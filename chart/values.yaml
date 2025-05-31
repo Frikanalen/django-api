@@ -24,3 +24,17 @@ database:
 
 memcached:
   image: memcached:1.6-alpine
+
+
+ingress:
+  enabled: true
+  className: traefik
+  certResolver: letsencrypt
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+  hosts:
+    - host: beta.frikanalen.no
+      paths:
+        - path: /api
+          pathType: Prefix
