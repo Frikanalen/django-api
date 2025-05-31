@@ -7,11 +7,11 @@ metadata:
 spec:
   type: {{ .Values.service.type }}
   ports:
-    - port: {{ .Values.service.port }}
+    - port: 80
       targetPort: 80
       protocol: TCP
       name: http-static
-    - port: {{ .Values.service.port }}
+    - port: 8080
       targetPort: 8080
       protocol: TCP
       name: http-api
