@@ -36,7 +36,7 @@ spec:
                   name: {{ .Values.database.secret }}
                   key: DATABASE_URL
           ports:
-            - name: django-web
+            - name: http-api
               containerPort: 8080
           volumeMounts:
             - mountPath: /srv/collected_staticfiles
@@ -50,7 +50,7 @@ spec:
             - mountPath: /usr/share/nginx/html
               name: static-files
           ports:
-            - name: django-web
+            - name: http-static
               containerPort: 80
       volumes:
         - name: static-files
