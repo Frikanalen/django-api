@@ -39,7 +39,7 @@ ingress:
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
     traefik.ingress.kubernetes.io/router.tls: "true"
   hosts:
-    - host: example.com
+    - host: beta.frikanalen.no
       paths:
         - path: /api
           serviceName: django-api
