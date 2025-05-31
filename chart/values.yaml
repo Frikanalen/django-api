@@ -1,5 +1,5 @@
 image:
-  django: frikanalen/django-backend:master
+  django: frikanalen/django-api:master
   nginx: nginx
 
 env:
