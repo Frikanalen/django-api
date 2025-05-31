@@ -35,12 +35,15 @@ ingress:
   className: traefik
   certResolver: letsencrypt
   annotations:
+    kubernetes.io/ingress.class: traefik
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
     traefik.ingress.kubernetes.io/router.tls: "true"
   hosts:
-    - host: beta.frikanalen.no
+    - host: example.com
       paths:
-        - path: /static
-          pathType: Prefix
         - path: /api
-          pathType: Prefix
+          serviceName: django-api
+          servicePort: 8000
+        - path: /static
+          serviceName: static-files
+          servicePort: 8080
