@@ -9,7 +9,7 @@ spec:
       template:
         metadata:
           labels:
-            app: django
+            app: django-api
         spec:
           restartPolicy: OnFailure
           containers:

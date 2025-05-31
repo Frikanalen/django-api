@@ -5,14 +5,14 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: django
+      app: django-api
   minReadySeconds: 5
   template:
     metadata:
       annotations:
         linkerd.io/inject: enabled
       labels:
-        app: django
+        app: django-api
     spec:
       containers:
         - name: django

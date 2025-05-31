@@ -11,7 +11,7 @@ spec:
     metadata:
       name: django-migrations
       labels:
-        app: django
+        app: django-api
     spec:
       restartPolicy: OnFailure
       containers:
