@@ -22,7 +22,7 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: frontend
+                name: django-api
                 port:
                   number: {{ $.Values.service.port }}
           {{- end }}
