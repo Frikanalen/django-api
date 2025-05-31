@@ -4,7 +4,7 @@ image:
 
 env:
   DJANGO_SETTINGS_MODULE: fkweb.settings.production
-  ALLOWED_HOSTS: frikanalen.no,fk.dev.local,forrige.frikanalen.no,localhost,django.default.svc.cluster.local
+  ALLOWED_HOSTS: beta.frikanalen.no
   SMTP_SERVER: smtp.uio.no
 
 
