@@ -30,6 +30,8 @@ jobs:
           tags: |
             tags: |
             type=ref,event=branch
+            type=ref,event=tag
+            type=raw,value=latest
             type=sha
 
       - name: Log in to GHCR
