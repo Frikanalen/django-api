@@ -19,16 +19,16 @@ The backend is configured using environment variables.
 
 ### Docker
 
-This package builds on push as frikanalen/django-backend. To build a local copy:
+To build a local copy:
 
 ```sh
-docker build -t frikanalen/django-backend .
+docker build -t frikanalen/django-api .
 ```
 
 Then you can run it thus:
 
 ```sh
-docker run -p 8080:8080 frikanalen/django-backend
+docker run -p 8080:8080 frikanalen/django-api
 ```
 
 ### Local development
