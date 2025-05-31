@@ -40,5 +40,7 @@ ingress:
   hosts:
     - host: beta.frikanalen.no
       paths:
+        - path: /static
+          pathType: Prefix
         - path: /api
           pathType: Prefix
