@@ -45,5 +45,5 @@ ingress:
           serviceName: django-api
           servicePort: 8080
         - path: /static
-          serviceName: static-files
+          serviceName: django-api
           servicePort: 80
