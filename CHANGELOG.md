@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/Frikanalen/django-api/compare/v0.1.1...v0.2.0) (2025-05-31)
+
+
+### Features
+
+* actual feature title ([d92432c](https://github.com/Frikanalen/django-api/commit/d92432cb0a260f05058927d374d0e2c0bb4723c7))
+
 ## [0.1.1](https://github.com/Frikanalen/django-api/compare/v0.1.0...v0.1.1) (2025-05-31)
 
 
