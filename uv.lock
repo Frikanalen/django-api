@@ -124,6 +124,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/3b/ab/b5268d0c72944d2becc91ee48baa8e4a49c86e22a059746c9750a3c07909/django-durationfield-0.5.5.tar.gz", hash = "sha256:026f71f7fce22b4b8bf7f3d7292e9d37f3c9b17123ca2265d85e9927ebc0774d", size = 4731 }
 
 [[package]]
+name = "django-environ"
+version = "0.12.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d6/04/65d2521842c42f4716225f20d8443a50804920606aec018188bbee30a6b0/django_environ-0.12.0.tar.gz", hash = "sha256:227dc891453dd5bde769c3449cf4a74b6f2ee8f7ab2361c93a07068f4179041a", size = 56804 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/83/b3/0a3bec4ecbfee960f39b1842c2f91e4754251e0a6ed443db9fe3f666ba8f/django_environ-0.12.0-py2.py3-none-any.whl", hash = "sha256:92fb346a158abda07ffe6eb23135ce92843af06ecf8753f43adf9d2366dcc0ca", size = 19957 },
+]
+
+[[package]]
 name = "django-filter"
 version = "25.1"
 source = { registry = "https://pypi.org/simple" }
@@ -195,13 +204,14 @@ wheels = [
 
 [[package]]
 name = "fkweb"
-version = "0.1.0"
+version = "0.1.1"
 source = { virtual = "." }
 dependencies = [
     { name = "dj-database-url" },
     { name = "django" },
     { name = "django-cors-headers" },
     { name = "django-durationfield" },
+    { name = "django-environ" },
     { name = "django-filter" },
     { name = "django-model-utils" },
     { name = "django-phonenumber-field", extra = ["phonenumbers"] },
@@ -221,6 +231,7 @@ requires-dist = [
     { name = "django", specifier = "==5.2" },
     { name = "django-cors-headers", specifier = "==4.7.0" },
     { name = "django-durationfield", specifier = "==0.5.5" },
+    { name = "django-environ", specifier = ">=0.12.0" },
     { name = "django-filter", specifier = "==25.1" },
     { name = "django-model-utils", specifier = "==5.0.0" },
     { name = "django-phonenumber-field", extras = ["phonenumbers"], specifier = "==8.0.0" },
