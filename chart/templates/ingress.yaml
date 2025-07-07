@@ -7,9 +7,6 @@ metadata:
     {{- range $key, $value := .Values.ingress.annotations }}
     {{ $key }}: {{ $value | quote }}
     {{- end }}
-    {{- if .Values.ingress.certResolver }}
-    traefik.ingress.kubernetes.io/router.tls.certresolver: "{{ .Values.ingress.certResolver }}"
-    {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   rules:
