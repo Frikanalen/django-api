@@ -6,8 +6,15 @@
 
 """Common settings and globals."""
 
+import logging
 from os.path import abspath, basename, dirname, join, normpath
 import sys
+
+from environ import ImproperlyConfigured
+
+from .env import env, load_env_from
+
+load_env_from(".env")
 
 
 ########## CUSTOM FKBETA CONFIGURATION
@@ -71,21 +78,7 @@ MANAGERS = ADMINS + (
 ########## END MANAGER CONFIGURATION
 
 
-########## DATABASE CONFIGURATION
-# See: https://docs.djangoproject.com/en/dev/ref/settings/#databases
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.",
-        "NAME": "",
-        "USER": "",
-        "PASSWORD": "",
-        "HOST": "",
-        "PORT": "",
-    }
-}
-
 DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
-########## END DATABASE CONFIGURATION
 
 
 ########## GENERAL CONFIGURATION
@@ -125,20 +118,6 @@ STATICFILES_FINDERS = (
     "django.contrib.staticfiles.finders.AppDirectoriesFinder",
 )
 ########## END STATIC FILE CONFIGURATION
-
-
-########## SECRET CONFIGURATION
-# See: https://docs.djangoproject.com/en/dev/ref/settings/#secret-key
-# Note: This key should only be used for development and testing.
-SECRET_KEY = r"@l!^ce@uem)lud$ct*b6^!l$zmmx)j-(p^d2w9_mlg3c!e3!-&"
-########## END SECRET CONFIGURATION
-
-
-########## SITE CONFIGURATION
-# Hosts/domain names that are valid for this site
-# See https://docs.djangoproject.com/en/1.5/ref/settings/#allowed-hosts
-ALLOWED_HOSTS = []
-########## END SITE CONFIGURATION
 
 
 ########## FIXTURE CONFIGURATION
@@ -344,14 +323,16 @@ SPECTACULAR_SETTINGS = {
 CORS_ORIGIN_ALLOW_ALL = True
 CORS_URLS_REGEX = r"^/api/.*$"  # anyway, only enable CORS for the API
 
-CACHES = {
-    "schedule": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "schedule-cache",
-        "TIMEOUT": None,
-        "KEY_PREFIX": "schedule-",
-    },
-    "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-    },
-}
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = "Frikanalen <noreply@frikanalen.no>"
+SECRET_KEY = env.str("SECRET_KEY")
+ALLOWED_HOSTS = env.str("ALLOWED_HOSTS").split(",")
+DATABASES = {"default": env.db()}
+
+try:
+    cache_from_env_or_memory = env.cache()
+except ImproperlyConfigured:  # noqa: F821
+    logging.warning("CACHE_URL not set, falling back to in-memory cache.")
+    cache_from_env_or_memory = {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
+
+CACHES = {"default": cache_from_env_or_memory}
