@@ -15,6 +15,7 @@ spec:
           containers:
             - name: django-api
               image: {{ .Values.image.django }}
+              imagePullPolicy: Always
               args:
                 - ./manage.py
                 - fill_agenda_with_jukebox
