@@ -509,7 +509,7 @@ class Scheduleitem(models.Model):
     @receiver([post_save, post_delete])
     def _clear_cache(**kwargs):
         # logger.warning('[Scheduleitem] cache flush')
-        caches["schedule"].clear()
+        caches["default"].clear()
 
     def __str__(self):
         t = self.starttime
