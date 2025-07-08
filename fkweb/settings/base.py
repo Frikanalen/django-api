@@ -12,7 +12,9 @@ import sys
 
 from environ import ImproperlyConfigured
 
-from .env import env
+from .env import env, load_env_from
+
+load_env_from(".env")
 
 
 ########## CUSTOM FKBETA CONFIGURATION

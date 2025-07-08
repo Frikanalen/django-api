@@ -7,12 +7,13 @@ Backend API for the Norwegian public access TV channel [Frikanalen](https://frik
 
 ## Configuration
 
-The backend is configured using environment variables.
+### Environment variables
+
+If the server is run with `uv run manage.py runserver`, .env and .env.local are read, with .env.local taking precedence. If it is run in wsgi, only .env is used.
 
 - ALLOWED_HOSTS - comma-separated list of permitted domains
-- DATABASE_USER - postgres username
-- DATABASE_NAME - postgres db name
-- DATABASE_PASS - postgres password
+- DATABASE_URL - database URL
+- CACHE_URL - cache URL
 - SMTP_SERVER - smtp server for outgoing email
 
 ## Installation
