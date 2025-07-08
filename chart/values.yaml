@@ -1,5 +1,5 @@
 image:
-  django: ghcr.io/frikanalen/django-api:main
+  django: ghcr.io/frikanalen/django-api:latest
   nginx: nginx
 
 env:

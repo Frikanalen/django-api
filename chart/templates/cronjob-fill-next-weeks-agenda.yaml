@@ -15,7 +15,6 @@ spec:
           containers:
             - name: django
               image: {{ .Values.image.django }}
-              imagePullPolicy: Always
               args:
                 - ./manage.py
                 - fill_next_weeks_agenda
