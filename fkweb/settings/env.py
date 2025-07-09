@@ -21,6 +21,6 @@ def load_env_from(file: str) -> None:
 
 env = environ.Env(
     ALLOWED_HOSTS=(str, "frikanalen.no,forrige.frikanalen.no,beta.frikanalen.no"),
-    SMTP_SERVER=(str),
-    SECRET_KEY=(str),
+    SMTP_SERVER=(str,),
+    SECRET_KEY=(str,),
 )

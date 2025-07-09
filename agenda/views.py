@@ -375,13 +375,13 @@ def _fill_time_with_jukebox(start, end, videos, current_pool=None):
                 % (video, plist(rejected_videos), plist(new_rejects))
             )
             if not video:
-                return (new_items, rejected_videos + video_pool)
+                return new_items, rejected_videos + video_pool
         rejected_videos.extend(new_rejects)
         new_items.append({"id": video.id, "starttime": current_time, "video": video})
         logger.info("Added video %s at curr time %s", video.id, current_time.strftime("%H:%M:%S"))
         current_time = ceil_minute(current_time + video.duration)
 
-    return (new_items, rejected_videos + video_pool)
+    return new_items, rejected_videos + video_pool
 
 
 def xmltv_home(request):
