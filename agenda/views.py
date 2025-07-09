@@ -123,8 +123,10 @@ class AbstractVideoFormView(TemplateView):
     UserForm = VideoFormForUsers
     AdminForm = VideoFormForAdmin
 
-    def get_form(self, request, data=None, initial={}, form=None, instance=None):
+    def get_form(self, request, data=None, initial=None, form=None, instance=None):
         # I suspect this stuff should be moved to the VideoForm-class
+        if initial is None:
+            initial = {}
         organizations = Organization.objects.filter(members=request.user.id)
         if not form:
             if not instance:
