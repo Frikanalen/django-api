@@ -2,12 +2,10 @@
 # This file is covered by the LGPLv3 or later, read COPYING for details.
 import datetime
 
-from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.test import TestCase
 from django.utils import timezone
 
-from dateutil import parser
 
 from fk.models import Scheduleitem
 from fk.templatetags import vod
@@ -165,20 +163,18 @@ class APITest(TestCase):
         r = self.client.get(reverse("api-root"))
 
         self.assertEqual(
-            set(
-                [
-                    "scheduleitems",
-                    "asrun",
-                    "category",
-                    "videofiles",
-                    "videos",
-                    "obtain-token",
-                    "jukebox-csv",
-                    "user",
-                    "organization",
-                    "user/register",
-                ]
-            ),
+            {
+                "scheduleitems",
+                "asrun",
+                "category",
+                "videofiles",
+                "videos",
+                "obtain-token",
+                "jukebox-csv",
+                "user",
+                "organization",
+                "user/register",
+            },
             set(r.data.keys()),
         )
 
