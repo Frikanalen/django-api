@@ -5,7 +5,7 @@ services:
     restart: always
     environment:
       POSTGRES_PASSWORD: fk
-      POSTGRES_DB: fk
+      POSTGRES_DB: fkweb
     ports:
       - "5432:5432"
     command: >
