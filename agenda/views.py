@@ -70,8 +70,7 @@ class ManageVideoList(TemplateView):
     def get(self, request):
         if not request.user.is_authenticated:
             return redirect("/login/?next=%s" % request.path)
-        context = {}
-        context["title"] = _("My videos")
+        context = {"title": _("My videos")}
         videos = Video.objects.filter(creator=request.user).order_by("name")
 
         p = Paginator(videos, 20)
@@ -124,8 +123,10 @@ class AbstractVideoFormView(TemplateView):
     UserForm = VideoFormForUsers
     AdminForm = VideoFormForAdmin
 
-    def get_form(self, request, data=None, initial={}, form=None, instance=None):
+    def get_form(self, request, data=None, initial=None, form=None, instance=None):
         # I suspect this stuff should be moved to the VideoForm-class
+        if initial is None:
+            initial = {}
         organizations = Organization.objects.filter(members=request.user.id)
         if not form:
             if not instance:
@@ -374,13 +375,13 @@ def _fill_time_with_jukebox(start, end, videos, current_pool=None):
                 % (video, plist(rejected_videos), plist(new_rejects))
             )
             if not video:
-                return (new_items, rejected_videos + video_pool)
+                return new_items, rejected_videos + video_pool
         rejected_videos.extend(new_rejects)
         new_items.append({"id": video.id, "starttime": current_time, "video": video})
         logger.info("Added video %s at curr time %s", video.id, current_time.strftime("%H:%M:%S"))
         current_time = ceil_minute(current_time + video.duration)
 
-    return (new_items, rejected_videos + video_pool)
+    return new_items, rejected_videos + video_pool
 
 
 def xmltv_home(request):
