@@ -1,28 +1,27 @@
 # Copyright (c) 2012-2013 Benjamin Bruheim <grolgh@gmail.com>
 # This file is covered by the LGPLv3 or later, read COPYING for details.
-import datetime
-import os
-import uuid
-
 import logging
-
-logger = logging.getLogger(__name__)
-
+import os
+from datetime import date, datetime, time, timedelta
+from uuid import uuid4
 from zoneinfo import ZoneInfo
+
 from django.conf import settings
-from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from django.core.cache import caches
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import models
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.urls import reverse
-from django.db import models
-from django.db.models.signals import post_save, post_delete
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from model_utils import Choices
 from model_utils.models import TimeStampedModel
 from phonenumber_field.modelfields import PhoneNumberField
+
+logger = logging.getLogger(__name__)
 
 
 """
@@ -314,7 +313,7 @@ class Video(models.Model):
         Organization, null=True, help_text="Organization for video", on_delete=models.PROTECT
     )
     ref_url = models.CharField(blank=True, max_length=1024, help_text="URL for reference")
-    duration = models.DurationField(blank=True, default=datetime.timedelta(0))
+    duration = models.DurationField(blank=True, default=timedelta(0))
 
     # This field is used by the new ingest.
     media_metadata = models.JSONField(blank=True, default=dict)
@@ -332,7 +331,7 @@ class Video(models.Model):
 
     @staticmethod
     def default_uuid_value():
-        return uuid.uuid4().hex
+        return uuid4().hex
 
     upload_token = models.CharField(
         blank=True,
@@ -451,8 +450,8 @@ class ScheduleitemManager(models.Manager):
         elif hasattr(date, "date"):
             date.replace(tzinfo=timezone.get_current_timezone())
             date = date.date()
-        startdt = datetime.datetime.combine(date, datetime.time(0, tzinfo=ZoneInfo("Europe/Oslo")))
-        enddt = startdt + datetime.timedelta(days=days)
+        startdt = datetime.combine(date, time(0, tzinfo=ZoneInfo("Europe/Oslo")))
+        enddt = startdt + timedelta(days=days)
         if surrounding:
             startdt, enddt = self.expand_to_surrounding(startdt, enddt)
         return self.get_queryset().filter(starttime__gte=startdt, starttime__lte=enddt)
@@ -623,16 +622,16 @@ class WeeklySlot(models.Model):
 
     def next_date(self, from_date=None):
         if not from_date:
-            from_date = datetime.date.today()
+            from_date = date.today()
         days_ahead = self.day - from_date.weekday()
         if days_ahead <= 0:
             # target date already happened this week
             days_ahead += 7
-        return from_date + datetime.timedelta(days_ahead)
+        return from_date + timedelta(days_ahead)
 
     def next_datetime(self, from_date=None):
         next_date = self.next_date(from_date)
-        naive_dt = datetime.datetime.combine(next_date, self.start_time)
+        naive_dt = datetime.combine(next_date, self.start_time)
         tz = ZoneInfo(settings.TIME_ZONE)
         return tz.localize(naive_dt)
 
