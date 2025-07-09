@@ -418,7 +418,7 @@ class Video(models.Model):
         try:
             return settings.FK_MEDIA_URLPREFIX + self.videofile_url("theora")
         except ObjectDoesNotExist:
-            pass
+            return None
 
     def vod_files(self):
         """Return a list of video files fit for the video on demand
