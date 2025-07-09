@@ -6,10 +6,11 @@ import logging
 from django.conf import settings
 from django.core.paginator import Paginator
 from django.urls import reverse
-from django.forms import ModelForm
-from django.http import HttpResponseForbidden
+from django.forms import ModelForm, ModelChoiceField
+from django.http import HttpResponseForbidden, HttpResponse, HttpRequest
 from django.shortcuts import redirect
 from django.shortcuts import render
+from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.translation import gettext as _
 from django.views.generic import TemplateView
@@ -58,7 +59,7 @@ class ProgramguideCalendarView(ProgramguideView):
 
 
 class ProgramplannerView(TemplateView):
-    def get(self, request, form=None):
+    def get(self, request: HttpRequest, *_args, **_kwargs) -> HttpResponse:
         context = {
             #'events': events,
             "title": _("Schedule planner")
@@ -67,23 +68,25 @@ class ProgramplannerView(TemplateView):
 
 
 class ManageVideoList(TemplateView):
-    def get(self, request):
+    template_name = "agenda/manage_video_list.html"
+    VIDEOS_PER_PAGE = 20
+
+    def get(self, request: HttpRequest, *_args, **_kwargs) -> HttpResponse:
         if not request.user.is_authenticated:
             return redirect("/login/?next=%s" % request.path)
-        context = {"title": _("My videos")}
         videos = Video.objects.filter(creator=request.user).order_by("name")
 
-        p = Paginator(videos, 20)
-        s = request.GET.get("page")
-        if str(s).isdigit():
-            page_nr = int(s)
-        else:
-            page_nr = 1
-        page = p.page(page_nr)
+        paginator = Paginator(videos, self.VIDEOS_PER_PAGE)
+        requested_page = request.GET.get("page")
 
-        context["videos"] = page.object_list
-        context["page"] = page
-        return render(request, "agenda/manage_video_list.html", context)
+        page = paginator.page(int(requested_page) if str(requested_page).isdigit() else 1)
+        context = {"title": _("My videos"), "videos": page.object_list, "page": page}
+
+        return render(
+            request,
+            self.template_name,
+            context,
+        )
 
 
 class VideoFormForUsers(ModelForm):
@@ -129,6 +132,12 @@ class AbstractVideoFormView(TemplateView):
             initial = {}
         organizations = Organization.objects.filter(members=request.user.id)
         if not form:
+            if request.user.is_superuser:
+                form_class = self.AdminForm
+                initial["creator"] = request.user.id
+            else:
+                form_class = self.UserForm
+
             if not instance:
                 if organizations:
                     initial["organization"] = organizations[0].id
@@ -136,34 +145,28 @@ class AbstractVideoFormView(TemplateView):
 
                 # Request manual intervention before the video end in rotation
                 initial["is_filler"] = False
-
-            if request.user.is_superuser:
-                initial["creator"] = request.user.id
-                if not instance:
-                    form = self.AdminForm(initial=initial)
-                else:
-                    form = self.AdminForm(data, instance=instance)
+                form = form_class(initial=initial)
             else:
-                if not instance:
-                    form = self.UserForm(initial=initial)
-                else:
-                    form = self.UserForm(data, instance=instance)
+                form = form_class(data, instance=instance)
 
         if not request.user.is_superuser:
-            form.fields["organization"].queryset = organizations
+            org_field = form.fields["organization"]
+            if "organization" in form.fields and isinstance(org_field, ModelChoiceField):
+                org_field.queryset = organizations
+
         return form
 
 
 class ManageVideoNew(AbstractVideoFormView):
-    def get(self, request, form=None):
+    def get(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         if not request.user.is_authenticated or not request.user.is_superuser:
             return redirect("/login/?next=%s" % request.path)
         initial = {}
-        form = self.get_form(request, initial=initial, form=form)
+        form = self.get_form(request, initial=initial, form=kwargs.get("form"))
         context = {"form": form, "title": _("New Video")}
         return render(request, "agenda/manage_video_new.html", context)
 
-    def post(self, request):
+    def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         if not request.user.is_authenticated or not request.user.is_superuser:
             return redirect("/login/?next=%s" % request.path)
         if request.user.is_superuser:
@@ -178,7 +181,7 @@ class ManageVideoNew(AbstractVideoFormView):
             video = form.save()
             # Success, send to edit page
             return redirect("manage-video-edit", video.id)
-        return self.get(request, form=form)
+        return self.get(request, form=form, *args, **kwargs)
 
 
 def allowed_to_edit(video, user):
@@ -284,9 +287,6 @@ def _items_for_gap(start, end, candidates):
     logger.info("Being asked to fill gap from {} to {}".format(start, end))
     # The smallest gap this function will try to fill
     MINIMUM_GAP_SECONDS = 300
-    # The schedule granularity in minutes (eg. 5 means the scheduler
-    # will schedule at 13:05, 13:10, etc.)
-    SCHEDULE_GRANULARITY = 5
 
     # Get a list of previously scheduled videos
     startdt, enddt = Scheduleitem.objects.expand_to_surrounding(start, end)
@@ -351,6 +351,7 @@ def _fill_time_with_jukebox(start, end, videos, current_pool=None):
         return "[" + " ".join(str(v.id) for v in l) + "]"
 
     def next_vid(first=False):
+        logger.debug(Video.objects.all())
         logger.debug(
             "next vid %s rej %s pool %s" % (first, plist(rejected_videos), plist(video_pool))
         )
@@ -365,14 +366,17 @@ def _fill_time_with_jukebox(start, end, videos, current_pool=None):
     while current_time < end:
         video = next_vid(True)
         new_rejects = []
+
         while current_time + video.duration > end:
-            logger.debug("end overshoots time %s" % (current_time + video.duration))
+            logger.debug("end overshoots time", current_time + video.duration)
             if video not in rejected_videos and video not in new_rejects:
                 new_rejects.append(video)
             video = next_vid()
             logger.debug(
-                "next vid is %s rejected %s new_rej %s"
-                % (video, plist(rejected_videos), plist(new_rejects))
+                "next vid is %s rejected %s new_rej %s",
+                video,
+                plist(rejected_videos),
+                plist(new_rejects),
             )
             if not video:
                 return new_items, rejected_videos + video_pool
@@ -386,7 +390,7 @@ def _fill_time_with_jukebox(start, end, videos, current_pool=None):
 
 def xmltv_home(request):
     """Information about the XMLTV schedule presentation."""
-    now = datetime.timezone.now()
+    now = timezone.now()
     today_url = reverse(
         "xmltv-feed", args=(now.year, "{:02}".format(now.month), "{:02}".format(now.day))
     )
