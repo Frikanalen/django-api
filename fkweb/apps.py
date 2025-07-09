@@ -15,5 +15,5 @@ class FrikanalenAppConfig(AppConfig):
 
         post_save.connect(
             create_auth_token,
-            settings.AUTH_USER_MODEL,
+            get_user_model(),
         )
