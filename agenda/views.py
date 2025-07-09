@@ -70,8 +70,7 @@ class ManageVideoList(TemplateView):
     def get(self, request):
         if not request.user.is_authenticated:
             return redirect("/login/?next=%s" % request.path)
-        context = {}
-        context["title"] = _("My videos")
+        context = {"title": _("My videos")}
         videos = Video.objects.filter(creator=request.user).order_by("name")
 
         p = Paginator(videos, 20)
