@@ -1,7 +1,10 @@
 """Development settings and globals."""
 
+from .env import env, load_env_from
+
+load_env_from(".env.local")
 from .base import *  # noqa # pylint: disable=unused-import disable=wildcard-import
-from .env import env
+
 
 FK_UPLOAD_URL = "http://127.0.0.1:5000/upload"
 
