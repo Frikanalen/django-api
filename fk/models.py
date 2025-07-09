@@ -631,9 +631,7 @@ class WeeklySlot(models.Model):
 
     def next_datetime(self, from_date=None):
         next_date = self.next_date(from_date)
-        naive_dt = datetime.combine(next_date, self.start_time)
-        tz = ZoneInfo(settings.TIME_ZONE)
-        return tz.localize(naive_dt)
+        return timezone.make_aware(datetime.combine(next_date, self.start_time))
 
     def __str__(self):
         return "{day} {s.start_time} ({s.purpose})".format(day=self.get_day_display(), s=self)
