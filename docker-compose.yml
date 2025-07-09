@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: fk
       POSTGRES_DB: fk
     ports:
-      - 5432:5432
+      - "5432:5432"
     command: >
       postgres -c log_statement=all -c log_destination=stderr
 
@@ -15,4 +15,4 @@ services:
     image: adminer
     restart: always
     ports:
-      - 8082:8080
+      - "8082:8080"
