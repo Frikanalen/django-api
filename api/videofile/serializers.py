@@ -15,3 +15,8 @@ class VideoFileSerializer(serializers.ModelSerializer):
             "integrated_lufs",
             "truepeak_lufs",
         )
+        read_only_fields = (
+            "id",
+            "video",
+            "created_time",
+        )
