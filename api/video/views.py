@@ -1,8 +1,8 @@
+from django.db.models import Q
 from django_filters import rest_framework as djfilters
 from rest_framework import generics
 
 from api.auth.permissions import IsInOrganizationOrReadOnly, IsInOrganizationOrDisallow
-from api.search import search_videos
 from api.video.serializers import VideoSerializer, VideoCreateSerializer, VideoUploadTokenSerializer
 from api.views import Pagination
 from fk.models import Video, Category
@@ -38,6 +38,7 @@ class VideoFilter(djfilters.FilterSet):
     created_time = djfilters.DateTimeFromToRangeFilter()
     updated_time = djfilters.DateTimeFromToRangeFilter()
     uploaded_time = djfilters.DateTimeFromToRangeFilter()
+    q = djfilters.CharFilter(method="filter_search", label="Free-text search")
 
     class Meta:
         model = Video
@@ -53,6 +54,27 @@ class VideoFilter(djfilters.FilterSet):
             "publish_on_web": ["exact"],
             "ref_url": ["exact", "startswith", "icontains"],
         }
+
+    def filter_search(self, queryset, name, value):
+        terms = self.normalize_query(value)
+        queries = [
+            Q(name__icontains=term)
+            | Q(description__icontains=term)
+            | Q(organization__name__icontains=term)
+            | Q(header__icontains=term)
+            for term in terms
+        ]
+        query = queries.pop()
+        for item in queries:
+            query &= item
+        return queryset.filter(query).order_by("-id")
+
+    @staticmethod
+    def normalize_query(query_string):
+        """Split the query string into individual keywords, grouping quoted terms."""
+        import shlex
+
+        return shlex.split(query_string)
 
 
 class VideoList(generics.ListCreateAPIView):
@@ -128,7 +150,4 @@ class VideoList(generics.ListCreateAPIView):
         else:
             queryset = super(VideoList, self).get_queryset()
 
-        search_query = self.request.query_params.get("q")
-        if search_query:
-            queryset = search_videos(queryset, query=search_query)
         return queryset
