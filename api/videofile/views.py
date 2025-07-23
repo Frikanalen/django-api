@@ -5,7 +5,7 @@ from rest_framework import generics
 from api.auth.permissions import IsInOrganizationOrReadOnly
 from api.videofile.serializers import VideoFileSerializer
 from api.views import Pagination
-from fk.models import VideoFile
+from fk.models import VideoFile, Video
 
 
 class VideoFileFilter(djfilters.FilterSet):
@@ -14,6 +14,7 @@ class VideoFileFilter(djfilters.FilterSet):
     class Meta:
         model = VideoFile
         fields = {
+            "video__id": ["exact"],
             "format__fsname": ["exact"],
             "integrated_lufs": ["exact", "gt", "gte", "lt", "lte", "isnull"],
             "truepeak_lufs": ["exact", "gt", "gte", "lt", "lte", "isnull"],
@@ -29,7 +30,7 @@ class VideoFileList(generics.ListCreateAPIView):
 
     HTTP parameters:
 
-    `video_id` - The (parent) video by ID
+    `video__id` - The (parent) video by ID
 
     `created_time` - when this file entry was created.
 
@@ -52,20 +53,13 @@ class VideoFileList(generics.ListCreateAPIView):
     filterset_class = VideoFileFilter
     permission_classes = (IsInOrganizationOrReadOnly,)
 
-    def get_queryset(self):
-        queryset = super(VideoFileList, self).get_queryset()
-        video_id = self.request.query_params.get("video_id")
-        if video_id and video_id.isdigit():
-            queryset = queryset.filter(video_id=int(video_id))
-        return queryset
-
     def perform_create(self, serializer):
         video = serializer.validated_data["video"]
         # If we don't have a uploaded time, creating a file should set one.
         if not video.uploaded_time:
-            video.uploaded_time = timezone.now()
-            video.save()
-        super(VideoFileList, self).perform_create(serializer)
+            Video.objects.filter(pk=video.pk).update(uploaded_time=timezone.now())
+
+        super().perform_create(serializer)
 
 
 class VideoFileDetail(generics.RetrieveUpdateDestroyAPIView):
