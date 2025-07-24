@@ -1,11 +1,10 @@
-from django.utils import timezone
 from django_filters import rest_framework as djfilters
 from rest_framework import generics
 
 from api.auth.permissions import IsInOrganizationOrReadOnly
 from api.videofile.serializers import VideoFileSerializer
 from api.views import Pagination
-from fk.models import VideoFile, Video
+from fk.models import VideoFile
 
 
 class VideoFileFilter(djfilters.FilterSet):
@@ -52,14 +51,6 @@ class VideoFileList(generics.ListCreateAPIView):
     pagination_class = Pagination
     filterset_class = VideoFileFilter
     permission_classes = (IsInOrganizationOrReadOnly,)
-
-    def perform_create(self, serializer):
-        video = serializer.validated_data["video"]
-        # If we don't have a uploaded time, creating a file should set one.
-        if not video.uploaded_time:
-            Video.objects.filter(pk=video.pk).update(uploaded_time=timezone.now())
-
-        super().perform_create(serializer)
 
 
 class VideoFileDetail(generics.RetrieveUpdateDestroyAPIView):
