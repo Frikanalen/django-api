@@ -10,12 +10,30 @@ import api.auth.views
 import api.organization.views
 import api.schedule.views
 import api.video.views
-import api.videofile.views
+import api.videofile.views as videofile_views
 from . import views
+
 
 router = SimpleRouter()
 router.register(r"api/asrun", views.AsRunViewSet)
 router.register(r"api/categories", views.CategoryViewSet)
+
+# I am manually generating these to in order to have the transition to a ViewSet be
+# as compatible as at all possible with legacy frontend etc. until we can phase it out.
+videofile_list = videofile_views.VideoFileViewSet.as_view(
+    {
+        "get": "list",
+        "post": "create",
+    }
+)
+videofile_detail = videofile_views.VideoFileViewSet.as_view(
+    {
+        "get": "retrieve",
+        "put": "update",
+        "patch": "partial_update",
+        "delete": "destroy",
+    }
+)
 
 urlpatterns = [
     url(r"^api/$", views.api_root, name="api-root"),
@@ -44,14 +62,8 @@ urlpatterns = [
     url(
         r"^api/videos/(?P<pk>\d+)$", api.video.views.VideoDetail.as_view(), name="api-video-detail"
     ),
-    url(
-        r"^api/videofiles/$", api.videofile.views.VideoFileList.as_view(), name="api-videofile-list"
-    ),
-    url(
-        r"^api/videofiles/(?P<pk>\d+)$",
-        api.videofile.views.VideoFileDetail.as_view(),
-        name="api-videofile-detail",
-    ),
+    url(r"^api/videofiles/$", videofile_list, name="api-videofile-list"),
+    url(r"^api/videofiles/(?P<pk>\d+)$", videofile_detail, name="api-videofile-detail"),
     url(
         r"^api/organization/$",
         api.organization.views.OrganizationList.as_view(),

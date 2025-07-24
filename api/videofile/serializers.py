@@ -1,22 +1,36 @@
 from rest_framework import serializers
 
-from fk.models import VideoFile
+from fk.models import VideoFile, FileFormat
 
 
-class VideoFileSerializer(serializers.ModelSerializer):
+class BaseVideoFileSerializer(serializers.ModelSerializer):
+    format = serializers.SlugRelatedField(
+        slug_field="fsname",
+        queryset=FileFormat.objects.all(),
+    )
+
     class Meta:
         model = VideoFile
         fields = (
-            "id",
-            "video",
             "format",
             "filename",
-            "created_time",
             "integrated_lufs",
             "truepeak_lufs",
         )
+
+
+class VideoFileCreateSerializer(BaseVideoFileSerializer):
+    pass
+
+
+class VideoFileSerializer(BaseVideoFileSerializer):
+    class Meta(BaseVideoFileSerializer.Meta):
         read_only_fields = (
             "id",
             "video",
             "created_time",
+        )
+        fields = (
+            *read_only_fields,
+            *BaseVideoFileSerializer.Meta.fields,
         )

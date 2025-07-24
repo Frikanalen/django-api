@@ -1,10 +1,12 @@
 from django_filters import rest_framework as djfilters
-from rest_framework import generics
 
 from api.auth.permissions import IsInOrganizationOrReadOnly
 from api.videofile.serializers import VideoFileSerializer
 from api.views import Pagination
 from fk.models import VideoFile
+
+
+from rest_framework import viewsets
 
 
 class VideoFileFilter(djfilters.FilterSet):
@@ -14,50 +16,19 @@ class VideoFileFilter(djfilters.FilterSet):
         model = VideoFile
         fields = {
             "video__id": ["exact"],
-            "format__fsname": ["exact"],
+            "format": ["exact"],
             "integrated_lufs": ["exact", "gt", "gte", "lt", "lte", "isnull"],
             "truepeak_lufs": ["exact", "gt", "gte", "lt", "lte", "isnull"],
         }
 
 
-class VideoFileList(generics.ListCreateAPIView):
+class VideoFileViewSet(viewsets.ModelViewSet):
     """
-    Video file list
-
-    Query parameters
-    ----------------
-
-    HTTP parameters:
-
-    `video__id` - The (parent) video by ID
-
-    `created_time` - when this file entry was created.
-
-    `format__fsname` - the fileformat fsname for this file.
-
-    `integrated_lufs` (includes __gt, __gte, __lt, __lte, __isnull) the overall loudness of the file.
-
-    `truepeak_lufs` (includes __gt, __gte, __lt, __lte, __isnull) the overall loudness of the file.
-
-    `page_size` - How many items per page. If set to 0 it will list
-                  all items.  Default is 50 items.
-
-    `ordering` - Order results by specified field.  Prepend a minus for
-                 descending order.  I.e. `?ordering=-starttime`.
+    Video file list and detail endpoint.
     """
 
     queryset = VideoFile.objects.all()
     serializer_class = VideoFileSerializer
     pagination_class = Pagination
     filterset_class = VideoFileFilter
-    permission_classes = (IsInOrganizationOrReadOnly,)
-
-
-class VideoFileDetail(generics.RetrieveUpdateDestroyAPIView):
-    """
-    Video file details
-    """
-
-    queryset = VideoFile.objects.all()
-    serializer_class = VideoFileSerializer
     permission_classes = (IsInOrganizationOrReadOnly,)
