@@ -315,6 +315,7 @@ SPECTACULAR_SETTINGS = {
         "api.videofile.schema.inject_video_format_enum",
         "drf_spectacular.hooks.postprocess_schema_enums",
     ],
+    "COMPONENT_SPLIT_REQUEST": True,
     "CAMELIZE": False,
     "ENUM_GENERATION": True,
 }
