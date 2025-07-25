@@ -5,7 +5,6 @@ from django.core.cache import caches
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from rest_framework import generics
-from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 
 from api.auth.permissions import IsInOrganizationOrReadOnly
 from api.schedule.serializers import ScheduleitemModifySerializer, ScheduleitemReadSerializer
@@ -39,10 +38,6 @@ class ScheduleitemList(generics.ListCreateAPIView):
     queryset = Scheduleitem.objects.all()
     pagination_class = Pagination
     permission_classes = (IsInOrganizationOrReadOnly,)
-
-    # Permit session-based login for backwards compat with old frontend
-    # Remove when new planner works!
-    authentication_classes = [SessionAuthentication, TokenAuthentication]
 
     def get_serializer_class(self):
         if hasattr(self.request, "method") and self.request.method in ["POST", "PUT"]:
@@ -137,6 +132,3 @@ class ScheduleitemDetail(generics.RetrieveUpdateDestroyAPIView):
         return ScheduleitemReadSerializer
 
     permission_classes = (IsInOrganizationOrReadOnly,)
-    # Permit session-based login for backwards compat with old frontend
-    # Remove when new planner works!
-    authentication_classes = [SessionAuthentication, TokenAuthentication]
