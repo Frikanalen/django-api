@@ -23,6 +23,19 @@ from phonenumber_field.modelfields import PhoneNumberField
 
 logger = logging.getLogger(__name__)
 
+# we are slowly getting these out of the database, but can't make schema changes
+# until we have migrated away from the old version of Django.
+FILE_FORMATS = [
+    "large_thumb",
+    "broadcast",
+    "vc1",
+    "med_thumb",
+    "small_thumb",
+    "original",
+    "theora",
+    "srt",
+    "cloudflare_id",
+]
 
 """
 Models for the Frikanalen database.
@@ -178,7 +191,7 @@ class Organization(models.Model):
 class FileFormat(models.Model):
     id = models.AutoField(primary_key=True)
     description = models.TextField(unique=True, max_length=255, null=True, blank=True)
-    fsname = models.CharField(max_length=20)
+    fsname = models.CharField(max_length=20, choices=[(f, f) for f in FILE_FORMATS])
     vod_publish = models.BooleanField("Present video format to video on demand?", default=False)
     mime_type = models.CharField(max_length=256, null=True, blank=True)
 
