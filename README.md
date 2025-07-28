@@ -31,6 +31,10 @@ docker run -p 8080:8080 frikanalen/django-api
 
 ### Local development
 
+#### Use in Docker
+
+If you set the environment variables `$DJANGO_SUPERUSER_EMAIL` and `$DJANGO_SUPERUSER_PASSWORD`, the user will be created if it does not exist.
+
 #### Initializing dev environment
 
 Install the [uv package manager](https://docs.astral.sh/uv/getting-started/installation/).
