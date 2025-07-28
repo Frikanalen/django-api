@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from api.organization.serializers import OrganizationSerializer
-from fk.models import Category, VideoFile, Video, Organization
+from fk.models import Category, Video, Organization
 
 
 class VideoSerializer(serializers.ModelSerializer):
@@ -18,11 +18,11 @@ class VideoSerializer(serializers.ModelSerializer):
     )
     files = serializers.SerializerMethodField()
 
-    def get_files(self, video):
-        file_list = {}
-        for vf in VideoFile.objects.filter(video=video):
-            file_list[vf.format.fsname] = settings.FK_MEDIA_URLPREFIX + vf.location(relative=True)
-        return file_list
+    def get_files(self, video) -> dict[str, str]:
+        return {
+            vf.format.fsname: settings.FK_MEDIA_URLPREFIX + vf.location(relative=True)
+            for vf in video.videofile_set.all()
+        }
 
     class Meta:
         model = Video
