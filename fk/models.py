@@ -56,7 +56,7 @@ turn out to be silly they should obviously be removed.
 class UserManager(BaseUserManager):
     use_in_migrations = True
 
-    def create_user(self, email, date_of_birth, password=None):
+    def create_user(self, email, date_of_birth=None, password=None):
         """
         Creates and saves a User with the given email, date of
         birth and password.
@@ -73,7 +73,7 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, email, date_of_birth, password):
+    def create_superuser(self, email, password):
         """
         Creates and saves a superuser with the given email, date of
         birth and password.
@@ -81,7 +81,6 @@ class UserManager(BaseUserManager):
         user = self.create_user(
             email,
             password=password,
-            date_of_birth=date_of_birth,
         )
         user.is_superuser = True
         user.save(using=self._db)
@@ -120,7 +119,6 @@ class User(AbstractBaseUser):
     objects = UserManager()
 
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ["date_of_birth"]
 
     def __str__(self):
         return self.email
