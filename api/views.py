@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.reverse import reverse
-
+from rest_framework.authtoken import views as authtoken_views
 from fk.models import AsRun
 from fk.models import Category
 from fk.models import Video
@@ -33,6 +33,7 @@ def api_root(request):
             "category": reverse("category-list", request=request),
             "jukebox-csv": reverse("jukebox-csv", request=request),
             "obtain-token": reverse("api-token-auth", request=request),
+            "obtain-token-v2": authtoken_views.obtain_auth_token,
             "scheduleitems": reverse("api-scheduleitem-list", request=request),
             "videofiles": reverse("api-videofile-list", request=request),
             "videos": reverse("api-video-list", request=request),

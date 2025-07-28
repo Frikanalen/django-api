@@ -2,6 +2,8 @@
 # This file is covered by the LGPLv3 or later, read COPYING for details.
 from django.urls import re_path as url
 from django.urls import include, path
+from rest_framework import parsers
+from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.routers import SimpleRouter
 from rest_framework.urlpatterns import format_suffix_patterns
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
@@ -35,6 +37,14 @@ videofile_detail = videofile_views.VideoFileViewSet.as_view(
     }
 )
 
+
+class ObtainAuthTokenJsonOnly(ObtainAuthToken):
+    """If we don't restrict this to JSON-only, the Python generated
+    code tries to both send form-multipart and JSON."""
+
+    parser_classes = (parsers.JSONParser,)
+
+
 urlpatterns = [
     url(r"^api/$", views.api_root, name="api-root"),
     url(r"^api/jukebox_csv$", views.jukebox_csv, name="jukebox-csv"),
@@ -43,6 +53,7 @@ urlpatterns = [
     url(r"^api/user/logout$", api.auth.views.UserLogout.as_view(), name="api-user-logout"),
     url(r"^api/user$", api.auth.views.UserDetail.as_view(), name="api-user-detail"),
     url(r"^api/obtain-token$", api.auth.views.ObtainAuthToken.as_view(), name="api-token-auth"),
+    url(r"^api/obtain-token-v2$", ObtainAuthTokenJsonOnly.as_view(), name="api-token-auth-v2"),
     url(
         r"^api/scheduleitems/$",
         api.schedule.views.ScheduleitemList.as_view(),
