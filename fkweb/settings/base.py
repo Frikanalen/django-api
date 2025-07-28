@@ -312,7 +312,6 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.1.0",
     "POSTPROCESSING_HOOKS": [
         "drf_spectacular.contrib.djangorestframework_camel_case.camelize_serializer_fields",
-        "api.videofile.schema.inject_video_format_enum",
         "drf_spectacular.hooks.postprocess_schema_enums",
     ],
     "COMPONENT_SPLIT_REQUEST": True,
