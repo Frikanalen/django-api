@@ -10,8 +10,4 @@ class FrikanalenAppConfig(AppConfig):
 
     def ready(self):
         # register signal receivers
-
-        post_save.connect(
-            create_auth_token,
-            get_user_model(),
-        )
+        post_save.connect(create_auth_token, get_user_model())
