@@ -16,9 +16,8 @@ class VideoFileFilter(djfilters.FilterSet):
         model = VideoFile
         fields = {
             "video__id": ["exact"],
-            "format": ["exact"],
-            "integrated_lufs": ["exact", "gt", "gte", "lt", "lte", "isnull"],
-            "truepeak_lufs": ["exact", "gt", "gte", "lt", "lte", "isnull"],
+            "format__fsname": ["exact"],
+            "integrated_lufs": ["isnull"],
         }
 
 
