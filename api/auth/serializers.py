@@ -23,7 +23,6 @@ class NewUserSerializer(serializers.ModelSerializer):
     # but we want new users to have these values set.
     first_name = serializers.CharField()
     last_name = serializers.CharField()
-    date_of_birth = serializers.DateField()
 
     def create(self, validated_data):
         user = get_user_model().objects.create(
