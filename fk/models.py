@@ -285,8 +285,6 @@ class Video(models.Model):
     header = models.TextField(blank=True, null=True, max_length=2048)
     name = models.CharField(max_length=255)
     description = models.CharField(blank=True, null=True, max_length=2048)
-    # Code for editors' internal use
-    # production_code = models.CharField(null=True,max_length=255)
     categories = models.ManyToManyField(Category)
     creator = models.ForeignKey(get_user_model(), on_delete=models.PROTECT)
     has_tono_records = models.BooleanField(default=False)
@@ -294,17 +292,12 @@ class Video(models.Model):
         "Play automatically?",
         help_text="You still have the editorial responsibility.  Only affect videos from members.",
         default=False,
-    )  # Find a better name?
+    )
     publish_on_web = models.BooleanField(default=True)
 
-    # disabled = models.BooleanField() # Not migrated
-    # uploader = models.ForeignKey(settings.AUTH_USER_MODEL)
-    # Planned duration in milliseconds, probably not going to be used
-    # planned_duration = models.IntegerField()
-    # Time when it is to be published on web
-    # published_time = models.DateTimeField()
-
-    proper_import = models.BooleanField(default=False)
+    proper_import = models.BooleanField(
+        default=False, help_text="Has the video been properly imported?"
+    )
     played_count_web = models.IntegerField(
         default=0, help_text="Number of times it has been played"
     )
