@@ -131,7 +131,7 @@
       "model": "fk.category",
       "pk": 110,
       "fields": {
-         "name": "Andre"
+         "name": "Annet"
       }
    }  
 ]
