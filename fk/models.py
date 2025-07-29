@@ -390,11 +390,11 @@ class Video(models.Model):
             return events[max(0, len(events) - 1)]
         return None
 
-    def videofile_url(self, fsname):
+    def videofile_url(self, fsname) -> str:
         videofile = self.videofile_set.get(format__fsname=fsname)
         return videofile.location(relative=True)
 
-    def small_thumbnail_url(self):
+    def small_thumbnail_url(self) -> str:
         format = FileFormat.objects.get(fsname="small_thumb")
         try:
             videofile = VideoFile.objects.get(video=self, format=format)
@@ -402,7 +402,7 @@ class Video(models.Model):
             return "/static/default_small_thumbnail.png"
         return settings.FK_MEDIA_URLPREFIX + videofile.location(relative=True)
 
-    def medium_thumbnail_url(self):
+    def medium_thumbnail_url(self) -> str:
         format = FileFormat.objects.get(fsname="medium_thumb")
         try:
             videofile = VideoFile.objects.get(video=self, format=format)
@@ -410,7 +410,7 @@ class Video(models.Model):
             return "/static/default_medium_thumbnail.png"
         return settings.FK_MEDIA_URLPREFIX + videofile.location(relative=True)
 
-    def large_thumbnail_url(self):
+    def large_thumbnail_url(self) -> str:
         format = FileFormat.objects.get(fsname="large_thumb")
         try:
             videofile = VideoFile.objects.get(video=self, format=format)
@@ -418,7 +418,7 @@ class Video(models.Model):
             return "/static/default_large_thumbnail.png"
         return settings.FK_MEDIA_URLPREFIX + videofile.location(relative=True)
 
-    def ogv_url(self):
+    def ogv_url(self) -> str:
         try:
             return settings.FK_MEDIA_URLPREFIX + self.videofile_url("theora")
         except ObjectDoesNotExist:
