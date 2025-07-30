@@ -2,8 +2,6 @@ from django.db import models
 from django.utils import timezone
 from model_utils.models import TimeStampedModel
 
-from fk.models import Video
-
 
 class AsRun(TimeStampedModel):
     """
@@ -11,7 +9,7 @@ class AsRun(TimeStampedModel):
     """
 
     video = models.ForeignKey(
-        Video,
+        "Video",
         blank=True,
         null=True,
         on_delete=models.SET_NULL,

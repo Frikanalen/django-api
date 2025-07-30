@@ -2,8 +2,6 @@ from django.conf import settings
 from django.db import models
 from django.urls import reverse
 
-from fk.models import User
-
 
 class Organization(models.Model):
     id = models.AutoField(primary_key=True)
@@ -28,7 +26,7 @@ class Organization(models.Model):
 
     # The user legally marked as the editor for this organization
     editor = models.ForeignKey(
-        User, on_delete=models.SET_NULL, blank=True, null=True, related_name="editor"
+        "User", on_delete=models.SET_NULL, blank=True, null=True, related_name="editor"
     )
 
     # Videos to feature on their frontpage, incl other members

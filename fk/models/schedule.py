@@ -9,9 +9,6 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 from model_utils import Choices
 
-from fk.models import Video
-from fk.models.organization import Organization
-
 
 class ScheduleitemManager(models.Manager):
     def by_day(self, date=None, days=1, surrounding=False):
@@ -62,7 +59,7 @@ class Scheduleitem(models.Model):
 
     id = models.AutoField(primary_key=True)
     default_name = models.CharField(max_length=255, blank=True)
-    video = models.ForeignKey(Video, null=True, blank=True, on_delete=models.SET_NULL)
+    video = models.ForeignKey("Video", null=True, blank=True, on_delete=models.SET_NULL)
     schedulereason = models.IntegerField(blank=True, choices=SCHEDULE_REASONS)
     starttime = models.DateTimeField()
     duration = models.DurationField()
@@ -112,8 +109,10 @@ class SchedulePurpose(models.Model):
     strategy = models.CharField(max_length=32, choices=STRATEGY)
 
     # You probably need one of these depending on type and strategy
-    organization = models.ForeignKey(Organization, blank=True, null=True, on_delete=models.SET_NULL)
-    direct_videos = models.ManyToManyField(Video, blank=True)
+    organization = models.ForeignKey(
+        "Organization", blank=True, null=True, on_delete=models.SET_NULL
+    )
+    direct_videos = models.ManyToManyField("Video", blank=True)
 
     class Meta:
         ordering = ("-id",)
@@ -148,7 +147,7 @@ class SchedulePurpose(models.Model):
         if self.strategy == self.STRATEGY.latest:
             try:
                 return qs.latest()
-            except Video.DoesNotExist:
+            except qs.model.DoesNotExist:
                 return None
         elif self.strategy == self.STRATEGY.random:
             # This might be slow, but hopefully few records

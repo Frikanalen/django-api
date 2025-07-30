@@ -6,10 +6,6 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 
-from fk.models import Category, VideoFile, FileFormat
-from fk.models.organization import Organization
-from fk.models.schedule import Scheduleitem
-
 
 class VideoManager(models.Manager):
     def public(self):
@@ -36,7 +32,7 @@ class Video(models.Model):
     header = models.TextField(blank=True, null=True, max_length=2048)
     name = models.CharField(max_length=255)
     description = models.CharField(blank=True, null=True, max_length=2048)
-    categories = models.ManyToManyField(Category)
+    categories = models.ManyToManyField("Category")
     creator = models.ForeignKey(get_user_model(), on_delete=models.PROTECT)
     has_tono_records = models.BooleanField(default=False)
     is_filler = models.BooleanField(
@@ -65,7 +61,7 @@ class Video(models.Model):
         default=25000, help_text="Framerate of master video in thousands / second"
     )
     organization = models.ForeignKey(
-        Organization, null=True, help_text="Organization for video", on_delete=models.PROTECT
+        "Organization", null=True, help_text="Organization for video", on_delete=models.PROTECT
     )
     ref_url = models.CharField(blank=True, max_length=1024, help_text="URL for reference")
     duration = models.DurationField(blank=True, default=timedelta(0))
@@ -117,57 +113,42 @@ class Video(models.Model):
             tags.append("filler")
         return ", ".join(tags)
 
-    def videofiles(self):
-        videofiles = VideoFile.objects.filter(video=self)
-        return videofiles
-
     def category_list(self):
         categories = self.categories.filter(video=self)
         return categories
 
     def schedule(self):
-        events = Scheduleitem.objects.filter(video=self)
-        return events
+        return self.scheduleitem_set.all()
 
     def first_broadcast(self):
-        events = Scheduleitem.objects.filter(video=self)
-        if events:
-            return events[0]
-        return None
+        return self.scheduleitem_set.all().order_by("starttime").first()
 
     def last_broadcast(self):
-        events = Scheduleitem.objects.filter(video=self)
-        if events:
-            return events[max(0, len(events) - 1)]
-        return None
+        return self.scheduleitem_set.all().order_by("-starttime").first()
 
     def videofile_url(self, fsname) -> str:
-        videofile = self.videofile_set.get(format__fsname=fsname)
-        return videofile.location(relative=True)
+        return self.videofile_set.get(format__fsname=fsname).location(relative=True)
 
     def small_thumbnail_url(self) -> str:
-        format = FileFormat.objects.get(fsname="small_thumb")
         try:
-            videofile = VideoFile.objects.get(video=self, format=format)
+            video_file = self.videofile_set.get(video=self, format__fsname="small_thumb")
         except ObjectDoesNotExist:
             return "/static/default_small_thumbnail.png"
-        return settings.FK_MEDIA_URLPREFIX + videofile.location(relative=True)
+        return settings.FK_MEDIA_URLPREFIX + video_file.location(relative=True)
 
     def medium_thumbnail_url(self) -> str:
-        format = FileFormat.objects.get(fsname="medium_thumb")
         try:
-            videofile = VideoFile.objects.get(video=self, format=format)
+            video_file = self.videofile_set.get(video=self, format__fsname="medium_thumb")
         except ObjectDoesNotExist:
             return "/static/default_medium_thumbnail.png"
-        return settings.FK_MEDIA_URLPREFIX + videofile.location(relative=True)
+        return settings.FK_MEDIA_URLPREFIX + video_file.location(relative=True)
 
     def large_thumbnail_url(self) -> str:
-        format = FileFormat.objects.get(fsname="large_thumb")
         try:
-            videofile = VideoFile.objects.get(video=self, format=format)
+            video_file = self.videofile_set.get(video=self, format__fsname="large_thumb")
         except ObjectDoesNotExist:
             return "/static/default_large_thumbnail.png"
-        return settings.FK_MEDIA_URLPREFIX + videofile.location(relative=True)
+        return settings.FK_MEDIA_URLPREFIX + video_file.location(relative=True)
 
     def ogv_url(self) -> str:
         try:
@@ -189,7 +170,7 @@ class Video(models.Model):
         """
 
         vodfiles = []
-        for videofile in self.videofiles().filter(format__vod_publish=True):
+        for videofile in self.videofile_set.all().filter(format__vod_publish=True):
             url = settings.FK_MEDIA_URLPREFIX + videofile.location(relative=True)
             vodfiles.append({"url": url, "mime_type": videofile.format.mime_type})
         return vodfiles
