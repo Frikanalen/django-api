@@ -15,7 +15,7 @@ class VideoFileFilter(djfilters.FilterSet):
     class Meta:
         model = VideoFile
         fields = {
-            "video__id": ["exact"],
+            "video_id": ["exact"],
             "format__fsname": ["exact"],
             "integrated_lufs": ["isnull"],
         }

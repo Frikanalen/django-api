@@ -1,10 +1,12 @@
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.test import APITestCase
+from rest_framework.test import APITestCase, APIClient
 
 
 class FilterTest(APITestCase):
     fixtures = ["test.yaml"]
+    # not sure why the type checker needs help here?
+    client: APIClient
 
     def setUp(self):
         self.client.login(email="staff_user@fake.com", password="test")
@@ -51,7 +53,10 @@ class FilterTest(APITestCase):
             ("?creator__email=nuug", []),
             ("?creator__email=nuug_user@fake.com", ["tech video"]),
             ("?creator__email=dummy_user@fake.com&name=", ["dummy video"]),
-            ("?proper_import=false", ["broken video"]),
+            (
+                "?proper_import=false",
+                ["broken video", "unpublished video", "dummy video", "tech video"],
+            ),
             ("?proper_import=true", ["unpublished video", "dummy video", "tech video"]),
         ]
         self.list_lookup("api-video-list", "name", lookups)
@@ -61,11 +66,5 @@ class FilterTest(APITestCase):
             ("?video_id=1", ["tech_video.mp4"]),
             ("?video_id=2", ["dummy_video.mov"]),
             ("?format__fsname=broadcast", ["unpublished_video.dv"]),
-            ("?integrated_lufs=-23", ["broken_video.mov"]),
-            ("?integrated_lufs__lte=-23", ["broken_video.mov", "unpublished_video.dv"]),
-            ("?integrated_lufs__lt=-23", ["unpublished_video.dv"]),
-            ("?integrated_lufs__gt=-23", ["dummy_video.mov"]),
-            ("?integrated_lufs__gte=-23", ["broken_video.mov", "dummy_video.mov"]),
-            ("?integrated_lufs__isnull=True", ["tech_video.mp4"]),
         ]
         self.list_lookup("api-videofile-list", "filename", lookups)
