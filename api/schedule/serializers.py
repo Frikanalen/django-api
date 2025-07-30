@@ -71,27 +71,6 @@ class ScheduleitemReadSerializer(serializers.ModelSerializer):
         model = Scheduleitem
         fields = ("id", "video", "schedulereason", "starttime", "endtime", "duration")
 
-    def validate(self, data):
-        if "starttime" in data or "duration" in data:
-
-            def g(v):
-                return self.instance and getattr(self.instance, v)
-
-            start = data.get("starttime", g("starttime"))
-            end = start + data.get("duration", g("duration"))
-            sur_start, sur_end = Scheduleitem.objects.expand_to_surrounding(start, end)
-            items = (
-                Scheduleitem.objects.exclude(pk=g("id"))
-                .filter(starttime__gte=sur_start, starttime__lte=sur_end)
-                .order_by("starttime")
-            )
-            for entry in items:
-                if entry.starttime <= start < entry.endtime():
-                    raise serializers.ValidationError({"duration": "Conflict with '%s'." % entry})
-                if entry.starttime < end < entry.endtime():
-                    raise serializers.ValidationError({"duration": "Conflict with '%s'." % entry})
-        return data
-
 
 class AsRunSerializer(serializers.ModelSerializer):
     class Meta:
