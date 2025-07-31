@@ -1,11 +1,14 @@
-from rest_framework import serializers
+from rest_framework.serializers import ModelSerializer, PrimaryKeyRelatedField
 
-from fk.models import VideoFile, FileFormat, Video
+from fk.models import VideoFile, Video, FileFormat
 
 
-class VideoFileSerializer(serializers.ModelSerializer):
-    format = serializers.SlugRelatedField(slug_field="fsname", queryset=FileFormat.objects.all())
-    video = serializers.PrimaryKeyRelatedField(queryset=Video.objects.all())
+class VideoFileSerializer(ModelSerializer):
+    # this gives a much better DX, but we have to remain compatible with the Django 3.x backend.
+    # should be removed when we drop support for the old Django backend.
+    # format = serializers.SlugRelatedField(slug_field="fsname", queryset=FileFormat.objects.all())
+    format = PrimaryKeyRelatedField(queryset=FileFormat.objects.all())
+    video = PrimaryKeyRelatedField(queryset=Video.objects.all())
 
     class Meta:
         model = VideoFile
