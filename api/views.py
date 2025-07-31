@@ -32,7 +32,6 @@ def api_root(request):
             "category": reverse("category-list", request=request),
             "jukebox-csv": reverse("jukebox-csv", request=request),
             "obtain-token": reverse("api-token-auth", request=request),
-            "obtain-token-v2": reverse("api-token-auth-v2", request=request),
             "scheduleitems": reverse("api-scheduleitem-list", request=request),
             "videofiles": reverse("api-videofile-list", request=request),
             "videos": reverse("api-video-list", request=request),

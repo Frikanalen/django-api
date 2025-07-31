@@ -170,7 +170,6 @@ class APITest(TestCase):
                 "videofiles",
                 "videos",
                 "obtain-token",
-                "obtain-token-v2",
                 "jukebox-csv",
                 "user",
                 "organization",

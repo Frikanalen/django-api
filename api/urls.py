@@ -52,7 +52,7 @@ urlpatterns = [
     url(r"^api/user/login$", api.auth.views.UserLogin.as_view(), name="api-user-login"),
     url(r"^api/user/logout$", api.auth.views.UserLogout.as_view(), name="api-user-logout"),
     url(r"^api/user$", api.auth.views.UserDetail.as_view(), name="api-user-detail"),
-    url(r"^api/obtain-token-v2$", ObtainAuthTokenJsonOnly.as_view(), name="api-token-auth-v2"),
+    url(r"^api/obtain-token$", ObtainAuthTokenJsonOnly.as_view(), name="api-token-auth"),
     url(
         r"^api/scheduleitems/$",
         api.schedule.views.ScheduleitemList.as_view(),

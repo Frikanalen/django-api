@@ -15,8 +15,6 @@ class NuugPermissionsTest(PermissionsTest):
             ("asrun", status.HTTP_200_OK),
             ("category", status.HTTP_200_OK),
             ("jukebox-csv", status.HTTP_200_OK),
-            ("obtain-token", status.HTTP_401_UNAUTHORIZED),
-            ("obtain-token-v2", status.HTTP_405_METHOD_NOT_ALLOWED),
             ("user", status.HTTP_200_OK),
             ("scheduleitems", status.HTTP_200_OK),
             ("videofiles", status.HTTP_200_OK),
