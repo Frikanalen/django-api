@@ -84,6 +84,14 @@ urlpatterns = [
         api.organization.views.OrganizationDetail.as_view(),
         name="api-organization-detail",
     ),
+]
+urlpatterns += router.urls
+
+# Format suffixes
+urlpatterns = format_suffix_patterns(urlpatterns, allowed=["json", "api", "xml"])
+
+# Default login/logout views
+urlpatterns += [
     # Spectacular API views
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
@@ -96,12 +104,5 @@ urlpatterns = [
         SpectacularRedocView.as_view(url_name="schema"),
         name="redoc",
     ),
+    url(r"^api/api-auth/", include("rest_framework.urls", namespace="rest_framework")),
 ]
-
-urlpatterns += router.urls
-
-# Format suffixes
-urlpatterns = format_suffix_patterns(urlpatterns, allowed=["json", "api", "xml"])
-
-# Default login/logout views
-urlpatterns += [url(r"^api/api-auth/", include("rest_framework.urls", namespace="rest_framework"))]
