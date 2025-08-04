@@ -314,6 +314,10 @@ SPECTACULAR_SETTINGS = {
         "drf_spectacular.contrib.djangorestframework_camel_case.camelize_serializer_fields",
         "drf_spectacular.hooks.postprocess_schema_enums",
     ],
+    "SWAGGER_UI_SETTINGS": {
+        "persistAuthorization": True,
+        "withCredentials": True,
+    },
     "COMPONENT_SPLIT_REQUEST": True,
     "CAMELIZE": False,
     "ENUM_GENERATION": True,
