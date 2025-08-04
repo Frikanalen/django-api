@@ -1,46 +1,10 @@
-import datetime
-from zoneinfo import ZoneInfo
+from datetime import date, datetime, time, timedelta
 
-from django.core.cache import caches
 from django.db import models
-from django.db.models.signals import post_save, post_delete
-from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from model_utils import Choices
-
-
-class ScheduleitemManager(models.Manager):
-    def by_day(self, date=None, days=1, surrounding=False):
-        if not date:
-            date = timezone.now().astimezone(ZoneInfo("Europe/Oslo")).date()
-        elif hasattr(date, "date"):
-            date.replace(tzinfo=timezone.get_current_timezone())
-            date = date.date()
-        startdt = datetime.datetime.combine(date, datetime.time(0, tzinfo=ZoneInfo("Europe/Oslo")))
-        enddt = startdt + datetime.timedelta(days=days)
-        if surrounding:
-            startdt, enddt = self.expand_to_surrounding(startdt, enddt)
-        return self.get_queryset().filter(starttime__gte=startdt, starttime__lte=enddt)
-
-    def expand_to_surrounding(self, startdt, enddt):
-        # Try to find the event before the given date
-        try:
-            startdt = (
-                Scheduleitem.objects.filter(starttime__lte=startdt)
-                .order_by("-starttime")[0]
-                .starttime
-            )
-        except IndexError:
-            pass
-        # Try to find the event after the end date
-        try:
-            enddt = (
-                Scheduleitem.objects.filter(starttime__gte=enddt).order_by("starttime")[0].starttime
-            )
-        except IndexError:
-            pass
-        return startdt, enddt
+from api.schedule.query_set import ScheduleitemQuerySet
 
 
 class Scheduleitem(models.Model):
@@ -64,18 +28,12 @@ class Scheduleitem(models.Model):
     starttime = models.DateTimeField()
     duration = models.DurationField()
 
-    objects = ScheduleitemManager()
+    objects = ScheduleitemQuerySet.as_manager()
 
     class Meta:
         verbose_name = "TX schedule entry"
         verbose_name_plural = "TX schedule entries"
         ordering = ("-id",)
-
-    @staticmethod
-    @receiver([post_save, post_delete])
-    def _clear_cache(**kwargs):
-        # logger.warning('[Scheduleitem] cache flush')
-        caches["default"].clear()
 
     def __str__(self):
         t = self.starttime
@@ -184,23 +142,27 @@ class WeeklySlot(models.Model):
         ordering = ("day", "start_time", "pk")
 
     @property
-    def end_time(self):
+    def end_time(self) -> time:
         if not self.duration:
             return self.start_time
-        return self.start_time + self.duration
+
+        # make a mock date so we can do timedelta arithmetic
+        dummy_date = datetime.combine(date.today(), self.start_time)
+        end_datetime = dummy_date + self.duration
+        return end_datetime.time()
 
     def next_date(self, from_date=None):
         if not from_date:
-            from_date = datetime.date.today()
+            from_date = date.today()
         days_ahead = self.day - from_date.weekday()
         if days_ahead <= 0:
             # target date already happened this week
             days_ahead += 7
-        return from_date + datetime.timedelta(days_ahead)
+        return from_date + timedelta(days_ahead)
 
     def next_datetime(self, from_date=None):
         next_date = self.next_date(from_date)
-        return timezone.make_aware(datetime.datetime.combine(next_date, self.start_time))
+        return timezone.make_aware(datetime.combine(next_date, self.start_time))
 
     def __str__(self):
         return "{day} {s.start_time} ({s.purpose})".format(day=self.get_day_display(), s=self)

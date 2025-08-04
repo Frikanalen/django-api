@@ -10,15 +10,16 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, Spec
 
 import api.auth.views
 import api.organization.views
-import api.schedule.views
 import api.video.views
 import api.videofile.views as videofile_views
+import api.schedule.views as schedule_views
 from . import views
 
 
 router = SimpleRouter()
 router.register(r"api/asrun", views.AsRunViewSet, "asrun")
 router.register(r"api/categories", views.CategoryViewSet)
+router.register(r"api/scheduleitems", schedule_views.ScheduleitemViewSet, "api-scheduleitem")
 
 # I am manually generating these to in order to have the transition to a ViewSet be
 # as compatible as at all possible with legacy frontend etc. until we can phase it out.
@@ -53,16 +54,6 @@ urlpatterns = [
     url(r"^api/user/logout$", api.auth.views.UserLogout.as_view(), name="api-user-logout"),
     url(r"^api/user$", api.auth.views.UserDetail.as_view(), name="api-user-detail"),
     url(r"^api/obtain-token$", ObtainAuthTokenJsonOnly.as_view(), name="api-token-auth"),
-    url(
-        r"^api/scheduleitems/$",
-        api.schedule.views.ScheduleitemList.as_view(),
-        name="api-scheduleitem-list",
-    ),
-    url(
-        r"^api/scheduleitems/(?P<pk>\d+)$",
-        api.schedule.views.ScheduleitemDetail.as_view(),
-        name="api-scheduleitem-detail",
-    ),
     url(r"^api/videos/$", api.video.views.VideoList.as_view(), name="api-video-list"),
     url(
         r"^api/videos/(?P<pk>\d+)/upload_token$",

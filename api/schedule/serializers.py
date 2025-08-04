@@ -1,18 +1,19 @@
 from zoneinfo import ZoneInfo
-from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from api.organization.serializers import OrganizationSerializer
-from fk.models import Category, Video, Scheduleitem, AsRun
+from fk.models import Category, Video, Scheduleitem, AsRun, Organization
+
+
+class ScheduleitemOrganizationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Organization
+        fields = ("id", "name", "description")
+        read_only_fields = ("id", "name", "description")
 
 
 class ScheduleitemVideoSerializer(serializers.ModelSerializer):
-    organization = OrganizationSerializer(read_only=True)
-    creator = serializers.SlugRelatedField(
-        slug_field="email",
-        queryset=get_user_model().objects.all(),
-        default=serializers.CurrentUserDefault(),
-    )
+    organization = ScheduleitemOrganizationSerializer(read_only=True)
+
     categories = serializers.SlugRelatedField(
         slug_field="name", many=True, queryset=Category.objects.all()
     )
@@ -24,9 +25,7 @@ class ScheduleitemVideoSerializer(serializers.ModelSerializer):
             "name",
             "header",
             "description",
-            "creator",
             "organization",
-            "duration",
             "categories",
         )
         read_only_fields = ("framerate", "created_time", "updated_time")
@@ -69,7 +68,7 @@ class ScheduleitemReadSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Scheduleitem
-        fields = ("id", "video", "schedulereason", "starttime", "endtime", "duration")
+        fields = ("id", "video", "starttime", "endtime")
 
 
 class AsRunSerializer(serializers.ModelSerializer):
