@@ -1,8 +1,8 @@
-from django.contrib.auth import get_user_model, authenticate
+from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from rest_framework.authtoken.models import Token
 
-from fk.models import User
+from fk.models import User, Organization
 
 
 class TokenSerializer(serializers.ModelSerializer):
@@ -43,49 +43,28 @@ class NewUserSerializer(serializers.ModelSerializer):
         write_only_fields = ("password",)
 
 
+class SimpleOrgSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Organization
+        fields = ("id", "name")
+
+
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
-    organization_roles = serializers.SerializerMethodField()
-
-    def get_organization_roles(self, obj):
-        editor_list = list(obj.editor.all())
-
-        # A user may be both member and editor. As editor status supersedes
-        # member status, if they are editor, we filter out the membership
-        membership_list = list(filter(lambda x: x not in editor_list, obj.organization_set.all()))
-
-        return list(
-            [
-                {"role": "editor", "organization_id": o.id, "organization_name": o.name}
-                for o in editor_list
-            ]
-            + [
-                {"role": "member", "organization_id": o.id, "organization_name": o.name}
-                for o in membership_list
-            ]
-        )
+    editor_of = SimpleOrgSerializer(source="editor", many=True, read_only=True)
+    member_of = SimpleOrgSerializer(source="organization_set", many=True, read_only=True)
 
     class Meta:
         model = User
+        read_only_fields = ("id", "email", "is_staff", "date_joined", "editor_of", "member_of")
 
         fields = (
-            "id",
-            "email",
+            *read_only_fields,
             "first_name",
             "last_name",
-            "date_joined",
-            "is_staff",
             "date_of_birth",
             "phone_number",
-            "organization_roles",
             "password",
-        )
-
-        read_only_fields = (
-            "id",
-            "email",
-            "is_staff",
-            "date_joined",
         )
 
 
