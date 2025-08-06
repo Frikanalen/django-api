@@ -144,7 +144,7 @@ class VideoList(generics.ListCreateAPIView):
     def get_queryset(self):
         # Can filtering on proper_import be done using a different
         # queryset and VideoFilter?
-        proper_import = self.request.query_params.get("proper_import")
+        proper_import = self.request.query_params.get("properImport")
         if proper_import and "false" == proper_import:
             queryset = Video.objects.all()
         else:
