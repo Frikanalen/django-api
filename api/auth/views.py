@@ -1,10 +1,12 @@
-from django.contrib.auth import login, logout
+from django.contrib.auth import login, logout, authenticate
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from rest_framework import generics
 from rest_framework.authentication import BasicAuthentication
 from rest_framework.authtoken.models import Token
+from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
+from rest_framework.generics import CreateAPIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
@@ -61,14 +63,26 @@ class UserDetail(generics.RetrieveUpdateDestroyAPIView):
         return self.request.user
 
 
-class UserLogin(APIView):
+class UserLogin(CreateAPIView):
+    """Sets a session cookie for the user"""
+
+    serializer_class = LoginSerializer
     permission_classes = (AllowAny,)
 
-    def post(self, request):
-        serializer = LoginSerializer(data=request.data)
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data["user"]
-        login(request, user)
+
+        data = serializer.validated_data
+        user = authenticate(username=data["email"], password=data["password"])
+
+        if not user:
+            raise AuthenticationFailed("Incorrect email or password.")
+
+        if not user.is_active:
+            raise PermissionDenied("User is disabled.")
+
+        login(request._request, user)
         return Response(UserSerializer(user).data)
 
 
