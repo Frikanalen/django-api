@@ -314,6 +314,17 @@ SPECTACULAR_SETTINGS = {
         "drf_spectacular.contrib.djangorestframework_camel_case.camelize_serializer_fields",
         "drf_spectacular.hooks.postprocess_schema_enums",
     ],
+    "APPEND_COMPONENTS": {
+        "parameters": {
+            "X-CSRFToken": {
+                "name": "X-CSRFToken",
+                "in": "header",
+                "required": False,  # true for session-authenticated writes
+                "schema": {"type": "string"},
+                "description": "CSRF token echoed from csrftoken cookie when using SessionAuthentication.",
+            }
+        }
+    },
     "SWAGGER_UI_SETTINGS": {
         "persistAuthorization": True,
         "withCredentials": True,
@@ -333,7 +344,7 @@ DEFAULT_FROM_EMAIL = "Frikanalen <noreply@frikanalen.no>"
 SECRET_KEY = env.str("SECRET_KEY")
 ALLOWED_HOSTS = env.str("ALLOWED_HOSTS").split(",")
 DATABASES = {"default": env.db()}
-
+CSRF_TRUSTED_ORIGINS = env.str("CSRF_TRUSTED_ORIGINS").split(",")
 try:
     cache_from_env_or_memory = env.cache()
 except ImproperlyConfigured:  # noqa: F821

@@ -1,6 +1,10 @@
+from django.middleware.csrf import get_token
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views.generic import TemplateView
+from rest_framework.generics import RetrieveAPIView
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
 
 from fk.models import Scheduleitem
 
@@ -26,3 +30,12 @@ class Frontpage(TemplateView):
             pass
 
         return context
+
+
+class CsrfView(RetrieveAPIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []  # no auth required just to mint token
+
+    def get(self, request, *args, **kwargs):
+        # This ensures the csrftoken cookie is set on the response
+        return Response({"csrfToken": get_token(request)})

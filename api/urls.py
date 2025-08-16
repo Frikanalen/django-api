@@ -13,6 +13,7 @@ import api.organization.views
 import api.video.views
 import api.videofile.views as videofile_views
 import api.schedule.views as schedule_views
+from fkweb.views import CsrfView
 from . import views
 
 
@@ -48,6 +49,7 @@ class ObtainAuthTokenJsonOnly(ObtainAuthToken):
 
 urlpatterns = [
     url(r"^api/$", views.api_root, name="api-root"),
+    url(r"^api/csrf/$", CsrfView.as_view(), name="api-csrf-detail"),
     url(r"^api/jukebox_csv$", views.jukebox_csv, name="jukebox-csv"),
     url(r"^api/user/register$", api.auth.views.UserCreate.as_view(), name="api-user-create"),
     url(r"^api/user/login$", api.auth.views.UserLogin.as_view(), name="api-user-login"),
