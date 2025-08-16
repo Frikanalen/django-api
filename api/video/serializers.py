@@ -68,8 +68,8 @@ class VideoSerializer(serializers.ModelSerializer):
 
 
 class VideoCreateSerializer(VideoSerializer):
-    organization = serializers.SlugRelatedField(
-        slug_field="id", queryset=Organization.objects.all(), required=False
+    organization = serializers.PrimaryKeyRelatedField(
+        queryset=Organization.objects.all(), required=False
     )
 
 
