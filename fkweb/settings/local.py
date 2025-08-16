@@ -6,7 +6,7 @@ load_env_from(".env.local")
 from .base import *  # noqa # pylint: disable=unused-import disable=wildcard-import
 from corsheaders.defaults import default_headers
 
-FK_UPLOAD_URL = "http://127.0.0.1:5000/upload"
+FK_UPLOAD_URL = "http://localhost:1080/files/"
 
 # DEBUG CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#debug
