@@ -18,6 +18,8 @@ spec:
         - name: django
           image: {{ .Values.image.django }}
           env:
+            - name: CSRF_TRUSTED_ORIGINS
+              value: {{ .Values.env.CSRF_TRUSTED_ORIGINS }}
             - name: DJANGO_SETTINGS_MODULE
               value: {{ .Values.env.DJANGO_SETTINGS_MODULE }}
             - name: ALLOWED_HOSTS
