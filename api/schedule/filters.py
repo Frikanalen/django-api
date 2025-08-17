@@ -1,3 +1,6 @@
+import datetime
+from zoneinfo import ZoneInfo
+
 from django_filters import rest_framework as filters
 from django.utils.dateparse import parse_date
 
@@ -25,3 +28,16 @@ class ScheduleitemFilter(filters.FilterSet):
         return queryset.by_day(
             start_date=date_val, days=int(days), include_surrounding=bool(surrounding)
         )
+
+    @property
+    def qs(self):
+        qs = super().qs
+        params = self.request.query_params
+        # If none of the three are present, enforce the default window = today
+        if not any(k in params for k in ("date", "days", "surrounding")):
+            qs = qs.by_day(
+                start_date=datetime.datetime.now(tz=ZoneInfo("Europe/Oslo")).date().isoformat(),
+                days=1,
+                include_surrounding=False,
+            )
+        return qs
