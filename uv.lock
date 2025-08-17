@@ -209,6 +209,25 @@ wheels = [
 ]
 
 [[package]]
+name = "drf-standardized-errors"
+version = "0.15.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+    { name = "djangorestframework" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ea/5d/9301be05081261cebdc000f9fbad51dc2b2732f9decd8da693f7c2daae29/drf_standardized_errors-0.15.0.tar.gz", hash = "sha256:83112d072e751eb444c2f16ab4618273b912cffc07f12b81998060fdfa2eb655", size = 60729 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/62/94/4e7721ff51cb10aa826cb27f3bf015e8d94d7f898c19c2b650d822019e5b/drf_standardized_errors-0.15.0-py3-none-any.whl", hash = "sha256:75dcfec11433a16c81f8c5948a5cd2932cd5b02f426f64ca82020a78c155b263", size = 25673 },
+]
+
+[package.optional-dependencies]
+openapi = [
+    { name = "drf-spectacular" },
+    { name = "inflection" },
+]
+
+[[package]]
 name = "fkweb"
 version = "0.1.1"
 source = { virtual = "." }
@@ -224,6 +243,7 @@ dependencies = [
     { name = "djangorestframework" },
     { name = "djangorestframework-camel-case" },
     { name = "drf-spectacular" },
+    { name = "drf-standardized-errors", extra = ["openapi"] },
     { name = "gunicorn" },
     { name = "markdown" },
     { name = "psycopg2-binary" },
@@ -245,6 +265,7 @@ requires-dist = [
     { name = "djangorestframework", specifier = "==3.16.0" },
     { name = "djangorestframework-camel-case", specifier = ">=1.4.2" },
     { name = "drf-spectacular", specifier = "==0.28.0" },
+    { name = "drf-standardized-errors", extras = ["openapi"], specifier = ">=0.15.0" },
     { name = "gunicorn", specifier = "==23.0.0" },
     { name = "markdown", specifier = "==3.7" },
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
