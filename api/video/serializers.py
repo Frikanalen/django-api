@@ -20,7 +20,7 @@ class VideoSerializer(serializers.ModelSerializer):
     duration_sec = serializers.SerializerMethodField()
 
     @staticmethod
-    def get_duration_sec(obj):
+    def get_duration_sec(obj) -> float | None:
         return obj.duration.total_seconds() if obj.duration is not None else None
 
     @staticmethod
