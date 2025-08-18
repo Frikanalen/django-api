@@ -17,8 +17,14 @@ class VideoSerializer(serializers.ModelSerializer):
         slug_field="name", many=True, queryset=Category.objects.all()
     )
     files = serializers.SerializerMethodField()
+    duration_sec = serializers.SerializerMethodField()
 
-    def get_files(self, video) -> dict[str, str]:
+    @staticmethod
+    def get_duration_sec(obj):
+        return obj.duration.total_seconds() if obj.duration is not None else None
+
+    @staticmethod
+    def get_files(video) -> dict[str, str]:
         return {
             vf.format.fsname: settings.FK_MEDIA_URLPREFIX + vf.location(relative=True)
             for vf in video.videofile_set.all()
@@ -36,6 +42,7 @@ class VideoSerializer(serializers.ModelSerializer):
             "files",
             "organization",
             "duration",
+            "duration_sec",
             "categories",
             "framerate",
             "proper_import",
@@ -74,10 +81,7 @@ class VideoCreateSerializer(VideoSerializer):
 
 
 class VideoUploadTokenSerializer(serializers.ModelSerializer):
-    upload_url = serializers.SerializerMethodField()
-
-    def get_upload_url(self, video_upload_token):
-        return settings.FK_UPLOAD_URL
+    upload_url = serializers.CharField(default=settings.FK_UPLOAD_URL, read_only=True)
 
     class Meta:
         model = Video
