@@ -66,3 +66,36 @@ class ScheduleitemQuerySet(models.QuerySet):
         next_q = Q(pk=F("next_pk"))
 
         return annotated.filter(range_q | prev_q | next_q).order_by("starttime")
+
+    def expand_to_surrounding(
+        self, start_dt: datetime, end_dt: datetime
+    ) -> tuple[datetime, datetime]:
+        """
+        Expand [start_dt, end_dt] to include the immediate event before start_dt
+        and the immediate event after end_dt, if they exist.
+
+        Performs at most two extra queries:
+          - one ORDER BY -starttime to find the latest <= start_dt
+          - one ORDER BY starttime to find the earliest >= end_dt
+        """
+        # previous event at or before start_dt
+        prev_start = (
+            self.filter(starttime__lte=start_dt)
+            .order_by("-starttime")
+            .values_list("starttime", flat=True)
+            .first()
+        )
+        if prev_start:
+            start_dt = prev_start
+
+        # next event at or after end_dt
+        next_start = (
+            self.filter(starttime__gte=end_dt)
+            .order_by("starttime")
+            .values_list("starttime", flat=True)
+            .first()
+        )
+        if next_start:
+            end_dt = next_start
+
+        return start_dt, end_dt
