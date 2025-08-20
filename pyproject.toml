@@ -19,6 +19,7 @@ dependencies = [
     "drf-standardized-errors[openapi]>=0.15.0",
     "gunicorn==23.0.0",
     "markdown==3.7",
+    "mypy>=1.11",
     "psycopg2-binary>=2.9.10",
     "pymemcache>=4.0.0",
     "python-dateutil==2.9.0.post0",
@@ -27,3 +28,8 @@ dependencies = [
 
 [tool.ruff]
 line-length = 100
+
+[dependency-groups]
+dev = [
+    "mypy>=1.17.1",
+]
