@@ -8,7 +8,6 @@ env:
   SMTP_SERVER: smtp.uio.no
   CSRF_TRUSTED_ORIGINS: beta.frikanalen.no,frikanalen.no,fk.dev.local,forrige.frikanalen.no
 
-
 django:
   secretName: django-secret
 
@@ -30,21 +29,19 @@ service:
 memcached:
   image: memcached:1.6-alpine
 
-
 ingress:
   enabled: true
   className: traefik
   annotations:
-    kubernetes.io/ingress.class: traefik
     traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
     traefik.ingress.kubernetes.io/router.tls: "true"
   hosts:
-    - host: beta.frikanalen.no
-      paths:
-        - path: /api
-          serviceName: django-api
-          servicePort: 8080
-        - path: /static
-          serviceName: django-api
-          servicePort: 80
+  - host: beta.frikanalen.no
+    paths:
+    - path: /api
+      serviceName: django-api
+      servicePort: 8080
+    - path: /static
+      serviceName: django-api
+      servicePort: 80
