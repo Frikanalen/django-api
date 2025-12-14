@@ -90,7 +90,7 @@ In addition to the HTTP API, the following commands are executed periodically as
 This job will fill the next week's schedule with videos as defined by the WeeklySlot model. This will generally be entries like "Fill Mondays 12-13 with the latest videos from NUUG".
 
 ```sh
-./manage.py fill_agenda_with_jukebox
+./manage.py fill_with_jukebox
 ```
 
 This job will fill the remaining unpopulated areas with videos as randomly selected from the set of all videos marked with is_filler=True.

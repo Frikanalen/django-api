@@ -30,7 +30,7 @@ class FillJukeboxIntegrationTests(TestCase):
         start_date = parse_to_datetime("2019-06-30 12:00")
         pre_count = Scheduleitem.objects.count()
 
-        agenda_views.fill_agenda_with_jukebox(start_date, days=1)
+        agenda_views.fill_with_jukebox(start_date, days=1)
 
         self.assertEquals(pre_count + 23, Scheduleitem.objects.count())
 
@@ -64,7 +64,7 @@ class FillJukeboxIntegrationTests(TestCase):
         )
         pre_count = Scheduleitem.objects.count()
 
-        agenda_views.fill_agenda_with_jukebox(start_date, days=0.5)
+        agenda_views.fill_with_jukebox(start_date, days=0.5)
 
         self.assertEquals(pre_count + 9, Scheduleitem.objects.count())
 

@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: fill-next-weeks-agenda-with-jukebox
+  name: fill-with-jukebox
 spec:
   schedule: "00 23 * * *"
   jobTemplate:
@@ -17,7 +17,7 @@ spec:
               image: {{ .Values.image.django }}
               args:
                 - ./manage.py
-                - fill_agenda_with_jukebox
+                - fill_with_jukebox
                 - -v
                 - '2'
               env:

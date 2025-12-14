@@ -254,7 +254,7 @@ def fill_weekly_slots():
         item.save()
 
 
-def fill_agenda_with_jukebox(start=None, days=1):
+def fill_with_jukebox(start=None, days=1):
     start = start or timezone.now()
     end = start + datetime.timedelta(days=days)
 
