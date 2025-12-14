@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from agenda.views import fill_next_weeks_agenda
+from agenda.views import fill_weekly_slots
 
 
 class Command(BaseCommand):
@@ -13,4 +13,4 @@ class Command(BaseCommand):
 
             logging.basicConfig(level=logging.DEBUG)
 
-        fill_next_weeks_agenda()
+        fill_weekly_slots()

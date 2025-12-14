@@ -84,7 +84,7 @@ Point your browser to http://127.0.0.1:8000/admin and log in.
 In addition to the HTTP API, the following commands are executed periodically as Kubernetes cron jobs in our cluster:
 
 ```sh
-./manage.py fill_next_weeks_agenda
+./manage.py fill_weekly_slots
 ```
 
 This job will fill the next week's schedule with videos as defined by the WeeklySlot model. This will generally be entries like "Fill Mondays 12-13 with the latest videos from NUUG".

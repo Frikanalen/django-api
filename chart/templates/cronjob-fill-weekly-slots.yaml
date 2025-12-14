@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: fill-next-weeks-agenda
+  name: fill-weekly-slots
 spec:
   schedule: "00 22 * * *"
   jobTemplate:
@@ -17,7 +17,7 @@ spec:
               image: {{ .Values.image.django }}
               args:
                 - ./manage.py
-                - fill_next_weeks_agenda
+                - fill_weekly_slots
                 - -v
                 - '2'
               env:

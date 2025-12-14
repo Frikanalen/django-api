@@ -221,7 +221,7 @@ class ManageVideoEdit(AbstractVideoFormView):
         return self.get(request, id=id, form=form)
 
 
-def fill_next_weeks_agenda():
+def fill_weekly_slots():
     slots = WeeklySlot.objects.all()
 
     if len(slots) == 0:
