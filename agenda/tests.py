@@ -4,10 +4,9 @@ import random
 from django.test import TestCase
 from django.utils import timezone
 
+import agenda.jukebox.fill_with_jukebox
 from fk.models import Scheduleitem
 from fk.models import Video
-
-from . import views as agenda_views
 
 
 def parse_to_datetime(dt_str):
@@ -30,7 +29,7 @@ class FillJukeboxIntegrationTests(TestCase):
         start_date = parse_to_datetime("2019-06-30 12:00")
         pre_count = Scheduleitem.objects.count()
 
-        agenda_views.fill_with_jukebox(start_date, days=1)
+        agenda.jukebox.fill_with_jukebox.fill_with_jukebox(start_date, days=1)
 
         self.assertEquals(pre_count + 23, Scheduleitem.objects.count())
 
@@ -64,7 +63,7 @@ class FillJukeboxIntegrationTests(TestCase):
         )
         pre_count = Scheduleitem.objects.count()
 
-        agenda_views.fill_with_jukebox(start_date, days=0.5)
+        agenda.jukebox.fill_with_jukebox.fill_with_jukebox(start_date, days=0.5)
 
         self.assertEquals(pre_count + 9, Scheduleitem.objects.count())
 
@@ -95,7 +94,7 @@ class FillJukeboxUnitTests(TestCase):
 
         end = self.start_date + datetime.timedelta(minutes=15)
 
-        res = agenda_views._items_for_gap(self.start_date, end, videos)
+        res = agenda.jukebox.fill_with_jukebox._items_for_gap(self.start_date, end, videos)
 
         self.assertEquals([1, 2, 1, 2], [r["id"] for r in res])
 

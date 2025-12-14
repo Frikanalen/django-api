@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from agenda.views import fill_with_jukebox
+from agenda.jukebox.fill_with_jukebox import fill_with_jukebox
 
 
 class Command(BaseCommand):
