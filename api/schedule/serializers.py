@@ -1,7 +1,16 @@
 from zoneinfo import ZoneInfo
 from rest_framework import serializers
 
-from fk.models import Category, Video, Scheduleitem, AsRun, Organization
+from fk.models import Category, Video, Scheduleitem, AsRun, Organization, VideoFile
+
+
+class ScheduleitemVideoFileSerializer(serializers.ModelSerializer):
+    fsname = serializers.CharField(source="format.fsname", read_only=True)
+
+    class Meta:
+        model = VideoFile
+        fields = ("id", "fsname", "filename")
+        read_only_fields = ("id", "fsname", "filename")
 
 
 class ScheduleitemOrganizationSerializer(serializers.ModelSerializer):
@@ -18,6 +27,8 @@ class ScheduleitemVideoSerializer(serializers.ModelSerializer):
         slug_field="name", many=True, queryset=Category.objects.all()
     )
 
+    files = ScheduleitemVideoFileSerializer(many=True, read_only=True, source="videofile_set")
+
     class Meta:
         model = Video
         fields = (
@@ -27,6 +38,7 @@ class ScheduleitemVideoSerializer(serializers.ModelSerializer):
             "description",
             "organization",
             "categories",
+            "files",
         )
         read_only_fields = ("framerate", "created_time", "updated_time")
 
