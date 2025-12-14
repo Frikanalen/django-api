@@ -27,6 +27,12 @@ class ScheduleitemVideoSerializer(serializers.ModelSerializer):
         slug_field="name", many=True, queryset=Category.objects.all()
     )
 
+    fps = serializers.SerializerMethodField()
+
+    def get_fps(self, obj):
+        """Divide video framerate by 1000 to get frames per second"""
+        return obj.framerate / 1000
+
     files = ScheduleitemVideoFileSerializer(many=True, read_only=True, source="videofile_set")
 
     class Meta:
@@ -39,8 +45,9 @@ class ScheduleitemVideoSerializer(serializers.ModelSerializer):
             "organization",
             "categories",
             "files",
+            "fps",
         )
-        read_only_fields = ("framerate", "created_time", "updated_time")
+        read_only_fields = ("fps", "created_time", "updated_time")
 
 
 class ScheduleitemModifySerializer(serializers.ModelSerializer):
