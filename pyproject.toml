@@ -31,5 +31,7 @@ line-length = 100
 
 [dependency-groups]
 dev = [
+    "django-stubs>=5.2.8",
+    "djangorestframework-stubs>=3.16.6",
     "mypy>=1.17.1",
 ]
