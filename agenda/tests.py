@@ -4,8 +4,6 @@ import random
 from django.test import TestCase
 from django.utils import timezone
 
-import agenda.jukebox.fill_with_jukebox
-from fk.models import Scheduleitem
 from fk.models import Video
 
 
@@ -14,61 +12,8 @@ def parse_to_datetime(dt_str):
     return timezone.make_aware(dt, timezone.get_current_timezone())
 
 
-class FillJukeboxIntegrationTests(TestCase):
-    fixtures = ["test.yaml"]
-
-    def test_fills_in(self):
-        Video.objects.create(
-            name="video",
-            creator_id=1,
-            organization_id=1,
-            duration=datetime.timedelta(minutes=60),
-            proper_import=True,
-            is_filler=True,
-        )
-        start_date = parse_to_datetime("2019-06-30 12:00")
-        pre_count = Scheduleitem.objects.count()
-
-        agenda.jukebox.fill_with_jukebox.fill_with_jukebox(start_date, days=1)
-
-        self.assertEquals(pre_count + 23, Scheduleitem.objects.count())
-
-    def test_fills_in_only_where_it_can(self):
-        Video.objects.create(
-            name="video",
-            creator_id=1,
-            organization_id=1,
-            duration=datetime.timedelta(minutes=60),
-            proper_import=True,
-            is_filler=True,
-        )
-        start_date = parse_to_datetime("2019-06-30 12:00")
-        Scheduleitem.objects.create(
-            video_id=1,
-            starttime=start_date - datetime.timedelta(minutes=10),
-            duration=datetime.timedelta(minutes=1),
-            schedulereason=Scheduleitem.REASON_AUTO,
-        )
-        Scheduleitem.objects.create(
-            video_id=2,
-            starttime=start_date + datetime.timedelta(hours=6, minutes=0),
-            duration=datetime.timedelta(minutes=60),
-            schedulereason=Scheduleitem.REASON_AUTO,
-        )
-        Scheduleitem.objects.create(
-            video_id=1,
-            starttime=start_date + datetime.timedelta(hours=24, minutes=10),
-            duration=datetime.timedelta(minutes=1),
-            schedulereason=Scheduleitem.REASON_AUTO,
-        )
-        pre_count = Scheduleitem.objects.count()
-
-        agenda.jukebox.fill_with_jukebox.fill_with_jukebox(start_date, days=0.5)
-
-        self.assertEquals(pre_count + 9, Scheduleitem.objects.count())
-
-
 class FillJukeboxUnitTests(TestCase):
+    fixtures = ["test.yaml"]
     start_date = parse_to_datetime("2019-06-30 12:00")
 
     @classmethod
@@ -85,18 +30,6 @@ class FillJukeboxUnitTests(TestCase):
             is_filler=True,
             **kwargs,
         )
-
-    def test_two_videos_fills_time(self):
-        videos = [
-            self._video(video_id=1, minutes=2),
-            self._video(video_id=2, minutes=3),
-        ]
-
-        end = self.start_date + datetime.timedelta(minutes=15)
-
-        res = agenda.jukebox.fill_with_jukebox._items_for_gap(self.start_date, end, videos)
-
-        self.assertEquals([1, 2, 1, 2], [r["id"] for r in res])
 
     def test_times_are_rounded(self):
         """

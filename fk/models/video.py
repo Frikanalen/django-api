@@ -15,7 +15,7 @@ class VideoManager(models.Manager):
 
     def fillers(self):
         return (
-            super(VideoManager, self)
+            super()
             .get_queryset()
             .filter(
                 is_filler=True,
@@ -49,10 +49,10 @@ class Video(models.Model):
         default=0, help_text="Number of times it has been played"
     )
     created_time = models.DateTimeField(
-        auto_now_add=True, null=True, help_text="Time the program record was created"
+        auto_now_add=True, help_text="Time the program record was created"
     )
     updated_time = models.DateTimeField(
-        auto_now=True, null=True, help_text="Time the program record has been updated"
+        auto_now=True, help_text="Time the program record has been updated"
     )
     uploaded_time = models.DateTimeField(
         blank=True, null=True, help_text="Time the original video for the program was uploaded"

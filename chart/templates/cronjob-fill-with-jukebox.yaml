@@ -3,7 +3,7 @@ kind: CronJob
 metadata:
   name: fill-with-jukebox
 spec:
-  schedule: "00 23 * * *"
+  schedule: "00 23 * * 6"
   jobTemplate:
     spec:
       template:
@@ -17,7 +17,7 @@ spec:
               image: {{ .Values.image.django }}
               args:
                 - ./manage.py
-                - fill_with_jukebox
+                - plan_iso_week
                 - -v
                 - '2'
               env:

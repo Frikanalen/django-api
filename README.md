@@ -93,7 +93,14 @@ This job will fill the next week's schedule with videos as defined by the Weekly
 ./manage.py fill_with_jukebox
 ```
 
-This job will fill the remaining unpopulated areas with videos as randomly selected from the set of all videos marked with is_filler=True.
+This job will plan jukebox content for the week after next (2 weeks from now) by filling unpopulated time slots with videos randomly selected from all videos marked with is_filler=True. 
+
+You can optionally specify a specific ISO week:
+```sh
+./manage.py fill_with_jukebox --year 2025 --week 52
+```
+
+The cronjob runs every Saturday at 23:00 to plan the upcoming week.
 
 ## Test data
 
