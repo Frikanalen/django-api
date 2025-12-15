@@ -10,7 +10,7 @@ from portion import Interval, closedopen
 from fk.models import Scheduleitem
 
 
-def ceil_5minute(dt: datetime.datetime) -> datetime.datetime:
+def round_up_to_5min_boundary(dt: datetime.datetime) -> datetime.datetime:
     """Round datetime up to the next 5-minute boundary (00, 05, 10, etc.)."""
     floored = dt.replace(second=0, microsecond=0)
     minute = floored.minute

@@ -2,7 +2,7 @@ import datetime
 from dataclasses import dataclass
 from typing import List
 
-from agenda.jukebox.program_picker import WeighingResult
+from agenda.jukebox.picker import WeighingResult
 from agenda.jukebox.scoring import VideoScorer
 from agenda.views import logger
 from fk.models import Video, Scheduleitem

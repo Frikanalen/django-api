@@ -3,23 +3,23 @@ from typing import Iterable, List
 
 from portion import Interval, closedopen
 
-from agenda.jukebox.utils import ceil_5minute, interval_duration_sec
+from agenda.jukebox.utils import round_up_to_5min_boundary, interval_duration_sec
 from agenda.views import logger
 from fk.models import Video, Scheduleitem
 
-from agenda.jukebox.program_picker import ProgramPicker
+from agenda.jukebox.picker import ProgramPicker
 
 
-def _scheduleitem_from_pick(video: Video, start_time: datetime.datetime) -> Scheduleitem:
-    return Scheduleitem(
-        video=video,
-        schedulereason=Scheduleitem.REASON_JUKEBOX,
-        starttime=start_time,
-        duration=video.duration,
-    )
+class ScheduleLayout:
+    @staticmethod
+    def _scheduleitem_from_pick(video: Video, start_time: datetime.datetime) -> Scheduleitem:
+        return Scheduleitem(
+            video=video,
+            schedulereason=Scheduleitem.REASON_JUKEBOX,
+            starttime=start_time,
+            duration=video.duration,
+        )
 
-
-class ScheduleGapPlanner:
     def __init__(self, candidates: Iterable[Video] = None, picker: ProgramPicker = None):
         self._candidates: List[Video] = candidates or Video.objects.fillers()
         self._picker = picker or ProgramPicker()
@@ -65,9 +65,9 @@ class ScheduleGapPlanner:
                 now=now,
             )
 
-            item = _scheduleitem_from_pick(video=video, start_time=gap_cursor)
+            item = self._scheduleitem_from_pick(video=video, start_time=gap_cursor)
             new_items.append(item)
             logger.info("Added schedule item %s", item)
-            gap_cursor = ceil_5minute(gap_cursor + item.duration)
+            gap_cursor = round_up_to_5min_boundary(gap_cursor + item.duration)
 
         return new_items

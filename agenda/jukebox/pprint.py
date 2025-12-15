@@ -1,7 +1,7 @@
 """Rich console display utilities for jukebox scoring and selection."""
 
 from typing import List, Optional
-from .program_picker import ScoredCandidate
+from .picker import ScoredCandidate
 
 from portion import Interval
 from rich.console import Console

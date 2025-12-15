@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from typing import List, Protocol
 
-from agenda.jukebox.program_picker import WeighingResult
+from agenda.jukebox.picker import WeighingResult
 
 from agenda.jukebox.scoring.cooling_period import CoolingPeriod
 from agenda.jukebox.scoring.freshness import FreshnessScorer
@@ -11,7 +11,13 @@ from agenda.jukebox.scoring.org_balance import OrganizationBalanceScorer
 
 from fk.models import Video, Scheduleitem
 
-__all__ = ["CoolingPeriod", "FreshnessScorer", "OrganizationBalanceScorer", "VideoScorer"]
+__all__ = [
+    "CoolingPeriod",
+    "FreshnessScorer",
+    "OrganizationBalanceScorer",
+    "VideoScorer",
+    "RANKING_CRITERIA",
+]
 
 
 class VideoScorer(Protocol):

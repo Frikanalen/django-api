@@ -3,9 +3,7 @@ from dataclasses import dataclass
 
 from portion import Interval
 
-from agenda.jukebox.scoring import (
-    RANKING_CRITERIA,
-)
+from agenda.jukebox.scoring import RANKING_CRITERIA
 from agenda.jukebox.pprint import render_candidates_table
 from agenda.views import logger
 from fk.models import Video, Scheduleitem
