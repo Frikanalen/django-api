@@ -48,16 +48,6 @@ class WeekContext:
             current_airtime = self.total_airtime_for_org.get(org_id, datetime.timedelta())
             self.total_airtime_for_org[org_id] = current_airtime + duration
 
-    def add_placed_item(self, video: Video, duration: datetime.timedelta) -> None:
-        """Backward-compatible: update context after placing a video.
-
-        Delegates to add_proposed_item by constructing a temporary Scheduleitem-like
-        holder so existing callers continue to work.
-        """
-        # Minimal shim object to reuse add_proposed_item logic
-        item = Scheduleitem(video=video, duration=duration, starttime=self.now)
-        self.add_proposed_item(item)
-
 
 @dataclass(frozen=True)
 class GapContext:
