@@ -11,10 +11,7 @@ from fk.models import Video, Scheduleitem
 
 
 class ProgramPicker:
-    """Encapsulates selection of the best-fitting program (video) for a given gap cursor.
-
-    Responsible solely for choosing a candidate using scoring and fit constraints.
-    """
+    """Selects the best video candidate for a given time window."""
 
     @staticmethod
     def _score_candidate(
