@@ -57,6 +57,8 @@
     proper_import: true
     upload_token: deadbeef
     ref_url: a
+    created_time: "2015-01-01 09:00:00+01:00"
+    updated_time: "2015-01-01 09:00:00+01:00"
 - model: fk.video
   pk: 2
   fields:
@@ -68,6 +70,8 @@
     proper_import: true
     ref_url: b
     framerate: 24000
+    created_time: "2015-01-01 09:00:00+01:00"
+    updated_time: "2015-01-01 09:00:00+01:00"
 - model: fk.video
   pk: 3
   fields:
@@ -79,6 +83,8 @@
     proper_import: true
     has_tono_records: true
     ref_url: aa
+    created_time: "2015-01-01 09:00:00+01:00"
+    updated_time: "2015-01-01 09:00:00+01:00"
 - model: fk.video
   pk: 4
   fields:
@@ -89,6 +95,8 @@
     publish_on_web: false
     proper_import: false
     ref_url: ab
+    created_time: "2015-01-01 09:00:00+01:00"
+    updated_time: "2015-01-01 09:00:00+01:00"
 
 - model: fk.fileformat
   pk: 1
