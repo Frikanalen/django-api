@@ -94,7 +94,9 @@ class FillJukeboxUnitTests(TestCase):
 
         end = self.start_date + datetime.timedelta(minutes=15)
 
-        res = agenda.jukebox.fill_with_jukebox._items_for_gap(self.start_date, end, videos)
+        from agenda.jukebox.fill_with_jukebox import JukeboxPlanner
+
+        res = JukeboxPlanner(videos).items_for_gap(self.start_date, end)
 
         self.assertEquals([1, 2, 1, 2], [r["id"] for r in res])
 
