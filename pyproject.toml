@@ -19,7 +19,6 @@ dependencies = [
     "drf-standardized-errors[openapi]>=0.15.0",
     "gunicorn==23.0.0",
     "markdown==3.7",
-    "mypy>=1.11",
     "portion>=2.6.1",
     "psycopg2-binary>=2.9.10",
     "pymemcache>=4.0.0",
@@ -29,14 +28,14 @@ dependencies = [
 ]
 [tool.mypy]
 mypy_path = ["typings"]
+plugins = ["mypy_django_plugin.main"]
 [tool.ruff]
 line-length = 100
 
 [dependency-groups]
 dev = [
-    "django-stubs>=5.2.8",
+    "django-stubs[compatible-mypy]>=5.2.8",
     "djangorestframework-stubs>=3.16.6",
-    "mypy>=1.17.1",
     "pytest>=9.0.2",
     "pytest-django>=4.9.0",
 ]
