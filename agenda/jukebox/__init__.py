@@ -10,7 +10,7 @@ from portion import Interval, closedopen
 
 from agenda.jukebox.find_schedule_gaps import find_schedule_gaps
 from agenda.jukebox.gap_filler import GapFiller
-from agenda.jukebox.schedule_repository import ScheduleRepository
+from agenda.jukebox.schedule_repository import ScheduleRepository, fetch_schedule_items_by_interval
 
 from agenda.jukebox.utils import week_as_interval
 from agenda.jukebox.week_context_builder import WeekContextBuilder
@@ -23,7 +23,10 @@ LOOKBACK_HOURS = 24
 def _find_gaps(window: Interval) -> List[Interval]:
     logger.info("Being asked to find gaps from %s to %s", window.lower, window.upper)
     lookback_window = closedopen(window.lower - timedelta(hours=LOOKBACK_HOURS), window.upper)
-    schedule_items = ScheduleRepository.fetch_schedule_items_by_interval(lookback_window)
+    schedule_items = Scheduleitem.objects.filter(
+        starttime__gte=lookback_window.lower,
+        starttime__lt=lookback_window.upper,
+    ).order_by("starttime")
     return find_schedule_gaps(window=window, schedule_items=schedule_items)
 
 

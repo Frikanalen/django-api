@@ -5,9 +5,10 @@ from django.utils import timezone
 from portion import Interval, closedopen
 
 from agenda.jukebox.scoring import WeekContext
-from agenda.jukebox.schedule_repository import ScheduleRepository
 
 __all__ = ["WeekContextBuilder"]
+
+from fk.models import Scheduleitem
 
 logger = logging.getLogger(__name__)
 DEFAULT_LOOKBACK_HOURS = 24
@@ -38,7 +39,10 @@ class WeekContextBuilder:
         """
         lb_hours = lookback_hours if lookback_hours is not None else DEFAULT_LOOKBACK_HOURS
         lb_window = closedopen(window.lower - datetime.timedelta(hours=lb_hours), window.upper)
-        scheduled = ScheduleRepository.fetch_schedule_items_by_interval(lb_window)
+        scheduled = Scheduleitem.objects.filter(
+            starttime__gte=lb_window.lower,
+            starttime__lt=lb_window.upper,
+        ).order_by("starttime")
 
         # Create empty context and populate it with existing schedule
         week_ctx = WeekContext(
