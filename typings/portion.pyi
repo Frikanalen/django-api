@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Generic, Iterator, TypeVar
+import datetime
 
 T = TypeVar("T", bound=object)
 
@@ -38,7 +39,7 @@ class Interval(Generic[T]):
     def upper(self) -> T: ...
 
 
-def empty() -> Interval[object]: ...
+def empty() -> Interval[datetime.datetime]: ...
 
 
 def closedopen(lower: T, upper: T) -> Interval[T]: ...

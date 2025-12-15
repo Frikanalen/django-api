@@ -3,6 +3,7 @@
 import datetime
 from typing import List, Optional, Tuple
 
+from portion import Interval
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
@@ -29,23 +30,23 @@ def fmt_score(val: float) -> Text:
 def render_candidates_table(
     scored_candidates: List[Tuple[Video, float, List[Tuple[str, float]]]],
     scorer_names: List[str],
-    gap_start: datetime.datetime,
-    gap_end: datetime.datetime,
+    window: Interval,
     total_fitting: int,
-    top_n: int = 5,
     console: Optional[Console] = None,
 ) -> None:
-    """Render a Rich table showing scored candidates with per-scorer breakdowns.
+    """Render a Rich table showing scored candidates with per-scorer breakdowns and log diagnostics.
 
     Args:
         scored_candidates: List of (video, total_score, [(scorer_name, score), ...])
         scorer_names: List of scorer class names for column headers
-        gap_start: Start of the gap being filled
-        gap_end: End of the gap being filled
+        window: Gap window being filled
         total_fitting: Total number of fitting candidates
-        top_n: Number of top candidates to display
         console: Optional Rich Console instance (creates one if not provided)
     """
+    import logging
+
+    logger = logging.getLogger("agenda.jukebox.pprint")
+    logger.info("Gap %s: %d fitting candidates", window, total_fitting)
 
     # Use provided console or create a default one
     if console is None:
@@ -54,7 +55,7 @@ def render_candidates_table(
     # Build the table
     table = Table(
         title=(
-            f"Candidates at {gap_start.strftime('%Y-%m-%d %H:%M')} -> {gap_end.strftime('%Y-%m-%d %H:%M')} "
+            f"Candidates at {window.lower.strftime('%Y-%m-%d %H:%M')} -> {window.upper.strftime('%Y-%m-%d %H:%M')} "
             f"({total_fitting} fitting)\n"
             "Legend: green=boost, red=penalty"
         )
@@ -71,8 +72,8 @@ def render_candidates_table(
         table.add_column(scorer_name, justify="right")
 
     # Add rows for top N candidates
-    display_count = min(top_n, len(scored_candidates))
-    for i in range(display_count):
+    top_n = min(5, len(scored_candidates))
+    for i in range(top_n):
         video, total, per_scorer = scored_candidates[i]
 
         # Calculate duration in minutes
@@ -92,7 +93,9 @@ def render_candidates_table(
             for scorer_name in scorer_names:
                 row.append(fmt_score(contrib_map.get(scorer_name, 0.0)))
 
-        table.add_row(*row)
+        # Ensure all elements are str, None, or Rich Text
+        safe_row = [x if isinstance(x, (str, type(None), Text)) else str(x) for x in row]
+        table.add_row(*safe_row)
 
     # Print the table
     console.print(table)

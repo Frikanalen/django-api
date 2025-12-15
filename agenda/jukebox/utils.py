@@ -5,16 +5,12 @@ Utility functions for jukebox scheduling.
 import datetime
 
 from django.utils import timezone
-
-
-def ceil_minute(dt: datetime.datetime) -> datetime.datetime:
-    """Round datetime up to the next minute boundary."""
-    return floor_minute(dt) + datetime.timedelta(minutes=1)
+from portion import Interval, closedopen
 
 
 def ceil_5minute(dt: datetime.datetime) -> datetime.datetime:
     """Round datetime up to the next 5-minute boundary (00, 05, 10, etc.)."""
-    floored = floor_minute(dt)
+    floored = dt.replace(second=0, microsecond=0)
     minute = floored.minute
     # Calculate how many minutes to add to get to next 5-minute mark
     minutes_to_add = (5 - minute % 5) % 5
@@ -24,29 +20,24 @@ def ceil_5minute(dt: datetime.datetime) -> datetime.datetime:
     return floored + datetime.timedelta(minutes=minutes_to_add)
 
 
-def floor_minute(dt: datetime.datetime) -> datetime.datetime:
-    """Round datetime down to the current minute boundary (removes seconds and microseconds)."""
-    return dt.replace(second=0, microsecond=0)
+def week_as_interval(iso_year: int, iso_week: int) -> Interval:
+    """
+    Calculate the interval corresponding to a specific ISO year and week.
 
-
-def get_week_boundaries(
-    iso_year: int, iso_week: int, tz=None
-) -> tuple[datetime.datetime, datetime.datetime]:
-    """Calculate start and end datetimes for an ISO week.
-
-    ISO week starts on Monday (weekday=1).
+    This function takes an ISO year and an ISO week number, computes the start
+    date and time of the week, and returns the interval covering the specified
+    ISO week. The start time is included, while the end time is exclusive.
+    If no timezone is provided, the system's current timezone is used.
 
     Args:
-        iso_year: ISO year
-        iso_week: ISO week number (1-53)
-        tz: Timezone (defaults to current timezone)
+        iso_year (int): The ISO year.
+        iso_week (int): The ISO week number.
 
     Returns:
-        Tuple of (start, end) datetimes for the week
+        Interval: A closed-open interval representing the start and exclusive
+                  end of the specified ISO week.
     """
-    tz = tz or timezone.get_current_timezone()
     week_start_date = datetime.date.fromisocalendar(iso_year, iso_week, 1)
-    start = datetime.datetime.combine(week_start_date, datetime.time.min)
-    start = timezone.make_aware(start, tz)
+    start = timezone.make_aware(datetime.datetime.combine(week_start_date, datetime.time.min))
     end = start + datetime.timedelta(days=7)
-    return start, end
+    return closedopen(start, end)

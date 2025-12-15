@@ -16,8 +16,6 @@ class WeekContext:
     This is a mutable shared context that accumulates state as videos are placed.
     """
 
-    start: datetime.datetime
-    end: datetime.datetime
     # Aggregates for diversity, cooling, etc. (mutable, updated as gaps are filled)
     total_airtime_for_org: Dict[int, datetime.timedelta]  # organization_id -> total airtime in week
     recent_video_ids: List[int]  # recently scheduled ids (cooling)
@@ -186,3 +184,13 @@ class CompositeScorer:
             total,
         )
         return total
+
+
+def get_default_scorer() -> CompositeScorer:
+    return CompositeScorer(
+        scorers=[
+            FreshnessScorer(weight=1.0),
+            OrganizationBalanceScorer(weight=1.0),
+            CoolingPeriodScorer(weight=2.0),
+        ]
+    )

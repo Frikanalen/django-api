@@ -1,25 +1,18 @@
 from typing import Iterable, List, Optional
-import datetime
 
-from portion import Interval
+from portion import Interval, closedopen
 
-from agenda.jukebox.jukebox_planner import get_default_scorer
-from agenda.jukebox.scoring import CompositeScorer, WeekContext, GapContext
+from agenda.jukebox.find_schedule_gaps import interval_duration_sec
+from agenda.jukebox.scoring import CompositeScorer, WeekContext, GapContext, get_default_scorer
 from agenda.jukebox.utils import ceil_5minute
 from agenda.views import logger
 from fk.models import Video, Scheduleitem
 
 from agenda.jukebox.program_picker import ProgramPicker
 
-__all__ = ["GapFiller"]
-
 
 class GapFiller:
     def __init__(self, candidates: Iterable[Video], scorer: Optional[CompositeScorer] = None):
-        """Prepare a filler that selects videos from candidates to fill a given gap.
-
-        Selection uses highest score among non-overshooting candidates.
-        """
         self._candidates: List[Video] = list(candidates)
         self._picker = ProgramPicker(scorer or get_default_scorer())
 
@@ -41,20 +34,12 @@ class GapFiller:
         Returns:
             List of unsaved Scheduleitem objects for this gap
         """
-        gap_cursor: datetime.datetime = gap.lower
+        gap_cursor = gap.lower
         new_items: List[Scheduleitem] = []
         gap_ctx = GapContext(gap=gap)
 
-        logger.info(
-            "Filling jukebox from %s to %s - %d available",
-            gap.lower,
-            gap.upper,
-            len(self._candidates),
-        )
-        logger.debug(
-            "Gap duration minutes: %.1f",
-            (gap.upper - gap.lower).total_seconds() / 60.0,
-        )
+        logger.info("Filling gap %s - %d available", gap, len(self._candidates))
+        logger.debug("Gap duration minutes: %.1f", interval_duration_sec(gap) / 60.0)
 
         while gap_cursor < gap.upper:
             fitting = [v for v in self._candidates if gap_cursor + v.duration <= gap.upper]
@@ -63,9 +48,8 @@ class GapFiller:
                 break
 
             best_video = self._picker.pick(
-                gap_cursor=gap_cursor,
-                gap_end=gap.upper,
-                fitting=fitting,
+                window=closedopen(gap_cursor, gap.upper),
+                candidates=fitting,
                 week_ctx=week_ctx,
                 gap_ctx=gap_ctx,
             )

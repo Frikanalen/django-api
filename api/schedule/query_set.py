@@ -13,6 +13,10 @@ class ScheduleitemQuerySet(models.QuerySet):
 
     TZ = ZoneInfo("Europe/Oslo")
 
+    def with_video(self):
+        """Return only schedule items that have a video attached."""
+        return self.filter(video__isnull=False)
+
     def normalize_date(self, value: Union[str, date, datetime, None]) -> date | None:
         """
         Normalize various date representations to a date object.
@@ -110,3 +114,27 @@ class ScheduleitemQuerySet(models.QuerySet):
             end_dt = next_start
 
         return start_dt, end_dt
+
+
+class ScheduleitemWithVideoManager(models.Manager):
+    """
+    Manager that only returns Scheduleitem instances where video is not null.
+
+    This allows for better type safety - when using this manager, you can be
+    confident that item.video will never be None.
+
+    Usage:
+        from fk.models import Scheduleitem
+
+        # All items with videos
+        items = Scheduleitem.with_video.all()
+
+        # Type checkers still see video as Optional, but you can assert:
+        for item in Scheduleitem.with_video.all():
+            assert item.video is not None
+            # Now type checkers know video is not None
+    """
+
+    def get_queryset(self) -> "ScheduleitemQuerySet":
+        return ScheduleitemQuerySet(self.model, using=self._db).filter(video__isnull=False)
+

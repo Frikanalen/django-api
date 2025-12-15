@@ -1,5 +1,5 @@
-import datetime
-from typing import List
+from django.db.models import QuerySet
+from portion import Interval
 
 from fk.models import Scheduleitem
 
@@ -12,13 +12,8 @@ class ScheduleRepository:
     """
 
     @staticmethod
-    def fetch_overlaps(
-        start: datetime.datetime, end: datetime.datetime, lookback_hours: int
-    ) -> List[Scheduleitem]:
-        lookback = start - datetime.timedelta(hours=lookback_hours)
-        return list(
-            Scheduleitem.objects.filter(
-                starttime__gte=lookback,
-                starttime__lt=end,
-            ).order_by("starttime")
-        )
+    def fetch_schedule_items_by_interval(window: Interval) -> QuerySet[Scheduleitem]:
+        return Scheduleitem.objects.filter(
+            starttime__gte=window.lower,
+            starttime__lt=window.upper,
+        ).order_by("starttime")

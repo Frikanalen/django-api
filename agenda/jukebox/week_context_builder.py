@@ -2,6 +2,7 @@ import datetime
 import logging
 
 from django.utils import timezone
+from portion import Interval, closedopen
 
 from agenda.jukebox.scoring import WeekContext
 from agenda.jukebox.schedule_repository import ScheduleRepository
@@ -9,6 +10,7 @@ from agenda.jukebox.schedule_repository import ScheduleRepository
 __all__ = ["WeekContextBuilder"]
 
 logger = logging.getLogger(__name__)
+DEFAULT_LOOKBACK_HOURS = 24
 
 
 class WeekContextBuilder:
@@ -18,12 +20,8 @@ class WeekContextBuilder:
     initializing a WeekContext with aggregate information for scoring.
     """
 
-    DEFAULT_LOOKBACK_HOURS = 24
-
     @staticmethod
-    def build_for_window(
-        start: datetime.datetime, end: datetime.datetime, lookback_hours: int | None = None
-    ) -> WeekContext:
+    def build_for_window(window: Interval, lookback_hours: int | None = None) -> WeekContext:
         """Build initial week context from existing scheduled items.
 
         Fetches items within and adjacent to the window to aggregate organization
@@ -38,17 +36,12 @@ class WeekContextBuilder:
         Returns:
             WeekContext initialized with existing schedule data
         """
-        lb_hours = (
-            lookback_hours
-            if lookback_hours is not None
-            else WeekContextBuilder.DEFAULT_LOOKBACK_HOURS
-        )
-        scheduled = ScheduleRepository.fetch_overlaps(start, end, lb_hours)
+        lb_hours = lookback_hours if lookback_hours is not None else DEFAULT_LOOKBACK_HOURS
+        lb_window = closedopen(window.lower - datetime.timedelta(hours=lb_hours), window.upper)
+        scheduled = ScheduleRepository.fetch_schedule_items_by_interval(lb_window)
 
         # Create empty context and populate it with existing schedule
         week_ctx = WeekContext(
-            start=start,
-            end=end,
             total_airtime_for_org={},
             recent_video_ids=[],
             now=timezone.now(),
