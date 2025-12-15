@@ -78,7 +78,15 @@ class NuugPermissionsTest(PermissionsTest):
         self._get_upload_token_helper(
             VideoFile.objects.get(video__name="dummy video"),
             403,
-            {"detail": "You do not have permission to perform this action."},
+            {
+                "type": "client_error",
+                "errors": [
+                    {
+                        "code": "permission_denied",
+                        "detail": "You do not have permission to perform this action.",
+                    }
+                ],
+            },
         )
 
     def test_nuug_user_cannot_edit_nonowned_things(self):
@@ -93,9 +101,14 @@ class NuugPermissionsTest(PermissionsTest):
         ]
         for url_name, obj, attr in thing_tests:
             r = self.client.patch(reverse(url_name, args=[obj.id]), {attr: "test fn"})
-            self.assertEqual(
-                {"detail": "You do not have permission to perform this action."}, r.data
-            )
+            # Flexible check for error dict with possible 'attr': None
+            self.assertEqual(r.data["type"], "client_error")
+            self.assertEqual(len(r.data["errors"]), 1)
+            error = r.data["errors"][0]
+            self.assertEqual(error["code"], "permission_denied")
+            self.assertEqual(error["detail"], "You do not have permission to perform this action.")
+            if "attr" in error:
+                self.assertIsNone(error["attr"])
             self.assertEqual(status.HTTP_403_FORBIDDEN, r.status_code)
 
     def test_nuug_user_can_create_videofile(self):
@@ -143,5 +156,13 @@ class NuugPermissionsTest(PermissionsTest):
             reverse("asrun-list"),
             {"video": 2, "playedAt": "2015-01-01 11:00:00Z"},
             status.HTTP_403_FORBIDDEN,
-            {"detail": "You do not have permission to perform this action."},
+            {
+                "type": "client_error",
+                "errors": [
+                    {
+                        "code": "permission_denied",
+                        "detail": "You do not have permission to perform this action.",
+                    }
+                ],
+            },
         )

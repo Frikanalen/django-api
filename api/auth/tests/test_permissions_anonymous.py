@@ -7,9 +7,17 @@ from api.auth.tests.permission_test import PermissionsTest
 class AnonymousPermissionsTest(PermissionsTest):
     def test_anonymous_does_not_have_token(self):
         r = self.client.get(reverse("api-token-auth"))
-        error_msg = {"detail": "Authentication credentials were not provided."}
+        error_msg = {
+            "type": "client_error",
+            "errors": [
+                {
+                    "code": "not_authenticated",
+                    "detail": "Authentication credentials were not provided.",
+                }
+            ],
+        }
         self.assertEqual(status.HTTP_401_UNAUTHORIZED, r.status_code)
-        self.assertEqual(error_msg, r.data)
+        self._check_body(error_msg, r.data)
 
     def test_anonymous_can_list_videofiles(self):
         """
@@ -83,7 +91,17 @@ class AnonymousPermissionsTest(PermissionsTest):
     def _ensure_forbidden(self, url: str, data: dict | None = None):
         res = self.client.post(url, data=data or {})
         self.assertEqual(status.HTTP_401_UNAUTHORIZED, res.status_code)
-        self.assertEqual(res.json()["detail"], "Authentication credentials were not provided.")
+        # Expect new error format
+        expected_error = {
+            "type": "client_error",
+            "errors": [
+                {
+                    "code": "not_authenticated",
+                    "detail": "Authentication credentials were not provided.",
+                }
+            ],
+        }
+        self._check_body(expected_error, res.json())
 
     def test_anonymous_cannot_mutate(self):
         self._ensure_forbidden(reverse("api-video-list"))
