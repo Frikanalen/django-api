@@ -26,9 +26,15 @@ dependencies = [
     "requests==2.32.3",
     "rich==13.9.4",
 ]
+
+
+[tool.django-stubs]
+django_settings_module = "fkweb.settings.local"
+
 [tool.mypy]
 mypy_path = ["typings"]
 plugins = ["mypy_django_plugin.main"]
+
 [tool.ruff]
 line-length = 100
 
