@@ -1,5 +1,5 @@
 import datetime
-from typing import Iterable, List
+from typing import List, Optional
 
 from portion import Interval, closedopen
 
@@ -20,15 +20,19 @@ class ScheduleLayout:
             duration=video.duration,
         )
 
-    def __init__(self, candidates: Iterable[Video] = None, picker: ProgramPicker = None):
-        self._candidates: List[Video] = candidates or Video.objects.fillers()
+    def __init__(
+        self,
+        candidates: Optional[List[Video]] = None,
+        picker: Optional[ProgramPicker] = None,
+    ):
+        self._candidates = candidates or Video.objects.fillers()
         self._picker = picker or ProgramPicker()
 
     def layout(
         self,
         gap: Interval,
         scheduled_items: List[Scheduleitem],
-        now,
+        now: datetime.datetime,
     ) -> List[Scheduleitem]:
         """Fill a single gap by placing videos without overshooting.
 
@@ -66,6 +70,12 @@ class ScheduleLayout:
             )
 
             item = self._scheduleitem_from_pick(video=video, start_time=gap_cursor)
+            # Guard: Prevent infinite loop if video duration is zero or negative
+            if item.duration <= datetime.timedelta(0):
+                logger.warning(
+                    "Picked video with non-positive duration; breaking to avoid infinite loop."
+                )
+                break
             new_items.append(item)
             logger.info("Added schedule item %s", item)
             gap_cursor = round_up_to_5min_boundary(gap_cursor + item.duration)

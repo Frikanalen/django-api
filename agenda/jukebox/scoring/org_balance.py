@@ -2,8 +2,8 @@ import datetime
 from dataclasses import dataclass
 from typing import List
 
-from agenda.jukebox.picker import WeighingResult
-from agenda.jukebox.scoring import VideoScorer
+from agenda.jukebox.dataclasses import WeighingResult
+from agenda.jukebox.scoring.protocol import VideoScorer
 from agenda.views import logger
 from fk.models import Video, Scheduleitem
 
@@ -21,7 +21,7 @@ class OrganizationBalanceScorer(VideoScorer):
     def score(self, video: Video, scheduled_items: List[Scheduleitem], _) -> WeighingResult:
         org_id = getattr(video, "organization_id", None)
         if org_id is None:
-            return 0.0
+            return WeighingResult(criteria_name=self.__class__.__name__, score=0.0)
         # Calculate total airtime for this org in scheduled_items
         airtime = datetime.timedelta()
         for item in scheduled_items:
@@ -40,4 +40,4 @@ class OrganizationBalanceScorer(VideoScorer):
             score,
             self.weight,
         )
-        return WeighingResult(criteria_name=self.__name__, score=score)
+        return WeighingResult(criteria_name=self.__class__.__name__, score=score)

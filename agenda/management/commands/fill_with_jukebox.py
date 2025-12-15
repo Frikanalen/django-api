@@ -36,10 +36,7 @@ class Command(BaseCommand):
 
         self.stdout.write(f"Planning ISO week {iso_year}-W{iso_week:02d}")
 
-        placements = plan_iso_week(
-            iso_year,
-            iso_week,
-        )
+        placements = plan_iso_week(iso_year, iso_week, timezone.now())
 
         Scheduleitem.objects.bulk_create(placements)
 

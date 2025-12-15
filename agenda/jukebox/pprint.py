@@ -1,7 +1,7 @@
 """Rich console display utilities for jukebox scoring and selection."""
 
 from typing import List, Optional
-from .picker import ScoredCandidate
+from .dataclasses import ScoredCandidate
 
 from portion import Interval
 from rich.console import Console
@@ -54,7 +54,8 @@ def render_candidates_table(
     # Extract scorer names from the first candidate, if available
     scorer_names = []
     if scored and scored[0].weights:
-        scorer_names = [name for name, _ in scored[0].weights]
+        # Fix: Use attribute access for WeighingResult, not tuple unpacking
+        scorer_names = [w.criteria_name for w in scored[0].weights]
 
     # Build the table
     table = Table(
@@ -96,7 +97,7 @@ def render_candidates_table(
 
         # Map per-scorer values for the row
         if per_scorer:
-            contrib_map = {name: val for name, val in per_scorer}
+            contrib_map = {w.criteria_name: w.score for w in per_scorer}
             for scorer_name in scorer_names:
                 row.append(fmt_score(contrib_map.get(scorer_name, 0.0)))
 
