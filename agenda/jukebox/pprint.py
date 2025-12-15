@@ -1,7 +1,7 @@
 """Rich console display utilities for jukebox scoring and selection."""
 
-import datetime
-from typing import List, Optional, Tuple
+from typing import List, Optional
+from .program_picker import ScoredCandidate
 
 from portion import Interval
 from rich.console import Console
@@ -28,29 +28,33 @@ def fmt_score(val: float) -> Text:
 
 
 def render_candidates_table(
-    scored_candidates: List[Tuple[Video, float, List[Tuple[str, float]]]],
-    scorer_names: List[str],
+    scored: List[ScoredCandidate],
     window: Interval,
-    total_fitting: int,
+    candidates: List[Video],
     console: Optional[Console] = None,
 ) -> None:
     """Render a Rich table showing scored candidates with per-scorer breakdowns and log diagnostics.
 
     Args:
-        scored_candidates: List of (video, total_score, [(scorer_name, score), ...])
-        scorer_names: List of scorer class names for column headers
+        scored: List of ScoredCandidate dataclasses
         window: Gap window being filled
-        total_fitting: Total number of fitting candidates
+        candidates: List of all fitting Video candidates
         console: Optional Rich Console instance (creates one if not provided)
     """
     import logging
 
     logger = logging.getLogger("agenda.jukebox.pprint")
+    total_fitting = len(candidates)
     logger.info("Gap %s: %d fitting candidates", window, total_fitting)
 
     # Use provided console or create a default one
     if console is None:
         console = Console(width=120, force_terminal=True, color_system="truecolor")
+
+    # Extract scorer names from the first candidate, if available
+    scorer_names = []
+    if scored and scored[0].weights:
+        scorer_names = [name for name, _ in scored[0].weights]
 
     # Build the table
     table = Table(
@@ -72,9 +76,12 @@ def render_candidates_table(
         table.add_column(scorer_name, justify="right")
 
     # Add rows for top N candidates
-    top_n = min(5, len(scored_candidates))
+    top_n = min(5, len(scored))
     for i in range(top_n):
-        video, total, per_scorer = scored_candidates[i]
+        sc = scored[i]
+        video = sc.video
+        total = sc.total
+        per_scorer = sc.weights
 
         # Calculate duration in minutes
         dur_min = getattr(video.duration, "total_seconds", lambda: 0.0)() / 60.0

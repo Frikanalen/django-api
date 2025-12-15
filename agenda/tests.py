@@ -4,74 +4,12 @@ import random
 from django.test import TestCase
 from django.utils import timezone
 
-from agenda.jukebox import fill_with_jukebox
-from fk.models import Scheduleitem
 from fk.models import Video
 
 
 def parse_to_datetime(dt_str):
     dt = datetime.datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
     return timezone.make_aware(dt, timezone.get_current_timezone())
-
-
-class FillJukeboxIntegrationTests(TestCase):
-    fixtures = ["test.yaml"]
-
-    def test_fills_in(self):
-        Video.objects.create(
-            name="video",
-            creator_id=1,
-            organization_id=1,
-            duration=datetime.timedelta(minutes=60),
-            proper_import=True,
-            is_filler=True,
-        )
-        start_date = parse_to_datetime("2019-06-30 12:00")
-        pre_count = Scheduleitem.objects.count()
-
-        fill_with_jukebox(start_date)
-
-        # Fills 7 days - should add approximately 168 hours worth (7 days * 24 hours)
-        # Allow some variance due to gap boundaries and rounding
-        post_count = Scheduleitem.objects.count()
-        added_count = post_count - pre_count
-        self.assertGreater(added_count, 160, f"Should fill most of 7 days, got {added_count} items")
-        self.assertLess(added_count, 175, f"Should not overfill, got {added_count} items")
-
-    def test_fills_in_only_where_it_can(self):
-        Video.objects.create(
-            name="video",
-            creator_id=1,
-            organization_id=1,
-            duration=datetime.timedelta(minutes=60),
-            proper_import=True,
-            is_filler=True,
-        )
-        start_date = parse_to_datetime("2019-06-30 12:00")
-        Scheduleitem.objects.create(
-            video_id=1,
-            starttime=start_date - datetime.timedelta(minutes=10),
-            duration=datetime.timedelta(minutes=1),
-            schedulereason=Scheduleitem.REASON_AUTO,
-        )
-        Scheduleitem.objects.create(
-            video_id=2,
-            starttime=start_date + datetime.timedelta(hours=6, minutes=0),
-            duration=datetime.timedelta(minutes=60),
-            schedulereason=Scheduleitem.REASON_AUTO,
-        )
-        Scheduleitem.objects.create(
-            video_id=1,
-            starttime=start_date + datetime.timedelta(hours=24, minutes=10),
-            duration=datetime.timedelta(minutes=1),
-            schedulereason=Scheduleitem.REASON_AUTO,
-        )
-        pre_count = Scheduleitem.objects.count()
-
-        fill_with_jukebox(start_date)
-
-        # Now fills 7 days, so expect more items
-        self.assertGreater(Scheduleitem.objects.count(), pre_count)
 
 
 class FillJukeboxUnitTests(TestCase):

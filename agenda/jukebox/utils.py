@@ -7,6 +7,8 @@ import datetime
 from django.utils import timezone
 from portion import Interval, closedopen
 
+from fk.models import Scheduleitem
+
 
 def ceil_5minute(dt: datetime.datetime) -> datetime.datetime:
     """Round datetime up to the next 5-minute boundary (00, 05, 10, etc.)."""
@@ -41,3 +43,12 @@ def week_as_interval(iso_year: int, iso_week: int) -> Interval:
     start = timezone.make_aware(datetime.datetime.combine(week_start_date, datetime.time.min))
     end = start + datetime.timedelta(days=7)
     return closedopen(start, end)
+
+
+def scheduleitem_as_interval(scheduleitem: Scheduleitem) -> Interval:
+    return closedopen(scheduleitem.starttime, scheduleitem.endtime)
+
+
+def interval_duration_sec(interval: Interval) -> float:
+    """Convert an interval to a timedelta representing its duration."""
+    return (interval.upper - interval.lower).total_seconds()
