@@ -1,4 +1,5 @@
 from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from django.db import models
 from django.utils import timezone
@@ -36,7 +37,9 @@ class Scheduleitem(models.Model):
         ordering = ("-id",)
 
     def __str__(self):
-        t = self.starttime
+        # Convert to Europe/Oslo timezone for display
+        local_tz = ZoneInfo("Europe/Oslo")
+        t = self.starttime.astimezone(local_tz)
         s = t.strftime("%Y-%m-%d %H:%M:%S")
         # format microsecond to hundreths
         s += ".%02i" % (t.microsecond / 10000)

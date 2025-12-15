@@ -3,8 +3,7 @@ from typing import Union
 from zoneinfo import ZoneInfo
 
 from django.db import models
-from django.db.models import Q, Window, F
-from django.db.models.functions import Lag, Lead
+from django.db.models import Q
 
 
 class ScheduleitemQuerySet(models.QuerySet):
@@ -52,20 +51,32 @@ class ScheduleitemQuerySet(models.QuerySet):
         main_filter = Q(starttime__gte=start_dt, starttime__lt=end_dt)
 
         if not include_surrounding:
-            return self.filter(main_filter).order_by("starttime")
+            return self.filter(main_filter).order_by("-starttime")
 
-        # Annotate each row with previous and next PKs
-        annotated = self.annotate(
-            prev_pk=Window(expression=Lag("pk"), order_by=[F("starttime")]),
-            next_pk=Window(expression=Lead("pk"), order_by=[F("starttime")]),
-        )
+        # Get main range items
+        main_items = list(self.filter(main_filter))
 
-        # Filter for main range or matching prev/next PK
-        range_q = main_filter
-        prev_q = Q(pk=F("prev_pk"))
-        next_q = Q(pk=F("next_pk"))
+        # Get the item immediately before start_dt
+        prev_item = self.filter(starttime__lt=start_dt).order_by("-starttime").first()
 
-        return annotated.filter(range_q | prev_q | next_q).order_by("starttime")
+        # Get the item immediately after or at end_dt
+        next_item = self.filter(starttime__gte=end_dt).order_by("starttime").first()
+
+        # Combine all items
+        all_items = []
+        if prev_item:
+            all_items.append(prev_item)
+        all_items.extend(main_items)
+        if next_item:
+            all_items.append(next_item)
+
+        # Sort by starttime descending and return as queryset-like behavior
+        # We need to return actual queryset, so let's use PKs
+        if not all_items:
+            return self.none()
+
+        pks = [item.pk for item in all_items]
+        return self.filter(pk__in=pks).order_by("-starttime")
 
     def expand_to_surrounding(
         self, start_dt: datetime, end_dt: datetime
