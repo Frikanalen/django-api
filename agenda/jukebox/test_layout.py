@@ -98,7 +98,6 @@ class ScheduleLayoutTestCase:
         items = layout.layout(gap, scheduled_items, now)
         assert items == []
 
-
     def test_layout_respects_5min_boundaries(self):
         """Test that cursor advances to 5-minute boundaries between videos."""
         videos = [
@@ -111,7 +110,10 @@ class ScheduleLayoutTestCase:
         scheduled_items = []
         now = datetime.datetime(2025, 1, 1, 11, 59)
 
-        with patch('agenda.jukebox.layout.round_up_to_5min_boundary', side_effect=lambda dt: dt + datetime.timedelta(minutes=5)) as mock_round:
+        with patch(
+            "agenda.jukebox.layout.round_up_to_5min_boundary",
+            side_effect=lambda dt: dt + datetime.timedelta(minutes=5),
+        ) as mock_round:
             layout = ScheduleLayout(candidates=videos, picker=make_mock_picker())
             items = layout.layout(gap, scheduled_items, now)
             # First video: 12:00-12:03, cursor rounds to 12:05
@@ -166,22 +168,26 @@ class ScheduleLayoutTestCase:
         existing_item = make_mock_scheduleitem(
             video=make_mock_video(id=99),
             starttime=datetime.datetime(2025, 1, 1, 11, 0),
-            duration=datetime.timedelta(minutes=30)
+            duration=datetime.timedelta(minutes=30),
         )
         scheduled_items = [existing_item]
         now = datetime.datetime(2025, 1, 1, 11, 59)
 
         picker_calls = []
+
         def tracking_pick(window, candidates, current_schedule, now):
-            picker_calls.append({
-                'window': window,
-                'candidates': candidates,
-                'current_schedule': list(current_schedule),
-                'now': now
-            })
+            picker_calls.append(
+                {
+                    "window": window,
+                    "candidates": candidates,
+                    "current_schedule": list(current_schedule),
+                    "now": now,
+                }
+            )
             return candidates[0]
 
         from types import SimpleNamespace
+
         tracking_picker = SimpleNamespace(pick=tracking_pick)
 
         layout = ScheduleLayout(candidates=videos, picker=tracking_picker)
@@ -189,10 +195,10 @@ class ScheduleLayoutTestCase:
 
         # Verify picker was called with existing items in first call
         assert len(picker_calls) > 0
-        assert existing_item in picker_calls[0]['current_schedule']
+        assert existing_item in picker_calls[0]["current_schedule"]
         # Verify picker received accumulated items in subsequent calls
         if len(picker_calls) > 1:
-            assert items[0] in picker_calls[1]['current_schedule']
+            assert items[0] in picker_calls[1]["current_schedule"]
 
     def test_layout_picker_receives_correct_arguments(self):
         """Test that picker receives correct window, candidates, schedule, and now."""
@@ -207,26 +213,30 @@ class ScheduleLayoutTestCase:
         now = datetime.datetime(2025, 1, 1, 11, 59)
 
         picker_calls = []
+
         def tracking_pick(window, candidates, current_schedule, now):
-            picker_calls.append({
-                'window': window,
-                'candidates': list(candidates),
-                'current_schedule': list(current_schedule),
-                'now': now
-            })
+            picker_calls.append(
+                {
+                    "window": window,
+                    "candidates": list(candidates),
+                    "current_schedule": list(current_schedule),
+                    "now": now,
+                }
+            )
             return candidates[0]
 
         from types import SimpleNamespace
+
         tracking_picker = SimpleNamespace(pick=tracking_pick)
 
         layout = ScheduleLayout(candidates=videos, picker=tracking_picker)
-        items = layout.layout(gap, scheduled_items, now)
+        layout.layout(gap, scheduled_items, now)
 
         # Verify first call has correct parameters
         assert len(picker_calls) > 0
         first_call = picker_calls[0]
-        assert first_call['window'].lower == gap.lower
-        assert first_call['window'].upper == gap.upper
-        assert first_call['now'] == now
+        assert first_call["window"].lower == gap.lower
+        assert first_call["window"].upper == gap.upper
+        assert first_call["now"] == now
         # All candidates fit in first window
-        assert len(first_call['candidates']) == 2
+        assert len(first_call["candidates"]) == 2

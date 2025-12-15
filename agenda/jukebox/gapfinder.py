@@ -1,4 +1,3 @@
-import datetime
 from functools import reduce
 from typing import List
 
@@ -6,8 +5,6 @@ from portion import Interval, empty
 
 
 from agenda.jukebox.utils import interval_duration_sec
-
-LOOKBACK = datetime.timedelta(hours=24)
 
 
 class ScheduleGapFinder:
