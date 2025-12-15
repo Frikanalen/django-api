@@ -15,7 +15,7 @@ class VideoManager(models.Manager):
 
     def fillers(self):
         return (
-            super(VideoManager, self)
+            super()
             .get_queryset()
             .filter(
                 is_filler=True,
