@@ -3,9 +3,10 @@ from typing import Iterable, List, Optional, Dict, Any
 from dataclasses import dataclass
 
 from django.utils import timezone
+from portion import Interval
 
 from agenda.jukebox.gap_filler import GapFiller
-from agenda.jukebox.gap_finder import Gap, GapFinder
+from agenda.jukebox.gap_finder import GapFinder
 from agenda.jukebox.utils import ceil_minute, floor_minute
 from agenda.jukebox.scoring import (
     WeekContext,
@@ -65,9 +66,9 @@ class ReservedSlot:
 class WeekView:
     start: datetime.datetime
     end: datetime.datetime
-    free_slots_list: List[Gap]
+    free_slots_list: List[Interval]
 
-    def free_slots(self) -> List[Gap]:
+    def free_slots(self) -> List[Interval]:
         return self.free_slots_list
 
 
@@ -95,7 +96,7 @@ class WeekBuilder:
         intervals = sorted(reserved_slots, key=lambda r: r.start)
         pointer = ceil_minute(start)
         window_end = floor_minute(end)
-        free_slots: List[Gap] = []
+        free_slots: List[Interval] = []
         for r in intervals:
             if r.end <= pointer:
                 continue
@@ -104,14 +105,14 @@ class WeekBuilder:
             potential_end = floor_minute(r.start)
             gap_seconds = (potential_end - pointer).total_seconds()
             if gap_seconds > GapFinder.MINIMUM_GAP_SECONDS:
-                free_slots.append(Gap(pointer, potential_end))
+                free_slots.append(Interval(pointer, potential_end))
             pointer = ceil_minute(r.end)
             if pointer >= window_end:
                 break
         if pointer < window_end:
             gap_seconds = (window_end - pointer).total_seconds()
             if gap_seconds > GapFinder.MINIMUM_GAP_SECONDS:
-                free_slots.append(Gap(pointer, window_end))
+                free_slots.append(Interval(pointer, window_end))
 
         return WeekView(start=start, end=end, free_slots_list=free_slots)
 
@@ -176,6 +177,16 @@ class JukeboxPlanner:
 
         for gap in gaps:
             items = self._filler.fill_gap(gap, available_videos, week_ctx)
+
+            # Update org_counts and recent list as we place items, so scoring adapts
+            for schedobj in items:
+                vid = schedobj["video"]
+                if hasattr(vid, "organization_id") and vid.organization_id is not None:
+                    org_id = int(vid.organization_id)
+                    week_ctx.org_counts[org_id] = week_ctx.org_counts.get(org_id, 0) + 1
+                if hasattr(vid, "id") and vid.id is not None:
+                    week_ctx.recent_video_ids.append(int(vid.id))
+
             full_items.extend(items)
 
         return full_items

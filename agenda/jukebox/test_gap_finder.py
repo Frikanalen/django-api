@@ -6,6 +6,7 @@ These tests show how the refactored code can be tested without a database.
 
 import datetime
 
+
 from agenda.jukebox.gap_finder import GapFinder
 
 
@@ -37,8 +38,8 @@ class TestGapFinder:
         gaps = self.finder._find_gaps_in_items(start, end, [])
 
         assert len(gaps) == 1
-        assert gaps[0].start == start
-        assert gaps[0].end == end
+        assert gaps[0].lower == start
+        assert gaps[0].upper == end
 
     def test_single_item_creates_gaps_before_and_after(self):
         """Test that a single item creates gaps before and after it."""
@@ -54,11 +55,11 @@ class TestGapFinder:
 
         assert len(gaps) == 2
         # First gap: from start to item start
-        assert gaps[0].start == start
-        assert gaps[0].end == item.starttime
+        assert gaps[0].lower == start
+        assert gaps[0].upper == item.starttime
         # Second gap: from item end to window end
-        assert gaps[1].start == item.endtime()
-        assert gaps[1].end == end
+        assert gaps[1].lower == item.endtime()
+        assert gaps[1].upper == end
 
     def test_minimum_gap_duration_enforced(self):
         """Test that gaps smaller than MINIMUM_GAP_SECONDS are not included."""
@@ -96,10 +97,10 @@ class TestGapFinder:
 
         # Should have: gap before first item, then nothing (overlap), gap after second item
         assert len(gaps) == 2
-        assert gaps[0].start == start
-        assert gaps[0].end == items[0].starttime
-        assert gaps[1].start == items[1].endtime()
-        assert gaps[1].end == end
+        assert gaps[0].lower == start
+        assert gaps[0].upper == items[0].starttime
+        assert gaps[1].lower == items[1].endtime()
+        assert gaps[1].upper == end
 
     def test_items_completely_outside_window(self):
         """Test that items before the window don't affect gap calculation."""
@@ -113,8 +114,8 @@ class TestGapFinder:
 
         # Item is skipped, entire window is a gap
         assert len(gaps) == 1
-        assert gaps[0].start == start
-        assert gaps[0].end == end
+        assert gaps[0].lower == start
+        assert gaps[0].upper == end
 
     def test_items_exactly_at_boundaries(self):
         """Test edge case where items start or end at window boundaries."""

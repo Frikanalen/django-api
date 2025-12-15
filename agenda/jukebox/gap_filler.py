@@ -1,6 +1,7 @@
 from typing import Iterable, List, Dict, Any
 
-from agenda.jukebox.gap_finder import Gap
+import portion as P
+
 from agenda.jukebox.scoring import CompositeScorer, WeekContext, GapContext
 from agenda.jukebox.utils import ceil_minute
 from agenda.views import logger
@@ -18,7 +19,7 @@ class GapFiller:
 
     def fill_gap(
         self,
-        gap: Gap,
+        gap: P.Interval,
         available_videos: List[Video],
         week_ctx: WeekContext,
     ) -> List[Dict[str, Any]]:
@@ -26,7 +27,7 @@ class GapFiller:
 
         Returns a list of placement dicts. Videos placed are removed from available_videos.
         """
-        start, end = gap.start, gap.end
+        start, end = gap.lower, gap.upper
         current_time = start
         new_items: List[Dict[str, Any]] = []
 

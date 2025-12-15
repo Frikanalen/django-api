@@ -2,20 +2,22 @@ import datetime
 from dataclasses import dataclass
 from typing import Dict, List, Protocol
 
-from agenda.jukebox.gap_finder import Gap
+import portion as P
+
 from fk.models import Video
 
 
-@dataclass(frozen=True)
+@dataclass
 class WeekContext:
     """Context for scoring within an ISO week window.
 
     Holds window bounds and aggregate information useful for scoring.
+    This is a mutable shared context that accumulates state as videos are placed.
     """
 
     start: datetime.datetime
     end: datetime.datetime
-    # Aggregates for diversity, cooling, etc.
+    # Aggregates for diversity, cooling, etc. (mutable, updated as gaps are filled)
     org_counts: Dict[int, int]  # organization_id -> count in week
     recent_video_ids: List[int]  # recently scheduled ids (cooling)
     now: datetime.datetime
@@ -23,7 +25,7 @@ class WeekContext:
 
 @dataclass(frozen=True)
 class GapContext:
-    gap: "Gap"
+    gap: P.Interval
 
 
 class VideoScorer(Protocol):
