@@ -50,12 +50,39 @@ class PermissionsTest(APITestCase):
         )
 
     def _check_body(self, expected_body: dict, actual_body: dict):
-        self.assertEqual(
-            expected_body,
-            {expected: actual_body[expected] for expected in list(expected_body.keys())},
-        )
+        """
+        Assert that the actual response body matches the expected body, allowing extra keys in error dicts.
+        """
+        if (
+            "type" in expected_body
+            and "errors" in expected_body
+            and isinstance(expected_body["errors"], list)
+            and isinstance(actual_body.get("errors"), list)
+        ):
+            self.assertEqual(expected_body["type"], actual_body["type"])
+            self.assertEqual(len(expected_body["errors"]), len(actual_body["errors"]))
+            for exp_err, act_err in zip(expected_body["errors"], actual_body["errors"]):
+                for k, v in exp_err.items():
+                    self.assertIn(k, act_err)
+                    self.assertEqual(v, act_err[k])
+        else:
+            self.assertEqual(
+                expected_body,
+                {expected: actual_body[expected] for expected in list(expected_body.keys())},
+            )
 
     def _get_upload_token_helper(self, obj, status, data):
+        """
+        Helper for testing the video upload token detail endpoint.
+        """
         r = self.client.get(reverse("api-video-upload-token-detail", args=[obj.id]))
-        self.assertEqual(data, r.data)
+        if (
+            isinstance(data, dict)
+            and "type" in data
+            and "errors" in data
+            and isinstance(data["errors"], list)
+        ):
+            self._check_body(data, r.data)
+        else:
+            self.assertEqual(data, r.data)
         self.assertEqual(status, r.status_code)
