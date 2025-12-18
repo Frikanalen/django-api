@@ -7,7 +7,9 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
+  issues: write
   packages: write # Needed to push to ghcr.io
 
 jobs:
@@ -16,6 +18,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Release PR or GitHub Release
+
+        uses: google-github-actions/release-please-action@v4
+        id: release
+        if: ${{ github.ref == 'refs/heads/main' }}
+        with:
+          release-type: python
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -31,6 +41,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=tag
             type=ref,event=branch
+            type=raw,value=${{ steps.release.outputs.tag_name }},enable=${{ github.ref == 'refs/heads/main' && steps.release.outputs.release_created == 'true' }}
             type=sha
 
       - name: Log in to GHCR
