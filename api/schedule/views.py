@@ -25,7 +25,7 @@ class ScheduleitemViewSet(viewsets.ModelViewSet):
 
     # Eagerly load related video → organization and categories
     queryset = Scheduleitem.objects.select_related("video__organization").prefetch_related(
-        "video__categories"
+        "video__categories", "video__videofile_set"
     )
     pagination_class = Pagination
     permission_classes = (IsInOrganizationOrReadOnly,)
