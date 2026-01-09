@@ -16,7 +16,8 @@ spec:
     spec:
       containers:
         - name: django
-          image: {{ .Values.image.django }}
+          image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag }}"
+          imagePullPolicy: {{ .Values.django.image.pullPolicy }}
           env:
             - name: CSRF_TRUSTED_ORIGINS
               value: {{ .Values.env.CSRF_TRUSTED_ORIGINS }}
@@ -43,7 +44,8 @@ spec:
             - mountPath: /collected_staticfiles
               name: static-files
         - name: nginx
-          image: {{ .Values.image.nginx }}
+          image: "{{ .Values.nginx.image.repository }}:{{ .Values.nginx.image.tag }}"
+          imagePullPolicy: {{ .Values.nginx.image.pullPolicy }}
           volumeMounts:
             - mountPath: /etc/nginx/conf.d
               readOnly: true

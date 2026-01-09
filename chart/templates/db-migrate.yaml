@@ -16,7 +16,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: loaddata
-          image: {{ .Values.image.django }}
+          image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag }}"
           imagePullPolicy: Always
           command: ["python", "manage.py", "migrate"]
           env:

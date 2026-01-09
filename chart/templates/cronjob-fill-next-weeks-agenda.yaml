@@ -14,7 +14,8 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: django
-              image: {{ .Values.image.django }}
+              image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag }}"
+              imagePullPolicy: {{ .Values.django.image.pullPolicy }}
               args:
                 - ./manage.py
                 - fill_next_weeks_agenda
