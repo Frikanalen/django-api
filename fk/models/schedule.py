@@ -1,10 +1,11 @@
 from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from model_utils import Choices
-from api.schedule.query_set import ScheduleitemQuerySet
+from api.schedule.query_set import ScheduleitemQuerySet, ScheduleitemWithVideoManager
 
 
 class Scheduleitem(models.Model):
@@ -29,6 +30,9 @@ class Scheduleitem(models.Model):
     duration = models.DurationField()
 
     objects = ScheduleitemQuerySet.as_manager()
+    # Manager that only returns items with videos - use as: Scheduleitem.with_video.all()
+    # This manager is type-safe: when using it, you can assert that video is not None
+    with_video = ScheduleitemWithVideoManager()
 
     class Meta:
         verbose_name = "TX schedule entry"
@@ -36,7 +40,9 @@ class Scheduleitem(models.Model):
         ordering = ("-id",)
 
     def __str__(self):
-        t = self.starttime
+        # Convert to Europe/Oslo timezone for display
+        local_tz = ZoneInfo("Europe/Oslo")
+        t = self.starttime.astimezone(local_tz)
         s = t.strftime("%Y-%m-%d %H:%M:%S")
         # format microsecond to hundreths
         s += ".%02i" % (t.microsecond / 10000)
@@ -45,6 +51,7 @@ class Scheduleitem(models.Model):
         else:
             return str(s) + ": " + self.default_name
 
+    @property
     def endtime(self):
         if not self.duration:
             return self.starttime

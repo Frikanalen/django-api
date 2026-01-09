@@ -5,9 +5,9 @@ description = "Frikanalen's Django-based backend API"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "dj-database-url==2.3.0",
-    "django==5.2",
-    "django-cors-headers==4.7.0",
+    "dj-database-url>=3.0,<4.0",
+    "django>=5.2,<6.0",
+    "django-cors-headers>=4,<5.0",
     "django-durationfield==0.5.5",
     "django-environ>=0.12.0",
     "django-filter==25.1",
@@ -19,19 +19,28 @@ dependencies = [
     "drf-standardized-errors[openapi]>=0.15.0",
     "gunicorn==23.0.0",
     "markdown==3.7",
-    "mypy>=1.11",
+    "portion>=2.6.1",
     "psycopg2-binary>=2.9.10",
     "pymemcache>=4.0.0",
     "python-dateutil==2.9.0.post0",
-    "requests==2.32.3",
+    "rich==13.9.4",
 ]
+
+
+[tool.django-stubs]
+django_settings_module = "fkweb.settings.local"
+
+[tool.mypy]
+mypy_path = ["typings"]
+plugins = ["mypy_django_plugin.main"]
 
 [tool.ruff]
 line-length = 100
 
 [dependency-groups]
 dev = [
-    "django-stubs>=5.2.8",
+    "django-stubs[compatible-mypy]>=5.2.8",
     "djangorestframework-stubs>=3.16.6",
-    "mypy>=1.17.1",
+    "pytest>=9.0.2",
+    "pytest-django>=4.9.0",
 ]
