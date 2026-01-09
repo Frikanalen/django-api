@@ -11,23 +11,38 @@ metadata:
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   rules:
-    {{- range .Values.ingress.hosts }}
-    - host: {{ .host }}
+    - host: {{ .Values.ingress.hostname }}
       http:
         paths:
-          {{- range .paths }}
-          - path: {{ .path }}
-            pathType: {{ .pathType | default "Prefix" }}
+          - path: /admin
+            pathType: Prefix
             backend:
               service:
-                name: {{ .serviceName }}
+                name: django-api
                 port:
-                  number: {{ .servicePort }}
-          {{- end }}
-    {{- end }}
+                  number: 8080
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: django-api
+                port:
+                  number: 8080
+          - path: /static
+            pathType: Prefix
+            backend:
+              service:
+                name: django-api
+                port:
+                  number: 80
+          - path: /xmltv
+            pathType: Prefix
+            backend:
+              service:
+                name: django-api
+                port:
+                  number: 8080
   tls:
     - hosts:
-        {{- range .Values.ingress.hosts }}
-        - {{ .host }}
-        {{- end }}
+        - {{ .Values.ingress.hostname }}
 {{- end }}
