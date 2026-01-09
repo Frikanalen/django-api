@@ -1,18 +1,21 @@
-image:
-  django: ghcr.io/frikanalen/django-api:latest
-  nginx: nginx
-
-env:
-  DJANGO_SETTINGS_MODULE: fkweb.settings.production
-  ALLOWED_HOSTS: beta.frikanalen.no,frikanalen.no,fk.dev.local,forrige.frikanalen.no,localhost,django.default.svc.cluster.local
-  SMTP_SERVER: smtp.uio.no
-  CSRF_TRUSTED_ORIGINS: beta.frikanalen.no,frikanalen.no,fk.dev.local,forrige.frikanalen.no
-
 django:
+  image:
+    repository: ghcr.io/frikanalen/django-api
+    tag: latest
+    pullPolicy: IfNotPresent
   secretName: django-secret
 
+nginx:
+  image:
+    repository: nginx
+    tag: latest
+    pullPolicy: IfNotPresent
+
 database:
-  image: postgres:16
+  image:
+    repository: postgres
+    tag: "16"
+    pullPolicy: IfNotPresent
   kubegresName: django-postgres
   databaseName: fkweb
   configMapName: django-postgres-conf
@@ -22,26 +25,22 @@ database:
   size: 200Mi
   replicas: "1"
 
+memcached:
+  image:
+    repository: memcached
+    tag: 1.6-alpine
+    pullPolicy: IfNotPresent
+
+env:
+  DJANGO_SETTINGS_MODULE: fkweb.settings.production
+  ALLOWED_HOSTS: beta.frikanalen.no
+  CSRF_TRUSTED_ORIGINS: https://beta.frikanalen.no
+
 service:
   type: ClusterIP
   port: 80
 
-memcached:
-  image: memcached:1.6-alpine
-
 ingress:
   enabled: true
   className: traefik
-  annotations:
-    traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
-    traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    traefik.ingress.kubernetes.io/router.tls: "true"
-  hosts:
-  - host: beta.frikanalen.no
-    paths:
-    - path: /api
-      serviceName: django-api
-      servicePort: 8080
-    - path: /static
-      serviceName: django-api
-      servicePort: 80
+  hostname: beta.frikanalen.no

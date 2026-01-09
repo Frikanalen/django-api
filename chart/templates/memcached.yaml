@@ -14,7 +14,8 @@ spec:
     spec:
       containers:
       - name: memcached
-        image: {{ .Values.memcached.image }}
+        image: "{{ .Values.memcached.image.repository }}:{{ .Values.memcached.image.tag }}"
+        imagePullPolicy: {{ .Values.memcached.image.pullPolicy }}
         ports:
           - name: memcached
             containerPort: 11211
