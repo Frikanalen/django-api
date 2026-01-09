@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/Frikanalen/django-api/compare/v0.1.2...v0.1.3) (2026-01-09)
+
+
+### Miscellaneous Chores
+
+* release 0.1.3 ([4eb5730](https://github.com/Frikanalen/django-api/commit/4eb5730f2eb6693793049bf4c0119bececae06e6))
+
 ## [0.1.2](https://github.com/Frikanalen/django-api/compare/v0.1.1...v0.1.2) (2025-12-18)
 
 
