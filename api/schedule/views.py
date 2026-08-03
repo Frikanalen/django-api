@@ -3,7 +3,7 @@ from rest_framework import viewsets
 from api.auth.permissions import IsInOrganizationOrReadOnly
 from api.schedule.filters import ScheduleitemFilter
 from api.schedule.serializers import ScheduleitemModifySerializer, ScheduleitemReadSerializer
-from api.views import Pagination
+from api.pagination import FkDefaultPagination
 from fk.models import Scheduleitem
 
 
@@ -27,7 +27,7 @@ class ScheduleitemViewSet(viewsets.ModelViewSet):
     queryset = Scheduleitem.objects.select_related("video__organization").prefetch_related(
         "video__categories"
     )
-    pagination_class = Pagination
+    pagination_class = FkDefaultPagination
     permission_classes = (IsInOrganizationOrReadOnly,)
     filterset_class = ScheduleitemFilter
     ordering_fields = ["starttime"]

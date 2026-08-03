@@ -7,8 +7,8 @@ from django.http import HttpResponse
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
-from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.reverse import reverse
+from api.pagination import FkDefaultPagination
 from fk.models import AsRun
 from fk.models import Category
 from fk.models import Video
@@ -83,11 +83,6 @@ def jukebox_csv(request):
 # the front-end.
 
 
-class Pagination(LimitOffsetPagination):
-    default_limit = 50
-    max_limit = 1000
-
-
 class AsRunViewSet(ModelViewSet):
     """
     Query parameters
@@ -106,11 +101,11 @@ class AsRunViewSet(ModelViewSet):
     queryset = AsRun.objects.all()
     serializer_class = AsRunSerializer
     permission_classes = (IsStaffOrReadOnly,)
-    pagination_class = Pagination
+    pagination_class = FkDefaultPagination
 
 
 class CategoryViewSet(ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     permission_classes = (IsStaffOrReadOnly,)
-    pagination_class = Pagination
+    pagination_class = FkDefaultPagination

@@ -2,14 +2,14 @@ from rest_framework import generics
 
 from api.auth.permissions import IsOrganizationEditorOrReadOnly
 from api.organization.serializers import OrganizationSerializer
-from api.views import Pagination
+from api.pagination import FkDefaultPagination
 from fk.models import Organization
 
 
 class OrganizationList(generics.ListCreateAPIView):
     queryset = Organization.objects.all()
     serializer_class = OrganizationSerializer
-    pagination_class = Pagination
+    pagination_class = FkDefaultPagination
     permission_classes = (IsOrganizationEditorOrReadOnly,)
 
     def perform_create(self, serializer):
