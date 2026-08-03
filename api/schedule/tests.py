@@ -46,18 +46,32 @@ class ScheduleitemTest(APITestCase):
             ("10:00:00.00: dummy video", "2015-01-01T10:59:59.9Z"),
         ]
         for conflict, starttime in times:
-            r = self.client.post(
-                reverse("api-scheduleitem-list"),
-                {
-                    "video_id": "/api/videos/2",
-                    "starttime": starttime,
-                    "duration": "00:00:58.312",
-                    "schedulereason": Scheduleitem.REASON_LEGACY,
-                },
-                format="json",
-            )
-            self.assertEqual(status.HTTP_400_BAD_REQUEST, r.status_code)
-            self.assertEqual("Conflict with '2015-01-01 %s'." % conflict, r.data["duration"][0])
+            with self.subTest(starttime=starttime, conflict=conflict):
+                response = self.client.post(
+                    reverse("api-scheduleitem-list"),
+                    {
+                        "video": 2,
+                        "starttime": starttime,
+                        "duration": "00:00:58.312",
+                        "schedulereason": Scheduleitem.REASON_LEGACY,
+                    },
+                    format="json",
+                )
+
+                self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+                self.assertEqual(
+                    {
+                        "type": "validation_error",
+                        "errors": [
+                            {
+                                "code": "invalid",
+                                "detail": f"Conflict with '2015-01-01 {conflict}'.",
+                                "attr": "duration",
+                            }
+                        ],
+                    },
+                    response.data,
+                )
 
     def test_schedule_item_can_update(self):
         times = [
