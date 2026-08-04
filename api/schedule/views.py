@@ -1,10 +1,11 @@
+from django.db.models import Prefetch
 from rest_framework import viewsets
 
 from api.auth.permissions import IsInOrganizationOrReadOnly
 from api.schedule.filters import ScheduleitemFilter
 from api.schedule.serializers import ScheduleitemModifySerializer, ScheduleitemReadSerializer
 from api.pagination import FkSchedulePagination
-from fk.models import Scheduleitem
+from fk.models import Scheduleitem, VideoFile
 
 
 class ScheduleitemViewSet(viewsets.ModelViewSet):
@@ -23,9 +24,13 @@ class ScheduleitemViewSet(viewsets.ModelViewSet):
     `ordering`: Field to order by. Prefix '-' for desc. Defaults to 'starttime'.
     """
 
-    # Eagerly load related video → organization and categories
+    # Eagerly load the nested relations exposed by ScheduleitemReadSerializer.
     queryset = Scheduleitem.objects.select_related("video__organization").prefetch_related(
-        "video__categories"
+        "video__categories",
+        Prefetch(
+            "video__videofile_set",
+            queryset=VideoFile.objects.select_related("format"),
+        ),
     )
     pagination_class = FkSchedulePagination
     permission_classes = (IsInOrganizationOrReadOnly,)
