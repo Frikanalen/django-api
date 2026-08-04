@@ -66,6 +66,44 @@ def test_list_accepts_days_without_an_explicit_date(
 
 
 @pytest.mark.parametrize(
+    "target_day",
+    [
+        pytest.param(date(2025, 3, 30), id="spring-forward"),
+        pytest.param(date(2025, 10, 26), id="fall-back"),
+    ],
+)
+def test_list_uses_oslo_calendar_day_across_dst_transitions(
+    authenticated_client: APIClient,
+    schedule_item_factory: Callable[..., Scheduleitem],
+    target_day: date,
+) -> None:
+    one_minute = timedelta(minutes=1)
+    schedule_item_factory(
+        starttime=at(target_day - timedelta(days=1), 23, 59),
+        duration=one_minute,
+    )
+    expected = [
+        schedule_item_factory(starttime=at(target_day), duration=one_minute),
+        schedule_item_factory(
+            starttime=at(target_day, 23, 59),
+            duration=one_minute,
+        ),
+    ]
+    schedule_item_factory(
+        starttime=at(target_day + timedelta(days=1)),
+        duration=one_minute,
+    )
+
+    response = authenticated_client.get(
+        reverse("api-scheduleitem-list"),
+        {"date": target_day.isoformat()},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert result_ids(response) == [item.pk for item in expected]
+
+
+@pytest.mark.parametrize(
     ("query_params", "error_attr"),
     [
         pytest.param({"date": "not-a-date"}, "date", id="invalid-date"),
@@ -115,6 +153,39 @@ def test_list_optionally_includes_immediate_surrounding_items(
 
     assert response.status_code == status.HTTP_200_OK
     assert result_ids(response) == [items[index].pk for index in expected_indexes]
+
+
+@pytest.mark.parametrize(
+    ("has_previous", "has_next"),
+    [
+        pytest.param(True, False, id="previous-only"),
+        pytest.param(False, True, id="next-only"),
+        pytest.param(False, False, id="no-neighbors"),
+    ],
+)
+def test_surrounding_tolerates_missing_neighbors(
+    authenticated_client: APIClient,
+    schedule_item_factory: Callable[..., Scheduleitem],
+    has_previous: bool,
+    has_next: bool,
+) -> None:
+    target_day = date(2015, 1, 2)
+    expected = []
+    if has_previous:
+        expected.append(
+            schedule_item_factory(starttime=at(target_day - timedelta(days=1), 23))
+        )
+    expected.append(schedule_item_factory(starttime=at(target_day, 10)))
+    if has_next:
+        expected.append(schedule_item_factory(starttime=at(target_day + timedelta(days=1))))
+
+    response = authenticated_client.get(
+        reverse("api-scheduleitem-list"),
+        {"date": target_day.isoformat(), "surrounding": "true"},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert result_ids(response) == [item.pk for item in expected]
 
 
 @pytest.mark.parametrize(
