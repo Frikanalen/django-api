@@ -79,6 +79,27 @@ Start the webserver:
 
 Point your browser to http://127.0.0.1:8000/admin and log in.
 
+#### Running tests
+
+The test suite uses pytest with pytest-django. Existing Django `TestCase` and DRF
+`APITestCase` tests are collected alongside pytest-style tests.
+
+```sh
+uv run pytest
+```
+
+To run a specific test module or directory, pass its path to pytest:
+
+```sh
+uv run pytest api/schedule
+```
+
+To run the full suite with branch coverage and missing-line reporting:
+
+```sh
+uv run pytest --cov
+```
+
 ## Management commands
 
 In addition to the HTTP API, the following commands are executed periodically as Kubernetes cron jobs in our cluster:

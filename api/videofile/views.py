@@ -2,7 +2,7 @@ from django_filters import rest_framework as djfilters
 
 from api.auth.permissions import IsInOrganizationOrReadOnly
 from api.videofile.serializers import VideoFileSerializer
-from api.views import Pagination
+from api.pagination import FkDefaultPagination
 from fk.models import VideoFile
 
 
@@ -28,6 +28,6 @@ class VideoFileViewSet(viewsets.ModelViewSet):
 
     queryset = VideoFile.objects.all()
     serializer_class = VideoFileSerializer
-    pagination_class = Pagination
+    pagination_class = FkDefaultPagination
     filterset_class = VideoFileFilter
     permission_classes = (IsInOrganizationOrReadOnly,)

@@ -4,7 +4,7 @@ from rest_framework import generics
 
 from api.auth.permissions import IsInOrganizationOrReadOnly, IsInOrganizationOrDisallow
 from api.video.serializers import VideoSerializer, VideoCreateSerializer, VideoUploadTokenSerializer
-from api.views import Pagination
+from api.pagination import FkDefaultPagination
 from fk.models import Video, Category
 
 
@@ -129,7 +129,7 @@ class VideoList(generics.ListCreateAPIView):
     """
 
     queryset = Video.objects.filter(proper_import=True)
-    pagination_class = Pagination
+    pagination_class = FkDefaultPagination
     filterset_class = VideoFilter
     permission_classes = (IsInOrganizationOrReadOnly,)
     ordering_fields = [
