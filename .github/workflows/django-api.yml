@@ -3,6 +3,7 @@ name: Django API service
 on:
   push:
     branches: ["*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -20,7 +21,7 @@ jobs:
 
         uses: googleapis/release-please-action@v4
         id: release
-        if: ${{ github.ref == 'refs/heads/main' }}
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         with:
           release-type: python
 
@@ -36,7 +37,7 @@ jobs:
         with:
           images: ghcr.io/frikanalen/django-api
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
             type=ref,event=tag
             type=ref,event=branch
             type=raw,value=${{ steps.release.outputs.tag_name }},enable=${{ github.ref == 'refs/heads/main' && steps.release.outputs.release_created == 'true' }}
