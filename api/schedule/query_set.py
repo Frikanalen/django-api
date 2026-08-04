@@ -3,8 +3,7 @@ from typing import Union
 from zoneinfo import ZoneInfo
 
 from django.db import models
-from django.db.models import Q, Window, F
-from django.db.models.functions import Lag, Lead
+from django.db.models import Q, Subquery
 
 
 class ScheduleitemQuerySet(models.QuerySet):
@@ -41,7 +40,7 @@ class ScheduleitemQuerySet(models.QuerySet):
         """
         Return items from `start_date` (defaults to today) for `days` days.
         If `include_surrounding` is True, also include the immediately
-        preceding and following items via window functions in one pass.
+        preceding and following items using scalar subqueries.
         """
         # Normalize and compute datetime bounds
         date_obj = self.normalize_date(start_date) or datetime.now(self.TZ).date()
@@ -54,18 +53,16 @@ class ScheduleitemQuerySet(models.QuerySet):
         if not include_surrounding:
             return self.filter(main_filter).order_by("starttime")
 
-        # Annotate each row with previous and next PKs
-        annotated = self.annotate(
-            prev_pk=Window(expression=Lag("pk"), order_by=[F("starttime")]),
-            next_pk=Window(expression=Lead("pk"), order_by=[F("starttime")]),
+        previous_pk = (
+            self.filter(starttime__lt=start_dt).order_by("-starttime").values("pk")[:1]
         )
+        next_pk = self.filter(starttime__gte=end_dt).order_by("starttime").values("pk")[:1]
 
-        # Filter for main range or matching prev/next PK
-        range_q = main_filter
-        prev_q = Q(pk=F("prev_pk"))
-        next_q = Q(pk=F("next_pk"))
-
-        return annotated.filter(range_q | prev_q | next_q).order_by("starttime")
+        return self.filter(
+            main_filter
+            | Q(pk__in=Subquery(previous_pk))
+            | Q(pk__in=Subquery(next_pk))
+        ).order_by("starttime")
 
     def expand_to_surrounding(
         self, start_dt: datetime, end_dt: datetime
