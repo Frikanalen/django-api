@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/Frikanalen/django-api/compare/v0.1.3...v0.2.0) (2026-08-04)
+
+
+### Features
+
+* **schedule:** increase page size and improve schedule handling ([f212004](https://github.com/Frikanalen/django-api/commit/f21200454a0db11f65b16f2425139c119317b1dc))
+
 ## [0.1.3](https://github.com/Frikanalen/django-api/compare/v0.1.2...v0.1.3) (2026-01-09)
 
 
