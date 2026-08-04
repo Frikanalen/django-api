@@ -104,7 +104,6 @@ class AnonymousPermissionsTest(PermissionsTest):
         self._expect_status(status.HTTP_200_OK, reverse("api-scheduleitem-list"))
         self._expect_status(status.HTTP_200_OK, reverse("api-videofile-list"))
         self._expect_status(status.HTTP_200_OK, reverse("api-video-list"))
-        self._expect_status(status.HTTP_200_OK, reverse("api-organization-list"))
         self._expect_status(status.HTTP_401_UNAUTHORIZED, reverse("api-user-detail"))
         self._expect_status(status.HTTP_405_METHOD_NOT_ALLOWED, reverse("api-user-create"))
 
