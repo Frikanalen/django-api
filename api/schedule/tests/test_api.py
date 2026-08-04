@@ -188,6 +188,27 @@ def test_update_schedule_item_allows_non_overlapping_changes(
         assert parse_duration(response.data["duration"]) == parse_duration(duration)
 
 
+def test_update_schedule_item_allows_reason_only_change(
+    authenticated_client: APIClient,
+    schedule_item_factory: Callable[..., Scheduleitem],
+) -> None:
+    target = schedule_item_factory(starttime=oslo_datetime(10))
+    original_starttime = target.starttime
+    original_duration = target.duration
+
+    response = authenticated_client.patch(
+        reverse("api-scheduleitem-detail", args=[target.pk]),
+        {"schedulereason": Scheduleitem.REASON_ADMIN},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    target.refresh_from_db()
+    assert target.schedulereason == Scheduleitem.REASON_ADMIN
+    assert target.starttime == original_starttime
+    assert target.duration == original_duration
+
+
 @pytest.mark.parametrize(
     ("target_index", "changes", "conflict_index"),
     [
