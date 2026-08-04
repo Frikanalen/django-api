@@ -5,6 +5,17 @@ from rest_framework.test import APITestCase, APIClient
 from fk.models import User
 
 
+PERMISSION_DENIED_DETAIL = "You do not have permission to perform this action."
+
+
+def error_details(response) -> list[tuple[str, str]]:
+    """
+    drf-standardized-errors replaces DRF's flat ``{"detail": ...}`` body with
+    ``{"type": ..., "errors": [{"code", "detail", "attr"}]}``.
+    """
+    return [(error["code"], error["detail"]) for error in response.data["errors"]]
+
+
 class PermissionsTest(APITestCase):
     fixtures = ["test.yaml"]
     client: APIClient
@@ -36,6 +47,10 @@ class PermissionsTest(APITestCase):
                 "{} status is {} expected {}".format(name, page_response.status_code, code),
             )
 
+    def _assert_permission_denied(self, res):
+        self.assertEqual(status.HTTP_403_FORBIDDEN, res.status_code)
+        self.assertEqual([("permission_denied", PERMISSION_DENIED_DETAIL)], error_details(res))
+
     def post_create(self, url: str, obj: dict, exp_status: int, expected_body: dict | None = None):
         res = self.client.post(url, obj, format="json")
         self._check_status(exp_status, res.status_code)
@@ -59,3 +74,7 @@ class PermissionsTest(APITestCase):
         r = self.client.get(reverse("api-video-upload-token-detail", args=[obj.id]))
         self.assertEqual(data, r.data)
         self.assertEqual(status, r.status_code)
+
+    def _get_upload_token_denied(self, obj):
+        r = self.client.get(reverse("api-video-upload-token-detail", args=[obj.id]))
+        self._assert_permission_denied(r)

@@ -6,7 +6,7 @@ from django.urls import reverse
 from rest_framework import status
 
 from api.auth.tests.permission_test import PermissionsTest
-from fk.models import Scheduleitem, VideoFile
+from fk.models import FileFormat, Scheduleitem, VideoFile
 
 
 class NuugPermissionsTest(PermissionsTest):
@@ -20,6 +20,7 @@ class NuugPermissionsTest(PermissionsTest):
             ("videofiles", status.HTTP_200_OK),
             ("videos", status.HTTP_200_OK),
             ("organization", status.HTTP_200_OK),
+            ("obtain-token", status.HTTP_405_METHOD_NOT_ALLOWED),
             ("user/register", status.HTTP_405_METHOD_NOT_ALLOWED),
         ]
         self.authenticate_nuug_user()
@@ -75,11 +76,7 @@ class NuugPermissionsTest(PermissionsTest):
             200,
             {"upload_token": "deadbeef", "upload_url": settings.FK_UPLOAD_URL},
         )
-        self._get_upload_token_helper(
-            VideoFile.objects.get(video__name="dummy video"),
-            403,
-            {"detail": "You do not have permission to perform this action."},
-        )
+        self._get_upload_token_denied(VideoFile.objects.get(video__name="dummy video"))
 
     def test_nuug_user_cannot_edit_nonowned_things(self):
         self.authenticate_nuug_user()
@@ -93,18 +90,16 @@ class NuugPermissionsTest(PermissionsTest):
         ]
         for url_name, obj, attr in thing_tests:
             r = self.client.patch(reverse(url_name, args=[obj.id]), {attr: "test fn"})
-            self.assertEqual(
-                {"detail": "You do not have permission to perform this action."}, r.data
-            )
-            self.assertEqual(status.HTTP_403_FORBIDDEN, r.status_code)
+            self._assert_permission_denied(r)
 
     def test_nuug_user_can_create_videofile(self):
         self.authenticate_nuug_user()
+        original = FileFormat.objects.get(fsname="original")
         self.post_create(
             reverse("api-videofile-list"),
-            {"video": 1, "format": "original", "filename": "test.mov"},
+            {"video": 1, "format": original.id, "filename": "test.mov"},
             status.HTTP_201_CREATED,
-            {"id": 5, "video": 1, "filename": "test.mov"},
+            {"id": 5, "video": 1, "format": original.id, "filename": "test.mov"},
         )
 
     def test_nuug_user_can_create_video(self):
@@ -139,9 +134,9 @@ class NuugPermissionsTest(PermissionsTest):
 
     def test_nuug_user_cannot_create_asrun(self):
         self.authenticate_nuug_user()
-        self.post_create(
+        r = self.client.post(
             reverse("asrun-list"),
             {"video": 2, "playedAt": "2015-01-01 11:00:00Z"},
-            status.HTTP_403_FORBIDDEN,
-            {"detail": "You do not have permission to perform this action."},
+            format="json",
         )
+        self._assert_permission_denied(r)
