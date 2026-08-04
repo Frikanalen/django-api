@@ -33,6 +33,11 @@ class ScheduleitemViewSet(viewsets.ModelViewSet):
     ordering_fields = ["starttime"]
     ordering = ["starttime"]
 
+    def filter_queryset(self, queryset):
+        if self.action == "list":
+            return super().filter_queryset(queryset)
+        return queryset
+
     def get_serializer_class(self):
         if self.action in ["create", "update", "partial_update"]:
             return ScheduleitemModifySerializer
