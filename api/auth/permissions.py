@@ -5,8 +5,8 @@ class IsOrganizationEditorOrDisallow(permissions.IsAuthenticatedOrReadOnly):
     """
     Object-level read permission to users in the object's organization
 
-    Assumes the model instance has an `organization` foreign key or a
-    `video` foreign key with such a connection.
+    Supports an organization itself, an object with an `organization`
+    foreign key, or an object with a `video` belonging to an organization.
     """
 
     def has_object_permission(self, request, view, obj):
@@ -16,11 +16,13 @@ class IsOrganizationEditorOrDisallow(permissions.IsAuthenticatedOrReadOnly):
         # Staff are allowed to change everything
         if request.user.is_staff:
             return True
-        # We expect either the object to have an organization directly
-        # or have a video field with an organization.
-        try:
+        # The organization endpoint passes an Organization directly. Other
+        # endpoints pass an object related to one either directly or via video.
+        if hasattr(obj, "editor_id"):
+            organization_id = obj.pk
+        elif hasattr(obj, "organization_id"):
             organization_id = obj.organization_id
-        except AttributeError:
+        else:
             organization_id = obj.video.organization_id
         # User must be editor of organization to do changes
         return request.user.editor.filter(id=organization_id).exists()
