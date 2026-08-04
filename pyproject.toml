@@ -36,10 +36,20 @@ python_files = ["tests.py", "test_*.py", "*_test.py", "*_tests.py"]
 addopts = ["-ra", "--strict-config", "--strict-markers"]
 xfail_strict = true
 
+[tool.coverage.run]
+branch = true
+source = ["agenda", "api", "fk", "fkweb", "news"]
+omit = ["*/migrations/*", "*/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
 [dependency-groups]
 dev = [
     "djangorestframework-stubs~=3.17.1",
     "mypy>=1.17.1",
     "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
     "pytest-django>=4.12.0",
 ]

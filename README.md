@@ -88,10 +88,16 @@ The test suite uses pytest with pytest-django. Existing Django `TestCase` and DR
 uv run pytest
 ```
 
-To run only the schedule API tests:
+To run a specific test module or directory, pass its path to pytest:
 
 ```sh
 uv run pytest api/schedule
+```
+
+To run the full suite with branch coverage and missing-line reporting:
+
+```sh
+uv run pytest --cov
 ```
 
 ## Management commands
