@@ -2,10 +2,9 @@
 # This file is covered by the LGPLv3 or later, read COPYING for details.
 import datetime
 
-from django.urls import reverse
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
-
 
 from fk.models import Scheduleitem
 from fk.templatetags import vod
