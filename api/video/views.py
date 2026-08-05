@@ -2,7 +2,11 @@ from django.db.models import Q
 from django_filters import rest_framework as djfilters
 from rest_framework import generics
 
-from api.auth.permissions import IsInOrganizationOrDisallow, IsInOrganizationOrReadOnly
+from api.auth.permissions import (
+    IsInOrganizationOrDisallow,
+    IsInOrganizationOrReadOnly,
+    RequireTargetOrganizationMembership,
+)
 from api.pagination import FkDefaultPagination
 from api.video.serializers import VideoCreateSerializer, VideoSerializer, VideoUploadTokenSerializer
 from fk.models import Category, Video
@@ -77,7 +81,7 @@ class VideoFilter(djfilters.FilterSet):
         return shlex.split(query_string)
 
 
-class VideoList(generics.ListCreateAPIView):
+class VideoList(RequireTargetOrganizationMembership, generics.ListCreateAPIView):
     """
     List of videos
 

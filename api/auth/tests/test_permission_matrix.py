@@ -15,7 +15,7 @@ import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from fk.models import AsRun, Category, Video, VideoFile
+from fk.models import AsRun, Category, Organization, Scheduleitem, Video, VideoFile
 
 pytestmark = pytest.mark.django_db
 
@@ -138,27 +138,32 @@ def test_only_staff_may_create_categories(role, expected_status, role_client):
     assert Category.objects.filter(pk=99).exists() == (expected_status == 201)
 
 
-def test_creation_on_organization_owned_endpoints_is_open_to_any_authenticated_user(
-    outsider, organization, video, file_format, client_as
+@pytest.mark.parametrize(
+    ("role", "expected_status"),
+    [
+        ("anonymous", 401),
+        ("outsider", 403),
+        ("member", 201),
+        ("staff_user", 201),
+    ],
+)
+def test_creation_on_organization_owned_endpoints_requires_membership(
+    role, expected_status, role_client, organization, video, file_format
 ):
     """
-    Known hole, pinned on purpose: the IsInOrganization* permissions only
-    guard *object-level* access, and DRF never runs object checks on
-    create. Any authenticated user - regardless of membership - can
-    therefore create a video in someone else's organization, attach a
-    videofile to someone else's video, and insert items into the TX
-    schedule. Closing the hole is a behavior change that should replace
-    this test; until then it documents what the API actually allows.
+    Replaces the pinned create hole: creating a video in an organization,
+    attaching a videofile to a video, or scheduling a video for TX
+    requires belonging to the owning organization (or being staff).
     """
-    client = client_as(outsider)
+    client = role_client(role)
     cases = [
         (
             "api-video-list",
-            {"name": "Hole video", "organization": organization.pk, "categories": []},
+            {"name": "Created video", "organization": organization.pk, "categories": []},
         ),
         (
             "api-videofile-list",
-            {"video": video.pk, "format": file_format.pk, "filename": "hole.mov"},
+            {"video": video.pk, "format": file_format.pk, "filename": "created.mov"},
         ),
         (
             "api-scheduleitem-list",
@@ -172,10 +177,44 @@ def test_creation_on_organization_owned_endpoints_is_open_to_any_authenticated_u
     ]
     for url_name, payload in cases:
         response = client.post(reverse(url_name), payload, format="json")
-        assert response.status_code == 201, f"{url_name}: {response.content}"
+        assert response.status_code == expected_status, f"{url_name}: {response.content}"
 
-    assert Video.objects.filter(name="Hole video").exists()
-    assert VideoFile.objects.filter(filename="hole.mov").exists()
+    created = expected_status == 201
+    assert Video.objects.filter(name="Created video").exists() == created
+    assert VideoFile.objects.filter(filename="created.mov").exists() == created
+    assert Scheduleitem.objects.exists() == created
+
+
+@pytest.fixture
+def foreign_video(staff_user):
+    foreign_organization = Organization.objects.create(
+        name="Foreign organization", editor=staff_user
+    )
+    return Video.objects.create(
+        name="Foreign video",
+        creator=staff_user,
+        organization=foreign_organization,
+        proper_import=True,
+    )
+
+
+@pytest.mark.parametrize("target", ["videofile", "scheduleitem"])
+def test_members_cannot_repoint_their_objects_at_a_foreign_video(
+    target, member, foreign_video, client_as, request
+):
+    """
+    The object-level check runs against the object as it was, so without
+    a target check an update could attach a member's videofile or
+    schedule item to another organization's video.
+    """
+    obj = request.getfixturevalue(target)
+    url = reverse(DETAIL_URLS[target], args=[obj.pk])
+
+    response = client_as(member).patch(url, {"video": foreign_video.pk}, format="json")
+
+    assert response.status_code == 403
+    obj.refresh_from_db()
+    assert obj.video_id != foreign_video.pk
 
 
 @pytest.mark.parametrize(

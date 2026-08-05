@@ -1,14 +1,14 @@
 from django.db.models import Prefetch
 from rest_framework import viewsets
 
-from api.auth.permissions import IsInOrganizationOrReadOnly
+from api.auth.permissions import IsInOrganizationOrReadOnly, RequireTargetOrganizationMembership
 from api.pagination import FkSchedulePagination
 from api.schedule.filters import ScheduleitemFilter
 from api.schedule.serializers import ScheduleitemModifySerializer, ScheduleitemReadSerializer
 from fk.models import Scheduleitem, VideoFile
 
 
-class ScheduleitemViewSet(viewsets.ModelViewSet):
+class ScheduleitemViewSet(RequireTargetOrganizationMembership, viewsets.ModelViewSet):
     """
     Video events schedule
 
