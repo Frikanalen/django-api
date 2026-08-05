@@ -3,10 +3,11 @@ WeeklySlot's date arithmetic decides *when* the automatic scheduler
 places content. Pure computations, no database needed.
 """
 
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
+from django.utils import timezone
 
 from fk.models import WeeklySlot
 
@@ -41,13 +42,35 @@ def test_end_time_without_duration_is_the_start_time() -> None:
         pytest.param(FRIDAY, A_MONDAY, date(2015, 1, 9), id="upcoming-weekday"),
         # Earlier in the week: pushed to next week.
         pytest.param(MONDAY, date(2015, 1, 9), date(2015, 1, 12), id="already-passed"),
-        # Quirk pinned on purpose: a slot on the from-date's own weekday
-        # also goes to *next* week, so 'today's' slot is never chosen.
-        pytest.param(MONDAY, A_MONDAY, date(2015, 1, 12), id="same-day-skips-a-week"),
+        # On the from-date's own weekday, that date itself counts;
+        # next_datetime() decides by the clock whether it is still usable.
+        pytest.param(MONDAY, A_MONDAY, A_MONDAY, id="same-day-counts"),
     ],
 )
 def test_next_date(slot_day: int, from_date: date, expected: date) -> None:
     assert slot(day=slot_day).next_date(from_date) == expected
+
+
+def a_monday_at(hour: int, minute: int = 0) -> datetime:
+    return datetime(2015, 1, 5, hour, minute, tzinfo=ZoneInfo("Europe/Oslo"))
+
+
+def test_todays_slot_is_chosen_while_its_start_is_still_ahead(monkeypatch) -> None:
+    monkeypatch.setattr(timezone, "localtime", lambda: a_monday_at(11, 59))
+
+    result = slot(day=MONDAY, start=time(12, 0)).next_datetime()
+
+    assert result == a_monday_at(12, 0)
+
+
+def test_todays_slot_is_skipped_once_its_start_has_passed(monkeypatch) -> None:
+    # The boundary counts as passed: at 12:00 sharp the 12:00 slot has
+    # already started.
+    monkeypatch.setattr(timezone, "localtime", lambda: a_monday_at(12, 0))
+
+    result = slot(day=MONDAY, start=time(12, 0)).next_datetime()
+
+    assert result == a_monday_at(12, 0) + timedelta(days=7)
 
 
 def test_next_datetime_is_aware_in_the_django_timezone() -> None:

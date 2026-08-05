@@ -148,19 +148,27 @@ class WeeklySlot(models.Model):
         return end_datetime.time()
 
     def next_date(self, from_date=None):
+        """The slot's next occurrence on or after from_date."""
         if not from_date:
             # next_datetime() combines this with make_aware(), which resolves
             # against Django's timezone, so the date has to come from there too
             from_date = timezone.localdate()
         days_ahead = self.day - from_date.weekday()
-        if days_ahead <= 0:
-            # target date already happened this week
+        if days_ahead < 0:
+            # target weekday already happened this week
             days_ahead += 7
         return from_date + timedelta(days_ahead)
 
     def next_datetime(self, from_date=None):
-        next_date = self.next_date(from_date)
-        return timezone.make_aware(datetime.combine(next_date, self.start_time))
+        if from_date is not None:
+            return timezone.make_aware(datetime.combine(self.next_date(from_date), self.start_time))
+        # Anchored to the clock: today's occurrence only counts while its
+        # start time is still ahead.
+        now = timezone.localtime()
+        result = timezone.make_aware(datetime.combine(self.next_date(now.date()), self.start_time))
+        if result <= now:
+            result += timedelta(days=7)
+        return result
 
     def __str__(self):
         return f"{self.get_day_display()} {self.start_time} ({self.purpose})"
