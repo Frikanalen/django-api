@@ -136,7 +136,7 @@ class Video(models.Model):
 
     def medium_thumbnail_url(self) -> str:
         try:
-            video_file = self.videofile_set.get(video=self, format__fsname="medium_thumb")
+            video_file = self.videofile_set.get(video=self, format__fsname="med_thumb")
         except ObjectDoesNotExist:
             return "/static/default_medium_thumbnail.png"
         return settings.FK_MEDIA_URLPREFIX + video_file.location(relative=True)
