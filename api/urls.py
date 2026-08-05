@@ -1,21 +1,21 @@
 # Copyright (c) 2012-2013 Benjamin Bruheim <grolgh@gmail.com>
 # This file is covered by the LGPLv3 or later, read COPYING for details.
-from django.urls import re_path as url
 from django.urls import include, path
+from django.urls import re_path as url
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from rest_framework import parsers
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.routers import SimpleRouter
 from rest_framework.urlpatterns import format_suffix_patterns
-from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 import api.auth.views
 import api.organization.views
+import api.schedule.views as schedule_views
 import api.video.views
 import api.videofile.views as videofile_views
-import api.schedule.views as schedule_views
 from fkweb.views import CsrfView
-from . import views
 
+from . import views
 
 router = SimpleRouter()
 router.register(r"api/asrun", views.AsRunViewSet, "asrun")

@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from rest_framework.authtoken.models import Token
 
-from fk.models import User, Organization
+from fk.models import Organization, User
 
 
 class TokenSerializer(serializers.ModelSerializer):

@@ -46,8 +46,8 @@ class AsRun(TimeStampedModel):
 
     def __str__(self):
         if self.video:
-            return "{s.playout} video: {s.video}".format(s=self)
-        return "{s.playout}: {s.program_name}".format(s=self)
+            return f"{self.playout} video: {self.video}"
+        return f"{self.playout}: {self.program_name}"
 
     class Meta:
         ordering = (

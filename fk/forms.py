@@ -1,14 +1,10 @@
 from django import forms
-from django.contrib.auth import forms as auth_forms
 from django.contrib.auth.forms import ReadOnlyPasswordHashField
-from django.db import models
 
 from fk.models import User
 
 
 class UserForm(forms.ModelForm):
-    pass
-
     class Meta:
         model = User
         fields = ["first_name", "last_name", "phone_number"]

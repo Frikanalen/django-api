@@ -1,6 +1,6 @@
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.test import APITestCase, APIClient
+from rest_framework.test import APIClient, APITestCase
 
 
 class FilterTest(APITestCase):
@@ -16,11 +16,11 @@ class FilterTest(APITestCase):
             url = reverse(urlname) + lookup
             r = self.client.get(url)
             self.assertEqual(
-                status.HTTP_200_OK, r.status_code, "lookup '%s' did not return status 200" % url
+                status.HTTP_200_OK, r.status_code, f"lookup '{url}' did not return status 200"
             )
             videos = [v[fieldname] for v in r.data["results"]]
             self.assertEqual(
-                expect, videos, "%s lookup '%s' expect %s got %s" % (urlname, url, expect, videos)
+                expect, videos, f"{urlname} lookup '{url}' expect {expect} got {videos}"
             )
 
     def test_can_filter_video(self):

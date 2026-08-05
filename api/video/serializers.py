@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from api.organization.serializers import OrganizationSerializer
-from fk.models import Category, Video, Organization
+from fk.models import Category, Organization, Video
 
 
 class VideoSerializer(serializers.ModelSerializer):

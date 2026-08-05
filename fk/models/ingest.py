@@ -1,6 +1,5 @@
 from django.db import models
 
-
 # This class is actually not managed by Django. It is accessed by the
 # media-processor, which manipulates the database directly. It is only
 # defined here so that database migrations are handled centrally.

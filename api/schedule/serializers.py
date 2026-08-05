@@ -1,7 +1,8 @@
 from zoneinfo import ZoneInfo
+
 from rest_framework import serializers
 
-from fk.models import Category, Video, Scheduleitem, AsRun, Organization, VideoFile
+from fk.models import AsRun, Category, Organization, Scheduleitem, Video, VideoFile
 
 
 class ScheduleitemVideoFileSerializer(serializers.ModelSerializer):
@@ -67,7 +68,7 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
             )
             for entry in items:
                 if entry.starttime < end and start < entry.endtime():
-                    raise serializers.ValidationError({"duration": "Conflict with '%s'." % entry})
+                    raise serializers.ValidationError({"duration": f"Conflict with '{entry}'."})
         return data
 
 

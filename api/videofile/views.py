@@ -1,12 +1,10 @@
 from django_filters import rest_framework as djfilters
+from rest_framework import viewsets
 
 from api.auth.permissions import IsInOrganizationOrReadOnly
-from api.videofile.serializers import VideoFileSerializer
 from api.pagination import FkDefaultPagination
+from api.videofile.serializers import VideoFileSerializer
 from fk.models import VideoFile
-
-
-from rest_framework import viewsets
 
 
 class VideoFileFilter(djfilters.FilterSet):

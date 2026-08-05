@@ -4,6 +4,7 @@ from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from model_utils import Choices
+
 from api.schedule.query_set import ScheduleitemQuerySet
 
 
@@ -36,14 +37,9 @@ class Scheduleitem(models.Model):
         ordering = ("-id",)
 
     def __str__(self):
-        t = self.starttime
-        s = t.strftime("%Y-%m-%d %H:%M:%S")
-        # format microsecond to hundreths
-        s += ".%02i" % (t.microsecond / 10000)
-        if self.video:
-            return str(s) + ": " + str(self.video)
-        else:
-            return str(s) + ": " + self.default_name
+        # %f renders microseconds as six digits; drop four to get hundredths
+        timestamp = self.starttime.strftime("%Y-%m-%d %H:%M:%S.%f")[:-4]
+        return f"{timestamp}: {self.video or self.default_name}"
 
     def endtime(self):
         if not self.duration:
@@ -90,7 +86,7 @@ class SchedulePurpose(models.Model):
         elif self.type == self.TYPE.videos:
             qs = self.direct_videos.all()
         else:
-            raise Exception("Unhandled type %s" % self.type)
+            raise ValueError(f"Unhandled type {self.type}")
         if max_duration:
             qs = qs.filter(duration__lte=max_duration)
         # Workaround playout not handling broken files correctly
@@ -114,7 +110,7 @@ class SchedulePurpose(models.Model):
             # Get the video which has been scheduled the least
             return qs.annotate(num_sched=models.Count("scheduleitem")).order_by("num_sched").first()
         else:
-            raise Exception("Unhandled strategy %s" % self.strategy)
+            raise ValueError(f"Unhandled strategy {self.strategy}")
 
     def __str__(self):
         return self.name
@@ -146,14 +142,16 @@ class WeeklySlot(models.Model):
         if not self.duration:
             return self.start_time
 
-        # make a mock date so we can do timedelta arithmetic
-        dummy_date = datetime.combine(date.today(), self.start_time)
+        # any fixed date will do; only the time survives the arithmetic
+        dummy_date = datetime.combine(date(1970, 1, 1), self.start_time)
         end_datetime = dummy_date + self.duration
         return end_datetime.time()
 
     def next_date(self, from_date=None):
         if not from_date:
-            from_date = date.today()
+            # next_datetime() combines this with make_aware(), which resolves
+            # against Django's timezone, so the date has to come from there too
+            from_date = timezone.localdate()
         days_ahead = self.day - from_date.weekday()
         if days_ahead <= 0:
             # target date already happened this week
@@ -165,4 +163,4 @@ class WeeklySlot(models.Model):
         return timezone.make_aware(datetime.combine(next_date, self.start_time))
 
     def __str__(self):
-        return "{day} {s.start_time} ({s.purpose})".format(day=self.get_day_display(), s=self)
+        return f"{self.get_day_display()} {self.start_time} ({self.purpose})"

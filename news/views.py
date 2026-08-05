@@ -1,8 +1,9 @@
-from .models import Bulletin
-from .serializers import BulletinSerializer
+from rest_framework import viewsets
+
 from api.auth.permissions import IsStaffOrReadOnly
 
-from rest_framework import viewsets
+from .models import Bulletin
+from .serializers import BulletinSerializer
 
 
 class BulletinViewSet(viewsets.ModelViewSet):

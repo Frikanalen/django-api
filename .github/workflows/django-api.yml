@@ -52,21 +52,36 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # TODO: add a `lint` job running `ruff check` and `ruff format --check`.
-  # Blocked on a one-off cleanup pass: as of this commit `ruff check` reports
-  # 235 errors (134 auto-fixable; mostly RUF012 mutable class defaults and I001
-  # import ordering) and `ruff format --check` wants to reformat 5 files. The
-  # vendored stubs in typings/ account for ~21 of those and should go in
-  # `[tool.ruff] exclude` rather than being fixed. Adding this job before that
-  # work lands would just make main permanently red.
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check --output-format=github
+
+      - name: Check formatting
+        # run even if lint step failed
+        if: always()
+        run: uv run ruff format --check
 
   build:
     name: Build and push Docker image to GHCR
     runs-on: ubuntu-latest
-    needs: test
-    # Pull requests get the test job as their gate. They must not push images:
-    # the tags would be meaningless, and GITHUB_TOKEN on a fork PR has no
-    # packages:write anyway.
+    needs: [test, lint]
+    # Pull requests get the test and lint jobs as their gate. They must not push
+    # images: the tags would be meaningless, and GITHUB_TOKEN on a fork PR has
+    # no packages:write anyway.
     if: github.event_name != 'pull_request'
 
     permissions:

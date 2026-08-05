@@ -39,7 +39,7 @@ class IsOrganizationEditorOrReadOnly(IsOrganizationEditorOrDisallow):
         if request.method in permissions.SAFE_METHODS:
             return True
 
-        return super(IsOrganizationEditorOrReadOnly, self).has_object_permission(request, view, obj)
+        return super().has_object_permission(request, view, obj)
 
 
 class IsInOrganizationOrDisallow(permissions.IsAuthenticatedOrReadOnly):
@@ -83,7 +83,7 @@ class IsInOrganizationOrReadOnly(IsInOrganizationOrDisallow):
         if request.method in permissions.SAFE_METHODS:
             return True
 
-        return super(IsInOrganizationOrReadOnly, self).has_object_permission(request, view, obj)
+        return super().has_object_permission(request, view, obj)
 
 
 class IsStaffOrReadOnly(permissions.BasePermission):

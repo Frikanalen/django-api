@@ -2,9 +2,9 @@ from django.db.models import Prefetch
 from rest_framework import viewsets
 
 from api.auth.permissions import IsInOrganizationOrReadOnly
+from api.pagination import FkSchedulePagination
 from api.schedule.filters import ScheduleitemFilter
 from api.schedule.serializers import ScheduleitemModifySerializer, ScheduleitemReadSerializer
-from api.pagination import FkSchedulePagination
 from fk.models import Scheduleitem, VideoFile
 
 

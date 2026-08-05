@@ -3,20 +3,18 @@
 
 import csv
 import logging
+
 from django.http import HttpResponse
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from rest_framework.viewsets import ModelViewSet
 from rest_framework.reverse import reverse
-from api.pagination import FkDefaultPagination
-from fk.models import AsRun
-from fk.models import Category
-from fk.models import Video
-from fk.models import VideoFile
+from rest_framework.viewsets import ModelViewSet
 
 from api.auth.permissions import IsStaffOrReadOnly
+from api.pagination import FkDefaultPagination
 from api.schedule.serializers import AsRunSerializer
 from api.serializers import CategorySerializer
+from fk.models import AsRun, Category, Video, VideoFile
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +45,17 @@ def jukebox_csv(request):
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = "filename=jukebox.csv"
     fields = (
-        "id|name|has_tono_records|video_id|type_id|version|"
-        "creation_began|creation_finished|offset|duration|location".split("|")
+        "id",
+        "name",
+        "has_tono_records",
+        "video_id",
+        "type_id",
+        "version",
+        "creation_began",
+        "creation_finished",
+        "offset",
+        "duration",
+        "location",
     )
     writer = csv.DictWriter(response, fields, delimiter="|")
     writer.writeheader()
@@ -59,21 +66,23 @@ def jukebox_csv(request):
             videofile = video.videofile_set.get(format__fsname="broadcast")
         except VideoFile.DoesNotExist:
             continue
+        # NB: this is bytes, so it interpolates below as b'...'. Kept verbatim
+        # to leave this endpoint's long-standing output untouched.
+        encoded_filename = videofile.filename.encode("utf-8")
         writer.writerow(
-            dict(
-                id=video.id,
-                name=video.name.encode("utf-8"),
-                has_tono_records={False: "f", True: "t"}[video.has_tono_records],
-                video_id=video.id,
-                type_id=videofile.format.id,
-                version=1,  # What is this for?
-                creation_began=video.created_time,  # ??
-                creation_finished=None,  # ??
-                offset=0,
-                duration=video.duration.total_seconds(),
-                location="http://frontend.frikanalen.tv/media/%s"
-                % (videofile.filename.encode("utf-8")),
-            )
+            {
+                "id": video.id,
+                "name": video.name.encode("utf-8"),
+                "has_tono_records": {False: "f", True: "t"}[video.has_tono_records],
+                "video_id": video.id,
+                "type_id": videofile.format.id,
+                "version": 1,  # What is this for?
+                "creation_began": video.created_time,  # ??
+                "creation_finished": None,  # ??
+                "offset": 0,
+                "duration": video.duration.total_seconds(),
+                "location": f"http://frontend.frikanalen.tv/media/{encoded_filename}",
+            }
         )
     return response
 

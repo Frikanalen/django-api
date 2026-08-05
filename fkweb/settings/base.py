@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # vim: ts=4 sts=4 expandtab ai
 
 # Copyright (c) 2012-2013 Benjamin Bruheim <grolgh@gmail.com>
@@ -7,12 +6,14 @@
 """Common settings and globals."""
 
 import logging
-from os.path import abspath, basename, dirname, join, normpath
 import sys
+from os.path import abspath, basename, dirname, join, normpath
 
 from environ import ImproperlyConfigured
 
 from .env import env, load_env_from
+
+logger = logging.getLogger(__name__)
 
 load_env_from(".env")
 
@@ -189,7 +190,7 @@ MIDDLEWARE = (
 
 ########## URL CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#root-urlconf
-ROOT_URLCONF = "%s.urls" % SITE_NAME
+ROOT_URLCONF = f"{SITE_NAME}.urls"
 ########## END URL CONFIGURATION
 
 
@@ -283,7 +284,7 @@ LOGGING = {
 
 ########## WSGI CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#wsgi-application
-WSGI_APPLICATION = "%s.wsgi.application" % SITE_NAME
+WSGI_APPLICATION = f"{SITE_NAME}.wsgi.application"
 ########## END WSGI CONFIGURATION
 
 ########## REST FRAMEWORK CONFIGURATION
@@ -365,8 +366,8 @@ DATABASES = {"default": env.db()}
 CSRF_TRUSTED_ORIGINS = env.str("CSRF_TRUSTED_ORIGINS").split(",")
 try:
     cache_from_env_or_memory = env.cache()
-except ImproperlyConfigured:  # noqa: F821
-    logging.warning("CACHE_URL not set, falling back to in-memory cache.")
+except ImproperlyConfigured:
+    logger.warning("CACHE_URL not set, falling back to in-memory cache.")
     cache_from_env_or_memory = {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
 
 CACHES = {"default": cache_from_env_or_memory}

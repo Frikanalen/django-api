@@ -1,5 +1,4 @@
 from datetime import date, datetime, time, timedelta
-from typing import Union
 from zoneinfo import ZoneInfo
 
 from django.db import models
@@ -13,7 +12,7 @@ class ScheduleitemQuerySet(models.QuerySet):
 
     TZ = ZoneInfo("Europe/Oslo")
 
-    def normalize_date(self, value: Union[str, date, datetime, None]) -> date | None:
+    def normalize_date(self, value: str | date | datetime | None) -> date | None:
         """
         Normalize various date representations to a date object.
         Accepts strings in 'YYYY-MM-DD', date, datetime, or None.
@@ -26,14 +25,16 @@ class ScheduleitemQuerySet(models.QuerySet):
             return value.astimezone(self.TZ).date()
         if isinstance(value, str):
             try:
-                return datetime.strptime(value, "%Y-%m-%d").date()
+                # Date-only input, and only the date survives the call, so an
+                # absent zone cannot affect the result.
+                return datetime.strptime(value, "%Y-%m-%d").date()  # noqa: DTZ007
             except ValueError:
                 return None
         return None
 
     def by_day(
         self,
-        start_date: Union[str, date, datetime, None] = None,
+        start_date: str | date | datetime | None = None,
         days: int = 7,
         include_surrounding: bool = False,
     ) -> models.QuerySet:
@@ -53,15 +54,11 @@ class ScheduleitemQuerySet(models.QuerySet):
         if not include_surrounding:
             return self.filter(main_filter).order_by("starttime")
 
-        previous_pk = (
-            self.filter(starttime__lt=start_dt).order_by("-starttime").values("pk")[:1]
-        )
+        previous_pk = self.filter(starttime__lt=start_dt).order_by("-starttime").values("pk")[:1]
         next_pk = self.filter(starttime__gte=end_dt).order_by("starttime").values("pk")[:1]
 
         return self.filter(
-            main_filter
-            | Q(pk__in=Subquery(previous_pk))
-            | Q(pk__in=Subquery(next_pk))
+            main_filter | Q(pk__in=Subquery(previous_pk)) | Q(pk__in=Subquery(next_pk))
         ).order_by("starttime")
 
     def expand_to_surrounding(

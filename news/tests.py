@@ -1,10 +1,9 @@
-import string
 import random
+import string
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
-from rest_framework.test import APIRequestFactory
-from rest_framework.test import force_authenticate
+from rest_framework.test import APIRequestFactory, force_authenticate
 
 from .models import Bulletin
 from .views import BulletinViewSet
@@ -38,7 +37,7 @@ class TestArticleList(TestCase):
                 s = insert_into_string(s, i, punct)
             return s.strip().capitalize()
 
-        for n in range(0, 50):
+        for n in range(50):
             heading = random_string(30)
             text = random_string(300)
             Bulletin.objects.create(heading=heading, text=text)

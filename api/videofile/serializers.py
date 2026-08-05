@@ -1,6 +1,6 @@
 from rest_framework.serializers import ModelSerializer, PrimaryKeyRelatedField
 
-from fk.models import VideoFile, Video, FileFormat
+from fk.models import FileFormat, Video, VideoFile
 
 
 class VideoFileSerializer(ModelSerializer):

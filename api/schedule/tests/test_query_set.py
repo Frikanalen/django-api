@@ -1,12 +1,11 @@
 from collections.abc import Callable
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
 from django.utils import timezone as django_timezone
 
 from fk.models import Scheduleitem
-
 
 pytestmark = pytest.mark.django_db
 
@@ -17,7 +16,7 @@ OSLO = ZoneInfo("Europe/Oslo")
     ("value", "expected"),
     [
         pytest.param(
-            datetime(2015, 1, 1, 23, 30, tzinfo=timezone.utc),
+            datetime(2015, 1, 1, 23, 30, tzinfo=UTC),
             date(2015, 1, 2),
             id="timezone-aware-datetime",
         ),

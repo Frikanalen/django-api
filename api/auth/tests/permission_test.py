@@ -1,9 +1,8 @@
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.test import APITestCase, APIClient
+from rest_framework.test import APIClient, APITestCase
 
 from fk.models import User
-
 
 PERMISSION_DENIED_DETAIL = "You do not have permission to perform this action."
 
@@ -37,14 +36,14 @@ class PermissionsTest(APITestCase):
         root_response = self.client.get(reverse("api-root"))
         self.assertEqual(status.HTTP_200_OK, root_response.status_code)
         # Every page exists
-        self.assertEqual(set(p[0] for p in pages), set(root_response.data.keys()))
+        self.assertEqual({p[0] for p in pages}, set(root_response.data.keys()))
         for name, code in pages:
             url = root_response.data[name]
             page_response = self.client.get(url)
             self.assertEqual(
                 code,
                 page_response.status_code,
-                "{} status is {} expected {}".format(name, page_response.status_code, code),
+                f"{name} status is {page_response.status_code} expected {code}",
             )
 
     def _assert_permission_denied(self, res):
