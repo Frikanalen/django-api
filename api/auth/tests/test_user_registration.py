@@ -36,21 +36,21 @@ def test_registration_creates_a_working_logged_in_account() -> None:
         "email": VALID_USER["email"],
         "firstName": "John",
         "lastName": "Smith",
-        "dateOfBirth": None,
     }
 
 
-def test_registration_silently_drops_date_of_birth() -> None:
+def test_registration_does_not_collect_date_of_birth() -> None:
     """
-    Known wart, pinned on purpose: NewUserSerializer.create only copies
-    email, names and password, so a date_of_birth sent on registration
-    validates fine and is then thrown away. The old fixture-based test
-    sent one and never noticed. A fix should replace this test.
+    Policy: registration does not ask for a date of birth, so the field
+    is not part of the serializer and a submitted one is ignored like
+    any other unknown key. (The profile endpoint still allows setting
+    it later.)
     """
     response = register(APIClient(), {**VALID_USER, "date_of_birth": "2000-02-01"})
 
     assert response.status_code == status.HTTP_201_CREATED
     assert User.objects.get(email=VALID_USER["email"]).date_of_birth is None
+    assert "dateOfBirth" not in response.json()
 
 
 def test_duplicate_email_is_rejected() -> None:

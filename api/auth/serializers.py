@@ -38,7 +38,8 @@ class NewUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("id", "email", "first_name", "last_name", "date_of_birth", "password")
+        # No date_of_birth: policy is not to ask for it at registration.
+        fields = ("id", "email", "first_name", "last_name", "password")
 
         write_only_fields = ("password",)
 
