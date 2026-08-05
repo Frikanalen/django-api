@@ -92,22 +92,29 @@ def test_email_cannot_be_changed(client: APIClient, account: User) -> None:
     assert account.email == EMAIL
 
 
-def test_password_updates_are_broken(client: APIClient, account: User) -> None:
+def test_password_updates_are_hashed_and_usable(client: APIClient, account: User) -> None:
     """
-    Known defect, pinned on purpose: UserSerializer declares password as
-    a writable field but never runs it through set_password, so a PATCH
-    stores the raw string in the password column. The account can then
-    log in with neither the old nor the new password, and the plaintext
-    sits in the database. The fix (hash it, or reject the field) should
-    replace this test.
+    Replaces the pinned plaintext-password defect: a PATCHed password
+    must be hashed, never stored verbatim, and must work for a fresh
+    login while the old password stops working.
     """
     response = client.patch(reverse("api-user-detail"), {"password": "hunter2"}, format="json")
 
     assert response.status_code == status.HTTP_200_OK
     account.refresh_from_db()
-    assert account.password == "hunter2"
-    assert not account.check_password("hunter2")
+    assert account.password != "hunter2"
+    assert account.check_password("hunter2")
     assert not account.check_password(PASSWORD)
+
+    login = APIClient().post(
+        reverse("api-user-login"), {"email": EMAIL, "password": "hunter2"}, format="json"
+    )
+    assert login.status_code == status.HTTP_200_OK
+
+    stale_login = APIClient().post(
+        reverse("api-user-login"), {"email": EMAIL, "password": PASSWORD}, format="json"
+    )
+    assert stale_login.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 def test_account_can_be_deleted(client: APIClient, account: User) -> None:
