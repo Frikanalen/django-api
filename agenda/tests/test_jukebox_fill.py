@@ -310,16 +310,15 @@ def test_videos_from_non_member_organizations_are_never_scheduled(short_filler: 
 # --- degenerate pools ------------------------------------------------------
 
 
-def test_an_empty_filler_pool_crashes(db) -> None:
+def test_an_empty_filler_pool_schedules_nothing(db) -> None:
     """
-    BUG -- documents current behaviour.  With nothing eligible to draw
-    from, `next_vid` returns None and `_fill_time_with_jukebox`
-    dereferences it before reaching its own `if not video` guard, so the
-    nightly cron dies with an AttributeError instead of logging an empty
-    pool and moving on.  Replace this test when the guard is fixed.
+    With nothing eligible to draw from, the run is a no-op.  It used to
+    raise AttributeError -- `next_vid` returns None and the caller
+    dereferenced it before its own guard -- which killed the nightly
+    cron whenever the pool happened to be empty.
     """
-    with pytest.raises(AttributeError):
-        agenda_views.fill_agenda_with_jukebox(START_DATE, days=1)
+    assert agenda_views.fill_agenda_with_jukebox(START_DATE, days=1) == []
+    assert Scheduleitem.objects.count() == 0
 
 
 def test_a_filler_longer_than_the_window_leaves_it_empty(
@@ -332,28 +331,29 @@ def test_a_filler_longer_than_the_window_leaves_it_empty(
     assert Scheduleitem.objects.count() == 0
 
 
-def test_a_zero_length_filler_is_scheduled_once_a_minute(
-    member_organization: Organization,
-) -> None:
+def test_a_zero_length_filler_is_never_scheduled(member_organization: Organization) -> None:
     """
-    BUG -- documents current behaviour.  A zero-length video cannot move
-    `current_time` forward on its own; only `ceil_minute` does, one
-    minute at a time, so the window fills with entries for a programme
-    that has no duration.  Nothing should be scheduled at all.  Replace
-    this test when the pool is screened.
+    A video of non-positive length cannot move `current_time` forward, so
+    it is screened out of the pool.  A zero-length one used to be
+    scheduled once a minute for the whole window.
+
+    Negative lengths belonged to this case too -- they walked the clock
+    backwards and looped until the process died -- but they can no longer
+    reach the database at all; see
+    `fk/tests/test_duration_constraints.py`.  The screen stays `<= 0`
+    rather than `== 0` because what the filler needs is a duration that
+    actually advances the clock, not merely a non-negative one.
     """
     make_filler(member_organization, name="Zero length", minutes=0)
 
-    agenda_views.fill_agenda_with_jukebox(START_DATE, days=HALF_HOUR)
-
-    starts = list(Scheduleitem.objects.order_by("starttime").values_list("starttime", flat=True))
-    assert starts == [START_DATE + datetime.timedelta(minutes=m) for m in range(1, 30)]
+    assert agenda_views.fill_agenda_with_jukebox(START_DATE, days=HALF_HOUR) == []
+    assert Scheduleitem.objects.count() == 0
 
 
 def test_a_positive_filler_shorter_than_a_minute_still_advances(
     member_organization: Organization,
 ) -> None:
-    """Sub-minute videos are ordinary content and do reach the schedule."""
+    """The screening is on non-positive length only: sub-minute videos still play."""
     make_filler(member_organization, name="Thirty seconds", minutes=0.5)
 
     agenda_views.fill_agenda_with_jukebox(START_DATE, days=HALF_HOUR)

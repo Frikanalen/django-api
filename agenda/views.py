@@ -252,7 +252,14 @@ def fill_agenda_with_jukebox(start=None, days=1):
     start = start or timezone.now()
     end = start + datetime.timedelta(days=days)
 
-    candidates = Video.objects.fillers().order_by("?")
+    # A filler must have a length that actually advances the schedule
+    # clock; `_fill_time_with_jukebox` would otherwise place a zero-length
+    # video once a minute for the whole window.  Video.duration defaults
+    # to zero, so this is ordinary unimported data, not corruption --
+    # negative lengths are barred by a check constraint on the model.
+    # Kept out of Video.objects.fillers() on purpose: that queryset also
+    # feeds the jukebox CSV, whose output is a frozen contract.
+    candidates = Video.objects.fillers().exclude(duration__lte=datetime.timedelta(0)).order_by("?")
 
     jukebox_choices = _items_for_gap(start, end, candidates)
     for schedobj in jukebox_choices:
@@ -357,6 +364,11 @@ def _fill_time_with_jukebox(start, end, videos, current_pool=None):
 
     while current_time < end:
         video = next_vid(True)
+        if not video:
+            # Nothing eligible to draw from; leave the rest of the gap empty
+            # rather than dereferencing None below.
+            logger.info("No videos available to fill from %s", current_time)
+            break
         new_rejects = []
 
         while current_time + video.duration > end:
