@@ -4,9 +4,8 @@ from zoneinfo import ZoneInfo
 
 from django.test import TestCase
 
+from agenda import views as agenda_views
 from fk.models import Scheduleitem, Video
-
-from . import views as agenda_views
 
 OSLO = ZoneInfo("Europe/Oslo")
 START_DATE = datetime.datetime(2019, 6, 30, 12, tzinfo=OSLO)
