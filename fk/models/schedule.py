@@ -142,14 +142,16 @@ class WeeklySlot(models.Model):
         if not self.duration:
             return self.start_time
 
-        # make a mock date so we can do timedelta arithmetic
-        dummy_date = datetime.combine(date.today(), self.start_time)
+        # any fixed date will do; only the time survives the arithmetic
+        dummy_date = datetime.combine(date(1970, 1, 1), self.start_time)
         end_datetime = dummy_date + self.duration
         return end_datetime.time()
 
     def next_date(self, from_date=None):
         if not from_date:
-            from_date = date.today()
+            # next_datetime() combines this with make_aware(), which resolves
+            # against Django's timezone, so the date has to come from there too
+            from_date = timezone.localdate()
         days_ahead = self.day - from_date.weekday()
         if days_ahead <= 0:
             # target date already happened this week

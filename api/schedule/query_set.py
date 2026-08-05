@@ -25,7 +25,9 @@ class ScheduleitemQuerySet(models.QuerySet):
             return value.astimezone(self.TZ).date()
         if isinstance(value, str):
             try:
-                return datetime.strptime(value, "%Y-%m-%d").date()
+                # Date-only input, and only the date survives the call, so an
+                # absent zone cannot affect the result.
+                return datetime.strptime(value, "%Y-%m-%d").date()  # noqa: DTZ007
             except ValueError:
                 return None
         return None
