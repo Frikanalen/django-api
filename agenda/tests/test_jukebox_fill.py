@@ -70,7 +70,7 @@ def short_filler(member_organization: Organization) -> Video:
 
 
 def unsaved_video(video_id: int, minutes: int = 60, **kwargs) -> Video:
-    """An unsaved Video: _items_for_gap only reads id and duration."""
+    """An unsaved Video: items_for_gap only reads id and duration."""
     if "duration" not in kwargs:
         kwargs["duration"] = datetime.timedelta(minutes=minutes)
     return Video(
@@ -133,14 +133,14 @@ def test_two_videos_alternate_to_fill_the_time(db) -> None:
     videos = [unsaved_video(1, minutes=2), unsaved_video(2, minutes=3)]
     end = START_DATE + datetime.timedelta(minutes=15)
 
-    res = scheduling._items_for_gap(START_DATE, end, videos)
+    res = scheduling.items_for_gap(START_DATE, end, videos)
 
     assert [r["id"] for r in res] == [1, 2, 1, 2]
 
 
 def test_short_gap_before_scheduled_item_is_left_empty(filler_video: Video) -> None:
     """
-    Covers the rounding and minimum-gap rules in `_items_for_gap`.
+    Covers the rounding and minimum-gap rules in `items_for_gap`.
 
     Filling starts at 12:00:13 and an item occupies 12:02:27 to 12:03:27,
     leaving 12:01:00 to 12:02:00 free.  That gap is under MINIMUM_GAP_SECONDS,
@@ -160,7 +160,7 @@ def test_short_gap_before_scheduled_item_is_left_empty(filler_video: Video) -> N
     start = START_DATE + datetime.timedelta(seconds=13)
     end = START_DATE + datetime.timedelta(minutes=10, seconds=3)
 
-    res = scheduling._items_for_gap(start, end, videos)
+    res = scheduling.items_for_gap(start, end, videos)
 
     assert [r["id"] for r in res] == [1, 3, 1, 3]
     assert [r["starttime"] for r in res] == [

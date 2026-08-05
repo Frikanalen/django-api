@@ -65,7 +65,7 @@ def fill_agenda_with_jukebox(start=None, days=1):
     # feeds the jukebox CSV, whose output is a frozen contract.
     candidates = Video.objects.fillers().exclude(duration__lte=datetime.timedelta(0)).order_by("?")
 
-    jukebox_choices = _items_for_gap(start, end, candidates)
+    jukebox_choices = items_for_gap(start, end, candidates)
     for schedobj in jukebox_choices:
         video = schedobj["video"]
         item = Scheduleitem(
@@ -88,7 +88,12 @@ def floor_minute(dt):
     return dt.replace(second=0, microsecond=0)
 
 
-def _items_for_gap(start, end, candidates):
+def items_for_gap(start, end, candidates):
+    """Plan (but do not save) filler placements between `start` and `end`.
+
+    Returns a list of `{"id", "starttime", "video"}` dicts, skipping any
+    stretch already occupied by an existing Scheduleitem.
+    """
     logger.info("Being asked to fill gap from %s to %s", start, end)
     # The smallest gap this function will try to fill
     MINIMUM_GAP_SECONDS = 300
@@ -152,11 +157,10 @@ def _fill_time_with_jukebox(start, end, videos, current_pool=None):
     rejected_videos = []
     new_items = []
 
-    def plist(l):
-        return "[" + " ".join(str(v.id) for v in l) + "]"
+    def plist(video_list):
+        return "[" + " ".join(str(v.id) for v in video_list) + "]"
 
     def next_vid(first=False):
-        logger.debug(Video.objects.all())
         logger.debug("next vid %s rej %s pool %s", first, plist(rejected_videos), plist(video_pool))
         if len(video_pool) < len(videos) and first:
             video_pool.extend(list(videos))
