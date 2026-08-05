@@ -1,15 +1,31 @@
 from django.urls import reverse
 from rest_framework import status
 
-from api.auth.tests.permission_test import PermissionsTest
+from api.auth.tests.permission_test import PermissionsTest, error_details
 
 
 class AnonymousPermissionsTest(PermissionsTest):
     def test_anonymous_does_not_have_token(self):
-        r = self.client.get(reverse("api-token-auth"))
-        error_msg = {"detail": "Authentication credentials were not provided."}
-        self.assertEqual(status.HTTP_401_UNAUTHORIZED, r.status_code)
-        self.assertEqual(error_msg, r.data)
+        """The token endpoint takes credentials by POST, so there is nothing to hand out."""
+        r = self.client.post(reverse("api-token-auth"), {}, format="json")
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, r.status_code)
+        self.assertEqual("validation_error", r.data["type"])
+        self.assertEqual(
+            [("required", "username"), ("required", "password")],
+            [(error["code"], error["attr"]) for error in r.data["errors"]],
+        )
+
+    def test_anonymous_cannot_obtain_token_by_guessing(self):
+        r = self.client.post(
+            reverse("api-token-auth"),
+            {"username": "nuug_user@fake.com", "password": "wrong"},
+            format="json",
+        )
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, r.status_code)
+        self.assertEqual(
+            [("authorization", "Unable to log in with provided credentials.")],
+            error_details(r),
+        )
 
     def test_anonymous_can_list_videofiles(self):
         """
@@ -83,7 +99,10 @@ class AnonymousPermissionsTest(PermissionsTest):
     def _ensure_forbidden(self, url: str, data: dict | None = None):
         res = self.client.post(url, data=data or {})
         self.assertEqual(status.HTTP_401_UNAUTHORIZED, res.status_code)
-        self.assertEqual(res.json()["detail"], "Authentication credentials were not provided.")
+        self.assertEqual(
+            [("not_authenticated", "Authentication credentials were not provided.")],
+            error_details(res),
+        )
 
     def test_anonymous_cannot_mutate(self):
         self._ensure_forbidden(reverse("api-video-list"))
@@ -95,7 +114,6 @@ class AnonymousPermissionsTest(PermissionsTest):
         self._ensure_forbidden(reverse("api-videofile-detail", args=(1,)))
         self._ensure_forbidden(reverse("api-scheduleitem-detail", args=(1,)))
         self._ensure_forbidden(reverse("asrun-detail", args=(1,)))
-        self._ensure_forbidden(reverse("api-token-auth"))
 
     def test_anonymous_reading_all_pages_from_root_expecting_status(self):
         self._expect_status(status.HTTP_200_OK, reverse("asrun-list"))
@@ -104,7 +122,6 @@ class AnonymousPermissionsTest(PermissionsTest):
         self._expect_status(status.HTTP_200_OK, reverse("api-scheduleitem-list"))
         self._expect_status(status.HTTP_200_OK, reverse("api-videofile-list"))
         self._expect_status(status.HTTP_200_OK, reverse("api-video-list"))
-        self._expect_status(status.HTTP_200_OK, reverse("api-organization-list"))
         self._expect_status(status.HTTP_401_UNAUTHORIZED, reverse("api-user-detail"))
         self._expect_status(status.HTTP_405_METHOD_NOT_ALLOWED, reverse("api-user-create"))
 

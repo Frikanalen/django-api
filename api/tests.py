@@ -53,11 +53,13 @@ class FilterTest(APITestCase):
             ("?creator__email=nuug", []),
             ("?creator__email=nuug_user@fake.com", ["tech video"]),
             ("?creator__email=dummy_user@fake.com&name=", ["dummy video"]),
+            # VideoList.get_queryset reads this one straight off the query
+            # string in camelCase, unlike the django-filter fields above.
             (
-                "?proper_import=false",
+                "?properImport=false",
                 ["broken video", "unpublished video", "dummy video", "tech video"],
             ),
-            ("?proper_import=true", ["unpublished video", "dummy video", "tech video"]),
+            ("?properImport=true", ["unpublished video", "dummy video", "tech video"]),
         ]
         self.list_lookup("api-video-list", "name", lookups)
 

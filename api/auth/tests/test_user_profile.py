@@ -1,4 +1,3 @@
-import base64
 import datetime
 
 from django.urls import reverse
@@ -14,17 +13,13 @@ class UserProfileTests(APITestCase):
     email = "profile_test_user@fake.com"
     password = "test"
 
-    def _basic_auth_credentials(self):
-        credentials = base64.b64encode(f"{self.email}:{self.password}".encode("utf-8"))
-        return "Basic {}".format(credentials.decode("utf-8"))
-
     def setUp(self):
         self.user = User.objects.create_user(
             email=self.email, password=self.password, date_of_birth="1900-01-01"
         )
-        first_name = "Firstname before change"
-        last_name = "Lastname before change"
-        phone_number = "+1 800 USA-RAIL"
+        self.user.first_name = "Firstname before change"
+        self.user.last_name = "Lastname before change"
+        self.user.phone_number = "+47 22 22 55 55"
         self.user.save()
 
     def tearDown(self):
@@ -34,12 +29,15 @@ class UserProfileTests(APITestCase):
     def test_user_can_get_token(self):
         client = APIClient()
 
-        client.credentials(HTTP_AUTHORIZATION=self._basic_auth_credentials())
-        response = client.get(reverse("api-token-auth"))
+        response = client.post(
+            reverse("api-token-auth"),
+            {"username": self.email, "password": self.password},
+            format="json",
+        )
 
         self.assertEqual(status.HTTP_200_OK, response.status_code)
-        self.assertEqual(list(response.data.keys()), ["created", "key", "user"])
-        self.assertEqual(len(response.data["key"]), 40)
+        self.assertEqual(list(response.data.keys()), ["token"])
+        self.assertEqual(len(response.data["token"]), 40)
 
     def test_user_get_profile(self):
         req = self.factory.get(reverse("api-user-detail"))

@@ -3,7 +3,7 @@ from django.urls import reverse
 from rest_framework import status
 
 from api.auth.tests.permission_test import PermissionsTest
-from fk.models import Scheduleitem, VideoFile
+from fk.models import FileFormat, Scheduleitem, VideoFile
 
 
 class StaffPermissionsTest(PermissionsTest):
@@ -12,11 +12,12 @@ class StaffPermissionsTest(PermissionsTest):
 
     def test_staff_user_can_create_videofile(self):
         self.authenticate_staff()
+        original = FileFormat.objects.get(fsname="original")
         self.post_create(
             reverse("api-videofile-list"),
-            {"video": 1, "format": "original", "filename": "test.mov"},
+            {"video": 1, "format": original.id, "filename": "test.mov"},
             status.HTTP_201_CREATED,
-            {"id": 5, "video": 1, "filename": "test.mov"},
+            {"id": 5, "video": 1, "format": original.id, "filename": "test.mov"},
         )
 
     def test_staff_user_can_create_scheduleitem(self):
