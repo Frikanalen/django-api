@@ -50,6 +50,7 @@ def make_filler(
         "duration": timedelta(minutes=1),
         "is_filler": True,
         "has_tono_records": False,
+        "proper_import": True,
         **overrides,
     }
     video = Video.objects.create(**fields)
@@ -101,6 +102,7 @@ def test_fillers_without_a_broadcast_file_are_skipped(
     [
         pytest.param({"is_filler": False}, id="not-a-filler"),
         pytest.param({"has_tono_records": True}, id="tono-encumbered"),
+        pytest.param({"proper_import": False}, id="not-properly-imported"),
     ],
 )
 def test_ineligible_videos_are_excluded(member_organization, broadcast_format, overrides) -> None:
