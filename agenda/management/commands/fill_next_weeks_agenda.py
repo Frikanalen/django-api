@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from agenda.views import fill_next_weeks_agenda
+from agenda.scheduling import fill_next_weeks_agenda
 
 
 class Command(BaseCommand):

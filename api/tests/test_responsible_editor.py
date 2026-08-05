@@ -20,7 +20,7 @@ import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from agenda.views import fill_agenda_with_jukebox
+from agenda.scheduling import fill_agenda_with_jukebox
 from fk.models import (
     Category,
     Organization,

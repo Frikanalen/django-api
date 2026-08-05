@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from django.core.management import call_command
 
-from agenda import views as agenda_views
+from agenda import scheduling
 from fk.models import Organization, Scheduleitem, User, Video
 
 pytestmark = pytest.mark.django_db
@@ -98,7 +98,7 @@ def overlapping_pairs() -> list[tuple[datetime.datetime, datetime.datetime]]:
 
 
 def test_fills_a_whole_day(filler_video: Video) -> None:
-    agenda_views.fill_agenda_with_jukebox(START_DATE, days=1)
+    scheduling.fill_agenda_with_jukebox(START_DATE, days=1)
 
     assert Scheduleitem.objects.count() == 23
     assert set(Scheduleitem.objects.values_list("schedulereason", flat=True)) == {
@@ -124,7 +124,7 @@ def test_fills_in_only_where_it_can(filler_video: Video) -> None:
     )
     pre_count = Scheduleitem.objects.count()
 
-    agenda_views.fill_agenda_with_jukebox(START_DATE, days=0.5)
+    scheduling.fill_agenda_with_jukebox(START_DATE, days=0.5)
 
     assert Scheduleitem.objects.count() == pre_count + 9
 
@@ -133,7 +133,7 @@ def test_two_videos_alternate_to_fill_the_time(db) -> None:
     videos = [unsaved_video(1, minutes=2), unsaved_video(2, minutes=3)]
     end = START_DATE + datetime.timedelta(minutes=15)
 
-    res = agenda_views._items_for_gap(START_DATE, end, videos)
+    res = scheduling._items_for_gap(START_DATE, end, videos)
 
     assert [r["id"] for r in res] == [1, 2, 1, 2]
 
@@ -160,7 +160,7 @@ def test_short_gap_before_scheduled_item_is_left_empty(filler_video: Video) -> N
     start = START_DATE + datetime.timedelta(seconds=13)
     end = START_DATE + datetime.timedelta(minutes=10, seconds=3)
 
-    res = agenda_views._items_for_gap(start, end, videos)
+    res = scheduling._items_for_gap(start, end, videos)
 
     assert [r["id"] for r in res] == [1, 3, 1, 3]
     assert [r["starttime"] for r in res] == [
@@ -178,7 +178,7 @@ def test_saved_items_carry_the_start_and_duration_that_were_planned(filler_video
     later by the next one, and the first lands on the minute after the
     window opens -- not on the window's own minute.
     """
-    planned = agenda_views.fill_agenda_with_jukebox(START_DATE, days=1)
+    planned = scheduling.fill_agenda_with_jukebox(START_DATE, days=1)
 
     items = list(Scheduleitem.objects.order_by("starttime"))
     assert [item.starttime for item in items] == [
@@ -190,7 +190,7 @@ def test_saved_items_carry_the_start_and_duration_that_were_planned(filler_video
 
 def test_filling_starts_on_the_minute_after_an_off_minute_start(filler_video: Video) -> None:
     """`ceil_minute`, not `floor_minute`: a start mid-minute rounds forward."""
-    planned = agenda_views.fill_agenda_with_jukebox(
+    planned = scheduling.fill_agenda_with_jukebox(
         START_DATE + datetime.timedelta(seconds=37), days=1
     )
 
@@ -206,7 +206,7 @@ def test_every_filler_in_the_pool_gets_used(member_organization: Organization) -
     first = make_filler(member_organization, name="First filler")
     second = make_filler(member_organization, name="Second filler")
 
-    agenda_views.fill_agenda_with_jukebox(START_DATE, days=1)
+    scheduling.fill_agenda_with_jukebox(START_DATE, days=1)
 
     played = list(Scheduleitem.objects.order_by("starttime").values_list("video_id", flat=True))
     assert len(played) == 23
@@ -229,7 +229,7 @@ def test_the_jukebox_never_overlaps_an_existing_item(short_filler: Video) -> Non
         datetime.timedelta(minutes=30),
     )
 
-    agenda_views.fill_agenda_with_jukebox(START_DATE, days=HALF_HOUR)
+    scheduling.fill_agenda_with_jukebox(START_DATE, days=HALF_HOUR)
 
     assert overlapping_pairs() == []
 
@@ -248,7 +248,7 @@ def test_the_minimum_gap_boundary_is_exclusive(
     occupied_at = START_DATE + datetime.timedelta(minutes=occupied_minute)
     occupy(short_filler, occupied_at, datetime.timedelta(minutes=30))
 
-    agenda_views.fill_agenda_with_jukebox(START_DATE, days=HALF_HOUR)
+    scheduling.fill_agenda_with_jukebox(START_DATE, days=HALF_HOUR)
 
     filled = Scheduleitem.objects.filter(
         starttime__lt=occupied_at, schedulereason=Scheduleitem.REASON_JUKEBOX
@@ -262,10 +262,10 @@ def test_a_second_run_over_the_same_window_adds_nothing(filler_video: Video) -> 
     so a rerun must not double-book: its own items leave only sub-minimum
     gaps behind.
     """
-    agenda_views.fill_agenda_with_jukebox(START_DATE, days=1)
+    scheduling.fill_agenda_with_jukebox(START_DATE, days=1)
     after_first_run = Scheduleitem.objects.count()
 
-    agenda_views.fill_agenda_with_jukebox(START_DATE, days=1)
+    scheduling.fill_agenda_with_jukebox(START_DATE, days=1)
 
     assert Scheduleitem.objects.count() == after_first_run
     assert overlapping_pairs() == []
@@ -292,7 +292,7 @@ def test_ineligible_videos_are_never_scheduled(
     """
     make_filler(member_organization, name="Ineligible", minutes=1, **overrides)
 
-    agenda_views.fill_agenda_with_jukebox(START_DATE, days=HALF_HOUR)
+    scheduling.fill_agenda_with_jukebox(START_DATE, days=HALF_HOUR)
 
     assert set(Scheduleitem.objects.values_list("video_id", flat=True)) == {short_filler.id}
 
@@ -302,7 +302,7 @@ def test_videos_from_non_member_organizations_are_never_scheduled(short_filler: 
     non_member = Organization.objects.create(name="Non-member org", fkmember=False, editor=editor)
     make_filler(non_member, name="Non-member filler", minutes=1)
 
-    agenda_views.fill_agenda_with_jukebox(START_DATE, days=HALF_HOUR)
+    scheduling.fill_agenda_with_jukebox(START_DATE, days=HALF_HOUR)
 
     assert set(Scheduleitem.objects.values_list("video_id", flat=True)) == {short_filler.id}
 
@@ -317,7 +317,7 @@ def test_an_empty_filler_pool_schedules_nothing(db) -> None:
     dereferenced it before its own guard -- which killed the nightly
     cron whenever the pool happened to be empty.
     """
-    assert agenda_views.fill_agenda_with_jukebox(START_DATE, days=1) == []
+    assert scheduling.fill_agenda_with_jukebox(START_DATE, days=1) == []
     assert Scheduleitem.objects.count() == 0
 
 
@@ -326,7 +326,7 @@ def test_a_filler_longer_than_the_window_leaves_it_empty(
 ) -> None:
     make_filler(member_organization, name="Too long", minutes=48 * 60)
 
-    agenda_views.fill_agenda_with_jukebox(START_DATE, days=1)
+    scheduling.fill_agenda_with_jukebox(START_DATE, days=1)
 
     assert Scheduleitem.objects.count() == 0
 
@@ -346,7 +346,7 @@ def test_a_zero_length_filler_is_never_scheduled(member_organization: Organizati
     """
     make_filler(member_organization, name="Zero length", minutes=0)
 
-    assert agenda_views.fill_agenda_with_jukebox(START_DATE, days=HALF_HOUR) == []
+    assert scheduling.fill_agenda_with_jukebox(START_DATE, days=HALF_HOUR) == []
     assert Scheduleitem.objects.count() == 0
 
 
@@ -356,7 +356,7 @@ def test_a_positive_filler_shorter_than_a_minute_still_advances(
     """The screening is on non-positive length only: sub-minute videos still play."""
     make_filler(member_organization, name="Thirty seconds", minutes=0.5)
 
-    agenda_views.fill_agenda_with_jukebox(START_DATE, days=HALF_HOUR)
+    scheduling.fill_agenda_with_jukebox(START_DATE, days=HALF_HOUR)
 
     starts = list(Scheduleitem.objects.order_by("starttime").values_list("starttime", flat=True))
     assert starts == [START_DATE + datetime.timedelta(minutes=m) for m in range(1, 30)]
@@ -373,7 +373,7 @@ def test_the_management_command_fills_two_days_from_now(
     arguments; the command supplies days=2 and lets the view default the
     start to the current time.
     """
-    monkeypatch.setattr(agenda_views.timezone, "now", lambda: START_DATE)
+    monkeypatch.setattr(scheduling.timezone, "now", lambda: START_DATE)
 
     call_command("fill_agenda_with_jukebox")
 

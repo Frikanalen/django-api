@@ -9,7 +9,7 @@ import pytest
 from django.core.management import call_command
 from django.utils import timezone
 
-from agenda.views import fill_next_weeks_agenda
+from agenda.scheduling import fill_next_weeks_agenda
 from fk.models import (
     Organization,
     Scheduleitem,
