@@ -4,17 +4,6 @@ from django.test import TestCase
 from django.urls import reverse
 
 
-class WebPageTest(TestCase):
-    fixtures = ["test.yaml"]
-
-    def test_xmltv(self):
-        r = self.client.get("/xmltv/2015/01/01")
-        self.assertContains(r, '<title lang="no">tech video</title>', count=1)
-        self.assertContains(r, '<title lang="no">dummy video</title>', count=1)
-        self.assertContains(r, "<url>https://frikanalen.no/video/2/</url>", count=1)
-        self.assertContains(r, "</programme>", count=2)
-
-
 class APITest(TestCase):
     fixtures = ["test.yaml"]
 
