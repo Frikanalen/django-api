@@ -166,4 +166,4 @@ class WeeklySlot(models.Model):
         return timezone.make_aware(datetime.combine(next_date, self.start_time))
 
     def __str__(self):
-        return "{day} {s.start_time} ({s.purpose})".format(day=self.get_day_display(), s=self)
+        return f"{self.get_day_display()} {self.start_time} ({self.purpose})"

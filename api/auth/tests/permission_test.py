@@ -43,7 +43,7 @@ class PermissionsTest(APITestCase):
             self.assertEqual(
                 code,
                 page_response.status_code,
-                "{} status is {} expected {}".format(name, page_response.status_code, code),
+                f"{name} status is {page_response.status_code} expected {code}",
             )
 
     def _assert_permission_denied(self, res):

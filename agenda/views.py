@@ -32,7 +32,7 @@ class ProgramguideView(TemplateView):
     title = "Program guide - this week"
 
     def get_context_data(self, **kwargs):
-        context = super(ProgramguideView, self).get_context_data(**kwargs)
+        context = super().get_context_data(**kwargs)
 
         if "date" in self.request.GET:
             starttime = parse_datetime(self.request.GET["date"] + " 00:00")
@@ -278,7 +278,7 @@ def floor_minute(dt):
 
 
 def _items_for_gap(start, end, candidates):
-    logger.info("Being asked to fill gap from {} to {}".format(start, end))
+    logger.info(f"Being asked to fill gap from {start} to {end}")
     # The smallest gap this function will try to fill
     MINIMUM_GAP_SECONDS = 300
 
@@ -385,9 +385,7 @@ def _fill_time_with_jukebox(start, end, videos, current_pool=None):
 def xmltv_home(request):
     """Information about the XMLTV schedule presentation."""
     now = timezone.now()
-    today_url = reverse(
-        "xmltv-feed", args=(now.year, "{:02}".format(now.month), "{:02}".format(now.day))
-    )
+    today_url = reverse("xmltv-feed", args=(now.year, f"{now.month:02}", f"{now.day:02}"))
     return render(
         request,
         "agenda/xmltv_home.html",
@@ -422,7 +420,7 @@ def xmltv_upcoming(request):
 
 def xmltv_date(request, year, month, day):
     date = datetime.datetime(year=int(year), month=int(month), day=int(day)).replace(
-        tzinfo=datetime.timezone.utc
+        tzinfo=datetime.UTC
     )
     events = Scheduleitem.objects.by_day(date, days=1).order_by("starttime")
     return _xmltv(request, events)

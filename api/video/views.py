@@ -148,6 +148,6 @@ class VideoList(generics.ListCreateAPIView):
         if proper_import and "false" == proper_import:
             queryset = Video.objects.all()
         else:
-            queryset = super(VideoList, self).get_queryset()
+            queryset = super().get_queryset()
 
         return queryset

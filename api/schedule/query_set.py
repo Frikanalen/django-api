@@ -1,5 +1,4 @@
 from datetime import date, datetime, time, timedelta
-from typing import Union
 from zoneinfo import ZoneInfo
 
 from django.db import models
@@ -13,7 +12,7 @@ class ScheduleitemQuerySet(models.QuerySet):
 
     TZ = ZoneInfo("Europe/Oslo")
 
-    def normalize_date(self, value: Union[str, date, datetime, None]) -> date | None:
+    def normalize_date(self, value: str | date | datetime | None) -> date | None:
         """
         Normalize various date representations to a date object.
         Accepts strings in 'YYYY-MM-DD', date, datetime, or None.
@@ -33,7 +32,7 @@ class ScheduleitemQuerySet(models.QuerySet):
 
     def by_day(
         self,
-        start_date: Union[str, date, datetime, None] = None,
+        start_date: str | date | datetime | None = None,
         days: int = 7,
         include_surrounding: bool = False,
     ) -> models.QuerySet:

@@ -37,7 +37,7 @@ class TestArticleList(TestCase):
                 s = insert_into_string(s, i, punct)
             return s.strip().capitalize()
 
-        for n in range(0, 50):
+        for n in range(50):
             heading = random_string(30)
             text = random_string(300)
             Bulletin.objects.create(heading=heading, text=text)

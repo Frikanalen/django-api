@@ -45,8 +45,17 @@ def jukebox_csv(request):
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = "filename=jukebox.csv"
     fields = (
-        "id|name|has_tono_records|video_id|type_id|version|"
-        "creation_began|creation_finished|offset|duration|location".split("|")
+        "id",
+        "name",
+        "has_tono_records",
+        "video_id",
+        "type_id",
+        "version",
+        "creation_began",
+        "creation_finished",
+        "offset",
+        "duration",
+        "location",
     )
     writer = csv.DictWriter(response, fields, delimiter="|")
     writer.writeheader()
