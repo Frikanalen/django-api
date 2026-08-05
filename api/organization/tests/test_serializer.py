@@ -27,12 +27,13 @@ def test_serializer_includes_organization_and_editor_details(
     }
 
 
-def test_serializer_handles_an_editor_without_a_phone_number(editor: User) -> None:
+@pytest.mark.parametrize("phone_number", ["", "not a number", "12345"])
+def test_serializer_reports_no_usable_phone_number_as_null(editor: User, phone_number: str) -> None:
     organization = Organization.objects.create(name="No phone", editor=editor)
-    editor.phone_number = ""
+    editor.phone_number = phone_number
     editor.save(update_fields=["phone_number"])
 
-    assert OrganizationSerializer(organization).data["editor_msisdn"] == ""
+    assert OrganizationSerializer(organization).data["editor_msisdn"] is None
 
 
 def test_serializer_handles_an_organization_without_an_editor(caplog) -> None:
