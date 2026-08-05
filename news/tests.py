@@ -23,6 +23,7 @@ CREATED = datetime(2015, 1, 1, 10, 0, tzinfo=UTC)
 
 
 def make_bulletin(heading: str, created: datetime = CREATED, **fields) -> Bulletin:
+    fields.setdefault("is_published", True)
     bulletin = Bulletin.objects.create(heading=heading, text=f"Text of {heading}", **fields)
     # created is auto_now_add; pin it for deterministic ordering.
     Bulletin.objects.filter(pk=bulletin.pk).update(created=created)
@@ -51,35 +52,45 @@ def test_bulletins_are_listed_newest_first_without_pagination() -> None:
             "heading": "Newer",
             "text": "Text of Newer",
             "created": "2015-01-02T10:00:00Z",
+            "isPublished": True,
         },
         {
             "id": older.pk,
             "heading": "Older",
             "text": "Text of Older",
             "created": "2015-01-01T10:00:00Z",
+            "isPublished": True,
         },
     ]
 
 
-def test_unpublished_bulletins_are_listed_too() -> None:
+def test_drafts_are_hidden_from_the_public_but_visible_to_staff() -> None:
     """
-    Pinned quirk: Bulletin has an is_published flag, but neither the
-    queryset nor the serializer looks at it - drafts are served to the
-    public and the flag is invisible in the payload. If that is not the
-    intent, the fix should replace this test.
+    Replaces the pinned draft leak: unpublished bulletins are only
+    served to staff, who see the is_published flag to tell them apart.
     """
-    make_bulletin("Draft", is_published=False)
+    make_bulletin("Published")
+    draft = make_bulletin("Draft", CREATED + timedelta(days=1), is_published=False)
 
-    response = APIClient().get(reverse("news:bulletin-list"))
+    public_list = APIClient().get(reverse("news:bulletin-list"))
+    assert [item["heading"] for item in public_list.json()] == ["Published"]
 
-    assert [item["heading"] for item in response.json()] == ["Draft"]
-    assert "isPublished" not in response.json()[0]
+    draft_url = reverse("news:bulletin-detail", args=[draft.pk])
+    assert APIClient().get(draft_url).status_code == status.HTTP_404_NOT_FOUND
+
+    staff = staff_client()
+    staff_list = staff.get(reverse("news:bulletin-list"))
+    assert [(item["heading"], item["isPublished"]) for item in staff_list.json()] == [
+        ("Draft", False),
+        ("Published", True),
+    ]
+    assert staff.get(draft_url).status_code == status.HTTP_200_OK
 
 
 def test_staff_can_create_bulletins() -> None:
     response = staff_client().post(
         reverse("news:bulletin-list"),
-        {"heading": "Fresh news", "text": "Something happened"},
+        {"heading": "Fresh news", "text": "Something happened", "is_published": True},
         format="json",
     )
 
@@ -87,6 +98,18 @@ def test_staff_can_create_bulletins() -> None:
     bulletin = Bulletin.objects.get()
     assert bulletin.heading == "Fresh news"
     assert bulletin.text == "Something happened"
+    assert bulletin.is_published
+
+
+def test_bulletins_are_created_as_drafts_unless_published_explicitly() -> None:
+    response = staff_client().post(
+        reverse("news:bulletin-list"),
+        {"heading": "Quiet news", "text": "Not yet announced"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert not Bulletin.objects.get().is_published
 
 
 def test_non_staff_users_cannot_write() -> None:
