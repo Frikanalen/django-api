@@ -56,6 +56,23 @@ def test_videofile_detail_shape(video: Video) -> None:
     }
 
 
+def test_videofile_list_does_not_hide_files_of_improper_videos(video: Video) -> None:
+    """Unlike the video list, the videofile list applies no visibility
+    filtering: files of unpublished/broken videos are listed too."""
+    hidden_video = Video.objects.create(
+        name="Hidden video",
+        creator=video.creator,
+        organization=video.organization,
+        proper_import=False,
+        publish_on_web=False,
+    )
+    hidden_file = make_file(hidden_video, filename="hidden.mp4")
+
+    response = APIClient().get(reverse("api-videofile-list"))
+
+    assert hidden_file.pk in [item["id"] for item in response.json()["results"]]
+
+
 def test_videofile_list_envelope_and_ordering(video: Video) -> None:
     first_video_file = make_file(video, fsname="original")
     second_video_file = make_file(video, fsname="broadcast")

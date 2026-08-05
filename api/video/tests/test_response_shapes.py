@@ -140,6 +140,46 @@ def test_video_list_orders_newest_first(editor: User, organization: Organization
     ]
 
 
+def test_unpublished_and_broken_videos_have_public_detail_pages(
+    editor: User, organization: Organization
+) -> None:
+    """Video detail is unrestricted: proper_import/publish_on_web hide
+    a video from the default list, not from direct retrieval."""
+    hidden = Video.objects.create(
+        name="Hidden video",
+        creator=editor,
+        organization=organization,
+        proper_import=False,
+        publish_on_web=False,
+    )
+
+    response = APIClient().get(reverse("api-video-detail", args=[hidden.pk]))
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Hidden video"
+
+
+def test_video_list_hides_improper_imports_by_default(
+    editor: User, organization: Organization
+) -> None:
+    Video.objects.create(
+        name="Broken import",
+        creator=editor,
+        organization=organization,
+        proper_import=False,
+    )
+    listed = Video.objects.create(
+        name="Proper import",
+        creator=editor,
+        organization=organization,
+        proper_import=True,
+    )
+
+    response = APIClient().get(reverse("api-video-list"))
+
+    assert [item["id"] for item in response.json()["results"]] == [listed.pk]
+
+
 def test_video_without_files_uses_fallback_urls(editor: User, organization: Organization) -> None:
     video = Video.objects.create(
         name="Bare video",
