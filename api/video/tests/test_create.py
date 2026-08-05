@@ -57,6 +57,41 @@ def test_create_parses_fields_and_infers_the_creator(
     assert payload["creator"] == editor.email
 
 
+def test_creator_attribution_cannot_be_spoofed_on_create(
+    editor_client: APIClient,
+    editor: User,
+    organization: Organization,
+) -> None:
+    other = User.objects.create(email="somebody-else@example.test")
+
+    response = create_video(
+        editor_client,
+        {"name": "Attributed video", "categories": [], "creator": other.email},
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert Video.objects.get(name="Attributed video").creator == editor
+
+
+def test_creator_cannot_be_reassigned_after_creation(
+    editor_client: APIClient,
+    editor: User,
+    organization: Organization,
+) -> None:
+    video = Video.objects.create(name="Owned video", creator=editor, organization=organization)
+    other = User.objects.create(email="somebody-else@example.test")
+
+    response = editor_client.patch(
+        reverse("api-video-detail", args=[video.pk]),
+        {"creator": other.email},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    video.refresh_from_db()
+    assert video.creator == editor
+
+
 def test_create_without_organization_uses_the_users_only_membership(
     editor_client: APIClient,
     organization: Organization,
