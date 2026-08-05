@@ -53,15 +53,11 @@ class ScheduleitemQuerySet(models.QuerySet):
         if not include_surrounding:
             return self.filter(main_filter).order_by("starttime")
 
-        previous_pk = (
-            self.filter(starttime__lt=start_dt).order_by("-starttime").values("pk")[:1]
-        )
+        previous_pk = self.filter(starttime__lt=start_dt).order_by("-starttime").values("pk")[:1]
         next_pk = self.filter(starttime__gte=end_dt).order_by("starttime").values("pk")[:1]
 
         return self.filter(
-            main_filter
-            | Q(pk__in=Subquery(previous_pk))
-            | Q(pk__in=Subquery(next_pk))
+            main_filter | Q(pk__in=Subquery(previous_pk)) | Q(pk__in=Subquery(next_pk))
         ).order_by("starttime")
 
     def expand_to_surrounding(

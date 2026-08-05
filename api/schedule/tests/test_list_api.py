@@ -171,9 +171,7 @@ def test_surrounding_tolerates_missing_neighbors(
     target_day = date(2015, 1, 2)
     expected = []
     if has_previous:
-        expected.append(
-            schedule_item_factory(starttime=at(target_day - timedelta(days=1), 23))
-        )
+        expected.append(schedule_item_factory(starttime=at(target_day - timedelta(days=1), 23)))
     expected.append(schedule_item_factory(starttime=at(target_day, 10)))
     if has_next:
         expected.append(schedule_item_factory(starttime=at(target_day + timedelta(days=1))))
@@ -201,9 +199,7 @@ def test_list_orders_by_starttime(
     expected_indexes: list[int],
 ) -> None:
     target_day = date(2015, 1, 2)
-    items = [
-        schedule_item_factory(starttime=at(target_day, hour)) for hour in (9, 10, 11)
-    ]
+    items = [schedule_item_factory(starttime=at(target_day, hour)) for hour in (9, 10, 11)]
 
     response = authenticated_client.get(
         reverse("api-scheduleitem-list"),
