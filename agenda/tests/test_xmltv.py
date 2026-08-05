@@ -7,7 +7,7 @@ deliberately not part of it, which is why these tests assert on an
 ElementTree rather than on raw bytes.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from xml.etree import ElementTree
 from zoneinfo import ZoneInfo
 
@@ -125,13 +125,22 @@ def test_missing_video_header_renders_as_the_string_none(video: Video) -> None:
 
 
 def test_upcoming_feed_spans_seven_days_from_today(video: Video) -> None:
-    now = timezone.now()
-    schedule(video, now - timedelta(days=1, hours=2))
+    # The window is by_day(days=7): seven whole Oslo calendar days from
+    # today, so the cases are anchored to local dates rather than to the
+    # current instant - offsetting from now would place the last case
+    # outside the window whenever the suite runs late in the evening.
+    today = timezone.localdate()
+
+    def at(days_from_today: int, hour: int) -> datetime:
+        return datetime.combine(today + timedelta(days=days_from_today), time(hour), tzinfo=OSLO)
+
+    schedule(video, at(-1, 23))
     included = [
-        schedule(video, now + timedelta(hours=1)),
-        schedule(video, now + timedelta(days=6, hours=1)),
+        # First and last instants of the window.
+        schedule(video, at(0, 0)),
+        schedule(video, at(6, 23)),
     ]
-    schedule(video, now + timedelta(days=8))
+    schedule(video, at(7, 0))
 
     doc = fetch_feed(reverse("xmltv-feed-upcoming"))
 
