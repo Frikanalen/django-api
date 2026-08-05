@@ -67,12 +67,9 @@ class VideoSerializer(serializers.ModelSerializer):
                     )
                 elif len(potential_orgs) > 1:
                     raise serializers.ValidationError(
-                        [
-                            {
-                                "organization": "Field required when editor has more than "
-                                "one organization."
-                            }
-                        ]
+                        {
+                            "organization": "Field required when editor has more than one organization."
+                        }
                     )
                 data["organization"] = potential_orgs[0]
         return data
