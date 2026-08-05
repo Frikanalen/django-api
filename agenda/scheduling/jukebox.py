@@ -1,12 +1,10 @@
 # Copyright (c) 2012-2013 Benjamin Bruheim <grolgh@gmail.com>
 # This file is covered by the LGPLv3 or later, read COPYING for details.
-"""Schedule filling.
+"""Filling leftover airtime with fillers.
 
-Both entry points here are invoked from management commands (and thus from
-nightly CronJobs), not from the web request path:
-
-* :func:`fill_next_weeks_agenda` places one video per :class:`WeeklySlot`.
-* :func:`fill_agenda_with_jukebox` fills whatever is left over with fillers.
+Runs after the weekly slots are placed (see :mod:`agenda.scheduling.weekly_slots`)
+and fills whatever airtime is still empty, working minute-aligned around the
+programming that is already scheduled.
 """
 
 import datetime
@@ -14,42 +12,9 @@ import logging
 
 from django.utils import timezone
 
-from fk.models import Scheduleitem, Video, WeeklySlot
+from fk.models import Scheduleitem, Video
 
 logger = logging.getLogger(__name__)
-
-
-def fill_next_weeks_agenda():
-    slots = WeeklySlot.objects.all()
-
-    if len(slots) == 0:
-        logger.warning("No WeeklySlots defined; exiting")
-        return
-
-    for slot in slots:
-        if not slot.purpose:
-            logger.info("No purpose connected, so nothing to fill")
-            continue
-        video = slot.purpose.single_video(slot.duration)
-        if not video:
-            logger.info("Couldn't get a video to use in slot!")
-            continue
-        next_datetime = slot.next_datetime()
-        end_next_datetime = next_datetime + slot.duration
-
-        if Scheduleitem.objects.filter(
-            starttime__gte=next_datetime, starttime__lt=end_next_datetime
-        ).exists():
-            # Ouch we have already scheduled something in the slot
-            logger.debug("Already something scheduled in this slot")
-            continue
-        item = Scheduleitem(
-            video=video,
-            schedulereason=Scheduleitem.REASON_AUTO,
-            starttime=next_datetime,
-            duration=video.duration,
-        )
-        item.save()
 
 
 def fill_agenda_with_jukebox(start=None, days=1):
