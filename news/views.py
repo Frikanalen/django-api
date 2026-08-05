@@ -11,3 +11,9 @@ class BulletinViewSet(viewsets.ModelViewSet):
     serializer_class = BulletinSerializer
     permission_classes = (IsStaffOrReadOnly,)
     pagination_class = None
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.request.user.is_staff:
+            return queryset
+        return queryset.filter(is_published=True)

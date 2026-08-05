@@ -57,6 +57,41 @@ def test_create_parses_fields_and_infers_the_creator(
     assert payload["creator"] == editor.email
 
 
+def test_creator_attribution_cannot_be_spoofed_on_create(
+    editor_client: APIClient,
+    editor: User,
+    organization: Organization,
+) -> None:
+    other = User.objects.create(email="somebody-else@example.test")
+
+    response = create_video(
+        editor_client,
+        {"name": "Attributed video", "categories": [], "creator": other.email},
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert Video.objects.get(name="Attributed video").creator == editor
+
+
+def test_creator_cannot_be_reassigned_after_creation(
+    editor_client: APIClient,
+    editor: User,
+    organization: Organization,
+) -> None:
+    video = Video.objects.create(name="Owned video", creator=editor, organization=organization)
+    other = User.objects.create(email="somebody-else@example.test")
+
+    response = editor_client.patch(
+        reverse("api-video-detail", args=[video.pk]),
+        {"creator": other.email},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    video.refresh_from_db()
+    assert video.creator == editor
+
+
 def test_create_without_organization_uses_the_users_only_membership(
     editor_client: APIClient,
     organization: Organization,
@@ -92,4 +127,6 @@ def test_create_without_organization_fails_for_a_user_with_several(
     response = create_video(editor_client, {"name": "Ambiguous video", "categories": []})
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
+    # Same shape as the no-organization error: the field is named in attr.
+    assert [error["attr"] for error in response.json()["errors"]] == ["organization"]
     assert not Video.objects.exists()

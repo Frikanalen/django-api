@@ -2,7 +2,11 @@ from django.db.models import Q
 from django_filters import rest_framework as djfilters
 from rest_framework import generics
 
-from api.auth.permissions import IsInOrganizationOrDisallow, IsInOrganizationOrReadOnly
+from api.auth.permissions import (
+    IsInOrganizationOrDisallow,
+    IsInOrganizationOrReadOnly,
+    RequireTargetOrganizationMembership,
+)
 from api.pagination import FkDefaultPagination
 from api.video.serializers import VideoCreateSerializer, VideoSerializer, VideoUploadTokenSerializer
 from fk.models import Category, Video
@@ -16,6 +20,11 @@ class VideoDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = Video.objects.all()
     serializer_class = VideoSerializer
     permission_classes = (IsInOrganizationOrReadOnly,)
+
+    def get_queryset(self):
+        # Videos of an organization without an ansvarlig redaktor are
+        # staff-only until one is appointed; see OrganizationQuerySet.
+        return Video.objects.visible_to(self.request.user)
 
 
 class VideoUploadTokenDetail(generics.RetrieveAPIView):
@@ -77,7 +86,7 @@ class VideoFilter(djfilters.FilterSet):
         return shlex.split(query_string)
 
 
-class VideoList(generics.ListCreateAPIView):
+class VideoList(RequireTargetOrganizationMembership, generics.ListCreateAPIView):
     """
     List of videos
 
@@ -144,10 +153,8 @@ class VideoList(generics.ListCreateAPIView):
     def get_queryset(self):
         # Can filtering on proper_import be done using a different
         # queryset and VideoFilter?
+        queryset = Video.objects.visible_to(self.request.user)
         proper_import = self.request.query_params.get("properImport")
         if proper_import and "false" == proper_import:
-            queryset = Video.objects.all()
-        else:
-            queryset = super().get_queryset()
-
-        return queryset
+            return queryset
+        return queryset.filter(proper_import=True)

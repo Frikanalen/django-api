@@ -88,6 +88,40 @@ class User(AbstractBaseUser):
     def get_short_name(self):
         return self.email
 
+    def anonymize(self):
+        """
+        Scrub the person, keep the row.
+
+        Video.creator is PROTECT and the playout log refers to what was
+        broadcast, so a departing user's content has to outlive their
+        account. Deleting the row is therefore not an option; instead
+        every identifying column is cleared and the login disabled, which
+        satisfies an erasure request while leaving attribution intact -
+        the videos of one departed uploader stay recognizably one
+        uploader's, without naming them.
+
+        Organization ties are released rather than kept: a departed user
+        must not remain visible as a member or as an organization's
+        editor.
+        """
+        # .invalid is reserved by RFC 2606 and can never be delivered to;
+        # the pk keeps the address unique, as the column requires.
+        self.email = f"deleted-{self.pk}@invalid"
+        self.first_name = ""
+        self.last_name = ""
+        self.phone_number = ""
+        self.date_of_birth = None
+        # A confirmation of identity outlives neither the identity nor
+        # the privileges attached to the account.
+        self.identity_confirmed = False
+        self.is_superuser = False
+        self.is_active = False
+        self.set_unusable_password()
+        self.save()
+
+        self.organization_set.clear()
+        self.editor.update(editor=None)
+
     @property
     def is_staff(self):
         """Is the user a member of staff?"""

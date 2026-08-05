@@ -3,8 +3,8 @@ import os
 from django.conf import settings
 from django.db import models
 
-# we are slowly getting these out of the database, but can't make schema changes
-# until we have migrated away from the old version of Django.
+# we are slowly getting these out of the database; until then, FileFormat
+# rows are constrained to these names.
 FILE_FORMATS = [
     "large_thumb",
     "broadcast",
@@ -21,7 +21,7 @@ FILE_FORMATS = [
 class FileFormat(models.Model):
     id = models.AutoField(primary_key=True)
     description = models.TextField(unique=True, max_length=255, null=True, blank=True)
-    fsname = models.CharField(max_length=20, choices=[(f, f) for f in FILE_FORMATS])
+    fsname = models.CharField(max_length=20, unique=True, choices=[(f, f) for f in FILE_FORMATS])
     vod_publish = models.BooleanField("Present video format to video on demand?", default=False)
     mime_type = models.CharField(max_length=256, null=True, blank=True)
 
@@ -63,6 +63,11 @@ class VideoFile(models.Model):
             "-video_id",
             "-id",
         )
+        constraints = [
+            # Consumers look files up by (video, format) and expect a
+            # single result; playout's jukebox CSV in particular.
+            models.UniqueConstraint(fields=("video", "format"), name="unique_format_per_video"),
+        ]
 
     def __str__(self):
         return f"{self.format.fsname} version of {self.video.name}"

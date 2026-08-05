@@ -102,10 +102,10 @@ def test_session_login_rejects_a_wrong_password(account: User) -> None:
 
 def test_session_login_rejects_an_inactive_user_as_bad_credentials(account: User) -> None:
     """
-    UserLogin has a dedicated 'User is disabled' branch, but the default
-    ModelBackend refuses inactive users before it is reached, so they
-    get the same 401 as a wrong password. Pinned so a change of auth
-    backend (which would suddenly activate that branch) shows up.
+    Inactive users get the same 401 as a wrong password, on purpose: a
+    distinct answer would reveal that the account exists. The default
+    ModelBackend enforces this; pinned so a change of auth backend
+    (e.g. to AllowAllUsersModelBackend) shows up here.
     """
     account.is_active = False
     account.save()

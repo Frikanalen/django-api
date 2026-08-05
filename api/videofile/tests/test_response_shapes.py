@@ -31,7 +31,7 @@ def video() -> Video:
 def make_file(video: Video, fsname: str = "original", **fields) -> VideoFile:
     video_file = VideoFile.objects.create(
         video=video,
-        format=FileFormat.objects.create(fsname=fsname),
+        format=FileFormat.objects.get_or_create(fsname=fsname)[0],
         filename=fields.pop("filename", "file.mp4"),
         **fields,
     )

@@ -1,5 +1,4 @@
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from api.organization.serializers import OrganizationSerializer
@@ -8,11 +7,9 @@ from fk.models import Category, Organization, Video
 
 class VideoSerializer(serializers.ModelSerializer):
     organization = OrganizationSerializer(read_only=True)
-    creator = serializers.SlugRelatedField(
-        slug_field="email",
-        queryset=get_user_model().objects.all(),
-        default=serializers.CurrentUserDefault(),
-    )
+    # Attribution, not a choice: the creator is whoever performs the
+    # creation, and is never changeable through the API afterwards.
+    creator = serializers.SlugRelatedField(slug_field="email", read_only=True)
     categories = serializers.SlugRelatedField(
         slug_field="name", many=True, queryset=Category.objects.all()
     )
@@ -60,17 +57,21 @@ class VideoSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         is_creation = not self.instance
-        if is_creation and not data.get("organization"):
-            potential_orgs = data["creator"].organization_set.all()
-            if len(potential_orgs) == 0:
-                raise serializers.ValidationError(
-                    {"organization": "Field required when editor has no organization."}
-                )
-            elif len(potential_orgs) > 1:
-                raise serializers.ValidationError(
-                    [{"organization": "Field required when editor has more than one organization."}]
-                )
-            data["organization"] = potential_orgs[0]
+        if is_creation:
+            data["creator"] = self.context["request"].user
+            if not data.get("organization"):
+                potential_orgs = data["creator"].organization_set.all()
+                if len(potential_orgs) == 0:
+                    raise serializers.ValidationError(
+                        {"organization": "Field required when editor has no organization."}
+                    )
+                elif len(potential_orgs) > 1:
+                    raise serializers.ValidationError(
+                        {
+                            "organization": "Field required when editor has more than one organization."
+                        }
+                    )
+                data["organization"] = potential_orgs[0]
         return data
 
 

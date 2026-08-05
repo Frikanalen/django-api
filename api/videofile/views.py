@@ -1,7 +1,7 @@
 from django_filters import rest_framework as djfilters
 from rest_framework import viewsets
 
-from api.auth.permissions import IsInOrganizationOrReadOnly
+from api.auth.permissions import IsInOrganizationOrReadOnly, RequireTargetOrganizationMembership
 from api.pagination import FkDefaultPagination
 from api.videofile.serializers import VideoFileSerializer
 from fk.models import VideoFile
@@ -19,7 +19,7 @@ class VideoFileFilter(djfilters.FilterSet):
         }
 
 
-class VideoFileViewSet(viewsets.ModelViewSet):
+class VideoFileViewSet(RequireTargetOrganizationMembership, viewsets.ModelViewSet):
     """
     Video file list and detail endpoint.
     """

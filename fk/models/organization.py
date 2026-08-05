@@ -3,6 +3,29 @@ from django.db import models
 from django.urls import reverse
 
 
+class OrganizationQuerySet(models.QuerySet):
+    def with_responsible_editor(self):
+        """
+        Organizations that have an ansvarlig redaktor: an editor whose
+        account is still active. Nothing may be broadcast on an
+        organization's behalf without one, so this is the single
+        definition of "may be seen and aired" - Video reuses it rather
+        than restating the condition, which is how the jukebox filter
+        drifted before.
+
+        A disabled editor account counts as none: deactivating is the
+        documented alternative to deleting a user, and deleting one
+        vacates the editor field outright.
+        """
+        return self.filter(editor__isnull=False, editor__is_active=True)
+
+    def visible_to(self, user):
+        """Everything for staff, only accountable organizations otherwise."""
+        if getattr(user, "is_staff", False):
+            return self
+        return self.with_responsible_editor()
+
+
 class Organization(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255)
@@ -35,6 +58,8 @@ class Organization(models.Model):
     # twitter_tags = models.CharField(null=True,max_length=255)
     # To be copied into every video they create
     # categories = models.ManyToManyField(Category)
+
+    objects = OrganizationQuerySet.as_manager()
 
     class Meta:
         ordering = ("name", "-id")

@@ -1,4 +1,4 @@
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, update_session_auth_hash
 from rest_framework import serializers
 from rest_framework.authtoken.models import Token
 
@@ -38,7 +38,8 @@ class NewUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("id", "email", "first_name", "last_name", "date_of_birth", "password")
+        # No date_of_birth: policy is not to ask for it at registration.
+        fields = ("id", "email", "first_name", "last_name", "password")
 
         write_only_fields = ("password",)
 
@@ -53,6 +54,21 @@ class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
     editor_of = SimpleOrgSerializer(source="editor", many=True, read_only=True)
     member_of = SimpleOrgSerializer(source="organization_set", many=True, read_only=True)
+
+    def update(self, instance, validated_data):
+        # The default update() would write the raw password string to the
+        # password column; it must go through set_password to be hashed.
+        password = validated_data.pop("password", None)
+        user = super().update(instance, validated_data)
+        if password is not None:
+            user.set_password(password)
+            user.save(update_fields=["password"])
+            request = self.context.get("request")
+            if request is not None:
+                # Keep the current session alive; other sessions are
+                # invalidated by the rotated session auth hash.
+                update_session_auth_hash(request, user)
+        return user
 
     class Meta:
         model = User

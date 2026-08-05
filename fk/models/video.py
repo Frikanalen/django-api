@@ -6,21 +6,36 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 
+from .organization import Organization
+
 
 class VideoManager(models.Manager):
-    def public(self):
-        return super().get_queryset().filter(publish_on_web=True, proper_import=True)
-
-    def fillers(self):
+    def with_responsible_editor(self):
+        """
+        Videos an organization may answer for, reusing Organization's
+        definition so the rule has exactly one home.
+        """
         return (
             super()
             .get_queryset()
-            .filter(
-                is_filler=True,
-                has_tono_records=False,
-                organization__fkmember=True,
-                proper_import=True,
-            )
+            .filter(organization__in=Organization.objects.with_responsible_editor())
+        )
+
+    def visible_to(self, user):
+        """Everything for staff, only accountable videos otherwise."""
+        if getattr(user, "is_staff", False):
+            return super().get_queryset()
+        return self.with_responsible_editor()
+
+    def public(self):
+        return self.with_responsible_editor().filter(publish_on_web=True, proper_import=True)
+
+    def fillers(self):
+        return self.with_responsible_editor().filter(
+            is_filler=True,
+            has_tono_records=False,
+            organization__fkmember=True,
+            proper_import=True,
         )
 
 
@@ -132,13 +147,6 @@ class Video(models.Model):
             video_file = self.videofile_set.get(video=self, format__fsname="small_thumb")
         except ObjectDoesNotExist:
             return "/static/default_small_thumbnail.png"
-        return settings.FK_MEDIA_URLPREFIX + video_file.location(relative=True)
-
-    def medium_thumbnail_url(self) -> str:
-        try:
-            video_file = self.videofile_set.get(video=self, format__fsname="medium_thumb")
-        except ObjectDoesNotExist:
-            return "/static/default_medium_thumbnail.png"
         return settings.FK_MEDIA_URLPREFIX + video_file.location(relative=True)
 
     def large_thumbnail_url(self) -> str:
