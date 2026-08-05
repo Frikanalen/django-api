@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timedelta
 
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext as _
@@ -29,7 +30,7 @@ class Scheduleitem(models.Model):
     video = models.ForeignKey("Video", null=True, blank=True, on_delete=models.SET_NULL)
     schedulereason = models.IntegerField(blank=True, choices=SCHEDULE_REASONS)
     starttime = models.DateTimeField()
-    duration = models.DurationField()
+    duration = models.DurationField(validators=[MinValueValidator(timedelta(0))])
 
     objects = ScheduleitemQuerySet.as_manager()
 
@@ -37,6 +38,15 @@ class Scheduleitem(models.Model):
         verbose_name = "TX schedule entry"
         verbose_name_plural = "TX schedule entries"
         ordering = ("-id",)
+        constraints = [
+            # endtime() would otherwise precede starttime, which makes the
+            # item invisible to the jukebox's gap search and lets it
+            # schedule over programming that is really going out.
+            models.CheckConstraint(
+                condition=models.Q(duration__gte=timedelta(0)),
+                name="scheduleitem_duration_not_negative",
+            ),
+        ]
 
     def __str__(self):
         # %f renders microseconds as six digits; drop four to get hundredths
@@ -137,10 +147,17 @@ class WeeklySlot(models.Model):
         choices=DAY_OF_THE_WEEK,
     )
     start_time = models.TimeField()
-    duration = models.DurationField()
+    duration = models.DurationField(validators=[MinValueValidator(timedelta(0))])
 
     class Meta:
         ordering = ("day", "start_time", "pk")
+        constraints = [
+            # end_time would wrap backwards past start_time.
+            models.CheckConstraint(
+                condition=models.Q(duration__gte=timedelta(0)),
+                name="weeklyslot_duration_not_negative",
+            ),
+        ]
 
     @property
     def end_time(self) -> time:

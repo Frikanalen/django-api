@@ -4,6 +4,7 @@ from uuid import uuid4
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from .organization import Organization
@@ -77,7 +78,11 @@ class Video(models.Model):
         "Organization", null=True, help_text="Organization for video", on_delete=models.PROTECT
     )
     ref_url = models.CharField(blank=True, max_length=1024, help_text="URL for reference")
-    duration = models.DurationField(blank=True, default=timedelta(0))
+    duration = models.DurationField(
+        blank=True,
+        default=timedelta(0),
+        validators=[MinValueValidator(timedelta(0))],
+    )
 
     # This field is used by the new ingest.
     media_metadata = models.JSONField(blank=True, default=dict)
@@ -109,6 +114,14 @@ class Video(models.Model):
     class Meta:
         get_latest_by = "uploaded_time"
         ordering = ("-id",)
+        constraints = [
+            # A negative length is not a shorter programme, it is corrupt
+            # data, and the schedulers do arithmetic on this field.
+            models.CheckConstraint(
+                condition=models.Q(duration__gte=timedelta(0)),
+                name="video_duration_not_negative",
+            ),
+        ]
 
     def __str__(self):
         return self.name
