@@ -5,7 +5,7 @@ from django.views.decorators.cache import never_cache
 from rest_framework import generics
 from rest_framework.authentication import BasicAuthentication
 from rest_framework.authtoken.models import Token
-from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.generics import CreateAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -76,11 +76,11 @@ class UserLogin(CreateAPIView):
         data = serializer.validated_data
         user = authenticate(username=data["email"], password=data["password"])
 
+        # ModelBackend refuses inactive users, so they land here too and
+        # are indistinguishable from a wrong password - deliberately: a
+        # dedicated "disabled" answer would reveal the account exists.
         if not user:
             raise AuthenticationFailed("Incorrect email or password.")
-
-        if not user.is_active:
-            raise PermissionDenied("User is disabled.")
 
         login(request._request, user)
         return Response(UserSerializer(user).data)
