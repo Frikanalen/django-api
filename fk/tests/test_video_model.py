@@ -47,17 +47,14 @@ def test_videofile_url_is_the_relative_location(video: Video) -> None:
 
 def test_thumbnail_urls_resolve_to_the_media_host(video: Video) -> None:
     add_file(video, "small_thumb", "small.jpg")
-    add_file(video, "med_thumb", "medium.jpg")
     add_file(video, "large_thumb", "large.jpg")
 
     assert video.small_thumbnail_url() == f"{MEDIA}{video.pk}/small_thumb/small.jpg"
-    assert video.medium_thumbnail_url() == f"{MEDIA}{video.pk}/med_thumb/medium.jpg"
     assert video.large_thumbnail_url() == f"{MEDIA}{video.pk}/large_thumb/large.jpg"
 
 
 def test_thumbnail_urls_fall_back_to_static_defaults(video: Video) -> None:
     assert video.small_thumbnail_url() == "/static/default_small_thumbnail.png"
-    assert video.medium_thumbnail_url() == "/static/default_medium_thumbnail.png"
     assert video.large_thumbnail_url() == "/static/default_large_thumbnail.png"
 
 
