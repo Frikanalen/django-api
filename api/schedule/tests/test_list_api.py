@@ -11,7 +11,6 @@ from rest_framework.test import APIClient
 
 from fk.models import Category, FileFormat, Scheduleitem, Video, VideoFile
 
-
 pytestmark = pytest.mark.django_db
 
 OSLO = ZoneInfo("Europe/Oslo")

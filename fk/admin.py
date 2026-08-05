@@ -4,17 +4,18 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group
 
-from fk.forms import UserChangeForm
-from fk.forms import UserCreationForm
-from fk.models import Category
-from fk.models import FileFormat
-from fk.models import Organization
-from fk.models import SchedulePurpose
-from fk.models import Scheduleitem
-from fk.models import User
-from fk.models import Video
-from fk.models import VideoFile
-from fk.models import WeeklySlot
+from fk.forms import UserChangeForm, UserCreationForm
+from fk.models import (
+    Category,
+    FileFormat,
+    Organization,
+    Scheduleitem,
+    SchedulePurpose,
+    User,
+    Video,
+    VideoFile,
+    WeeklySlot,
+)
 
 
 class UserAdmin(BaseUserAdmin):

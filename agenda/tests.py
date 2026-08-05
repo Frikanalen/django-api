@@ -4,8 +4,7 @@ import random
 from django.test import TestCase
 from django.utils import timezone
 
-from fk.models import Scheduleitem
-from fk.models import Video
+from fk.models import Scheduleitem, Video
 
 from . import views as agenda_views
 

@@ -5,7 +5,6 @@ import pytest
 from api.organization.serializers import OrganizationSerializer
 from fk.models import Organization, User
 
-
 pytestmark = pytest.mark.django_db
 
 

@@ -1,5 +1,6 @@
-from django.utils import timezone
 import datetime
+
+from django.utils import timezone
 
 
 def api_utc_middleware(get_response):

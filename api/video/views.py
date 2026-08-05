@@ -2,10 +2,10 @@ from django.db.models import Q
 from django_filters import rest_framework as djfilters
 from rest_framework import generics
 
-from api.auth.permissions import IsInOrganizationOrReadOnly, IsInOrganizationOrDisallow
-from api.video.serializers import VideoSerializer, VideoCreateSerializer, VideoUploadTokenSerializer
+from api.auth.permissions import IsInOrganizationOrDisallow, IsInOrganizationOrReadOnly
 from api.pagination import FkDefaultPagination
-from fk.models import Video, Category
+from api.video.serializers import VideoCreateSerializer, VideoSerializer, VideoUploadTokenSerializer
+from fk.models import Category, Video
 
 
 class VideoDetail(generics.RetrieveUpdateDestroyAPIView):

@@ -1,9 +1,8 @@
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.test import APITestCase, APIClient
+from rest_framework.test import APIClient, APITestCase
 
 from fk.models import User
-
 
 PERMISSION_DENIED_DETAIL = "You do not have permission to perform this action."
 

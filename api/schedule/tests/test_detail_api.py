@@ -9,7 +9,6 @@ from rest_framework.test import APIClient
 
 from fk.models import Scheduleitem
 
-
 pytestmark = pytest.mark.django_db
 
 HISTORICAL_START = datetime(2015, 1, 1, 10, tzinfo=ZoneInfo("Europe/Oslo"))

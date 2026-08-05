@@ -3,14 +3,13 @@
 # This file is covered by the LGPLv3 or later, read COPYING for details.
 
 from django.conf.urls import include
-from django.urls import re_path as url
 from django.contrib import admin
 from django.contrib.auth.views import LoginView, LogoutView
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
+from django.urls import re_path as url
 
 import agenda.urls
 import api.urls
-import news.urls
 from fkweb.views import Frontpage
 
 admin.autodiscover()

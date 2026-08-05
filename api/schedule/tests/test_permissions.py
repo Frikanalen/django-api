@@ -10,7 +10,6 @@ from rest_framework.test import APIClient
 
 from fk.models import Organization, Scheduleitem, User, Video
 
-
 pytestmark = pytest.mark.django_db
 
 OSLO = ZoneInfo("Europe/Oslo")

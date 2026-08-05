@@ -3,7 +3,6 @@ import os
 from django.conf import settings
 from django.db import models
 
-
 # we are slowly getting these out of the database, but can't make schema changes
 # until we have migrated away from the old version of Django.
 FILE_FORMATS = [

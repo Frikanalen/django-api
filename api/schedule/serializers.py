@@ -1,7 +1,8 @@
 from zoneinfo import ZoneInfo
+
 from rest_framework import serializers
 
-from fk.models import Category, Video, Scheduleitem, AsRun, Organization, VideoFile
+from fk.models import AsRun, Category, Organization, Scheduleitem, Video, VideoFile
 
 
 class ScheduleitemVideoFileSerializer(serializers.ModelSerializer):

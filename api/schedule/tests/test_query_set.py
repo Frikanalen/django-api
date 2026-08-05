@@ -7,7 +7,6 @@ from django.utils import timezone as django_timezone
 
 from fk.models import Scheduleitem
 
-
 pytestmark = pytest.mark.django_db
 
 OSLO = ZoneInfo("Europe/Oslo")

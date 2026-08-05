@@ -2,7 +2,7 @@ import datetime
 
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.test import APITestCase, APIRequestFactory, APIClient, force_authenticate
+from rest_framework.test import APIClient, APIRequestFactory, APITestCase, force_authenticate
 
 from api.auth.views import UserDetail
 from fk.models import User

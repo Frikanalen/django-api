@@ -5,22 +5,16 @@ import logging
 
 from django.conf import settings
 from django.core.paginator import Paginator
+from django.forms import ModelChoiceField, ModelForm
+from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
+from django.shortcuts import redirect, render
 from django.urls import reverse
-from django.forms import ModelForm, ModelChoiceField
-from django.http import HttpResponseForbidden, HttpResponse, HttpRequest
-from django.shortcuts import redirect
-from django.shortcuts import render
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.translation import gettext as _
 from django.views.generic import TemplateView
 
-from fk.models import Organization
-from fk.models import Scheduleitem
-from fk.models import Video
-from fk.models import VideoFile
-from fk.models import WeeklySlot
-
+from fk.models import Organization, Scheduleitem, Video, VideoFile, WeeklySlot
 
 logger = logging.getLogger(__name__)
 

@@ -7,8 +7,8 @@
 """Common settings and globals."""
 
 import logging
-from os.path import abspath, basename, dirname, join, normpath
 import sys
+from os.path import abspath, basename, dirname, join, normpath
 
 from environ import ImproperlyConfigured
 

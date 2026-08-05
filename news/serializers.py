@@ -1,5 +1,6 @@
-from .models import Bulletin
 from rest_framework import serializers
+
+from .models import Bulletin
 
 
 class BulletinSerializer(serializers.HyperlinkedModelSerializer):

@@ -5,7 +5,6 @@ from rest_framework.test import APIClient
 
 from fk.models import Organization, User
 
-
 pytestmark = pytest.mark.django_db
 
 

@@ -3,20 +3,18 @@
 
 import csv
 import logging
+
 from django.http import HttpResponse
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from rest_framework.viewsets import ModelViewSet
 from rest_framework.reverse import reverse
-from api.pagination import FkDefaultPagination
-from fk.models import AsRun
-from fk.models import Category
-from fk.models import Video
-from fk.models import VideoFile
+from rest_framework.viewsets import ModelViewSet
 
 from api.auth.permissions import IsStaffOrReadOnly
+from api.pagination import FkDefaultPagination
 from api.schedule.serializers import AsRunSerializer
 from api.serializers import CategorySerializer
+from fk.models import AsRun, Category, Video, VideoFile
 
 logger = logging.getLogger(__name__)
 

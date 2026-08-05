@@ -4,6 +4,7 @@ from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from model_utils import Choices
+
 from api.schedule.query_set import ScheduleitemQuerySet
 
 
