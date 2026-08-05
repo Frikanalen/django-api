@@ -3,6 +3,8 @@ from pathlib import Path
 
 import environ
 
+logger = logging.getLogger(__name__)
+
 
 def find_project_root() -> Path:
     marker = "manage.py"
@@ -17,7 +19,7 @@ def find_project_root() -> Path:
 def load_env_from(file: str) -> None:
     """Load environment variables from a specified file."""
     environ.Env.read_env(str(find_project_root() / file))
-    logging.info(f"Loading environment from {file}")
+    logger.info("Loading environment from %s", file)
 
 
 env = environ.Env(

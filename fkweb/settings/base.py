@@ -13,6 +13,8 @@ from environ import ImproperlyConfigured
 
 from .env import env, load_env_from
 
+logger = logging.getLogger(__name__)
+
 load_env_from(".env")
 
 
@@ -364,8 +366,8 @@ DATABASES = {"default": env.db()}
 CSRF_TRUSTED_ORIGINS = env.str("CSRF_TRUSTED_ORIGINS").split(",")
 try:
     cache_from_env_or_memory = env.cache()
-except ImproperlyConfigured:  # noqa: F821
-    logging.warning("CACHE_URL not set, falling back to in-memory cache.")
+except ImproperlyConfigured:
+    logger.warning("CACHE_URL not set, falling back to in-memory cache.")
     cache_from_env_or_memory = {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
 
 CACHES = {"default": cache_from_env_or_memory}

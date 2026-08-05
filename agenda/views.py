@@ -278,7 +278,7 @@ def floor_minute(dt):
 
 
 def _items_for_gap(start, end, candidates):
-    logger.info(f"Being asked to fill gap from {start} to {end}")
+    logger.info("Being asked to fill gap from %s to %s", start, end)
     # The smallest gap this function will try to fill
     MINIMUM_GAP_SECONDS = 300
 
@@ -325,7 +325,7 @@ def _items_for_gap(start, end, candidates):
             )
             full_items.extend(items)
         else:
-            logging.info("Not filling %d second gap" % gap)
+            logger.info("Not filling %d second gap", gap)
 
         if end_of_gap >= end:
             break
@@ -337,7 +337,7 @@ def _items_for_gap(start, end, candidates):
 def _fill_time_with_jukebox(start, end, videos, current_pool=None):
     current_time = start
     video_pool = current_pool or list(videos)
-    logger.info("Filling jukebox from %s to %s - %d in pool" % (start, end, len(video_pool)))
+    logger.info("Filling jukebox from %s to %s - %d in pool", start, end, len(video_pool))
     rejected_videos = []
     new_items = []
 
@@ -346,9 +346,7 @@ def _fill_time_with_jukebox(start, end, videos, current_pool=None):
 
     def next_vid(first=False):
         logger.debug(Video.objects.all())
-        logger.debug(
-            "next vid %s rej %s pool %s" % (first, plist(rejected_videos), plist(video_pool))
-        )
+        logger.debug("next vid %s rej %s pool %s", first, plist(rejected_videos), plist(video_pool))
         if len(video_pool) < len(videos) and first:
             video_pool.extend(list(videos))
         if len(rejected_videos):
@@ -362,7 +360,7 @@ def _fill_time_with_jukebox(start, end, videos, current_pool=None):
         new_rejects = []
 
         while current_time + video.duration > end:
-            logger.debug("end overshoots time", current_time + video.duration)
+            logger.debug("end overshoots time %s", current_time + video.duration)
             if video not in rejected_videos and video not in new_rejects:
                 new_rejects.append(video)
             video = next_vid()
