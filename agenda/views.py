@@ -67,7 +67,7 @@ class ManageVideoList(TemplateView):
 
     def get(self, request: HttpRequest, *_args, **_kwargs) -> HttpResponse:
         if not request.user.is_authenticated:
-            return redirect("/login/?next=%s" % request.path)
+            return redirect(f"/login/?next={request.path}")
         videos = Video.objects.filter(creator=request.user).order_by("name")
 
         paginator = Paginator(videos, self.VIDEOS_PER_PAGE)
@@ -154,7 +154,7 @@ class AbstractVideoFormView(TemplateView):
 class ManageVideoNew(AbstractVideoFormView):
     def get(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         if not request.user.is_authenticated or not request.user.is_superuser:
-            return redirect("/login/?next=%s" % request.path)
+            return redirect(f"/login/?next={request.path}")
         initial = {}
         form = self.get_form(request, initial=initial, form=kwargs.get("form"))
         context = {"form": form, "title": _("New Video")}
@@ -162,7 +162,7 @@ class ManageVideoNew(AbstractVideoFormView):
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         if not request.user.is_authenticated or not request.user.is_superuser:
-            return redirect("/login/?next=%s" % request.path)
+            return redirect(f"/login/?next={request.path}")
         if request.user.is_superuser:
             video = Video()
         else:
@@ -190,7 +190,7 @@ class ManageVideoEdit(AbstractVideoFormView):
 
     def get(self, request, id=None, form=None):
         if not request.user.is_authenticated:
-            return redirect("/login/?next=%s" % request.path)
+            return redirect(f"/login/?next={request.path}")
         video = Video.objects.get(id=id)
         if not allowed_to_edit(video, request.user):
             return HttpResponseForbidden(
@@ -203,7 +203,7 @@ class ManageVideoEdit(AbstractVideoFormView):
 
     def post(self, request, id):
         if not request.user.is_authenticated:
-            return redirect("/login/?next=%s" % request.path)
+            return redirect(f"/login/?next={request.path}")
         video = Video.objects.get(id=id)
         if not allowed_to_edit(video, request.user):
             return HttpResponseForbidden(

@@ -188,7 +188,7 @@ MIDDLEWARE = (
 
 ########## URL CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#root-urlconf
-ROOT_URLCONF = "%s.urls" % SITE_NAME
+ROOT_URLCONF = f"{SITE_NAME}.urls"
 ########## END URL CONFIGURATION
 
 
@@ -282,7 +282,7 @@ LOGGING = {
 
 ########## WSGI CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#wsgi-application
-WSGI_APPLICATION = "%s.wsgi.application" % SITE_NAME
+WSGI_APPLICATION = f"{SITE_NAME}.wsgi.application"
 ########## END WSGI CONFIGURATION
 
 ########## REST FRAMEWORK CONFIGURATION

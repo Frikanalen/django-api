@@ -37,14 +37,9 @@ class Scheduleitem(models.Model):
         ordering = ("-id",)
 
     def __str__(self):
-        t = self.starttime
-        s = t.strftime("%Y-%m-%d %H:%M:%S")
-        # format microsecond to hundreths
-        s += ".%02i" % (t.microsecond / 10000)
-        if self.video:
-            return str(s) + ": " + str(self.video)
-        else:
-            return str(s) + ": " + self.default_name
+        # %f renders microseconds as six digits; drop four to get hundredths
+        timestamp = self.starttime.strftime("%Y-%m-%d %H:%M:%S.%f")[:-4]
+        return f"{timestamp}: {self.video or self.default_name}"
 
     def endtime(self):
         if not self.duration:

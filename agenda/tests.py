@@ -78,7 +78,7 @@ class FillJukeboxUnitTests(TestCase):
             kwargs["duration"] = datetime.timedelta(minutes=minutes)
         return Video(
             id=video_id,
-            name="id:%d, min:%d" % (video_id, minutes),
+            name=f"id:{video_id}, min:{minutes}",
             creator_id=1,
             organization_id=1,
             proper_import=True,

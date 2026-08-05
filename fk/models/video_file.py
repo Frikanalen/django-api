@@ -65,7 +65,7 @@ class VideoFile(models.Model):
         )
 
     def __str__(self):
-        return "%s version of %s" % (self.format.fsname, self.video.name)
+        return f"{self.format.fsname} version of {self.video.name}"
 
     def location(self, relative=False):
         filename = os.path.basename(self.filename)
@@ -75,4 +75,4 @@ class VideoFile(models.Model):
         if relative:
             return path
         else:
-            return "/".join((settings.FK_MEDIA_ROOT, path))
+            return f"{settings.FK_MEDIA_ROOT}/{path}"

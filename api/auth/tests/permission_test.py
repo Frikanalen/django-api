@@ -36,7 +36,7 @@ class PermissionsTest(APITestCase):
         root_response = self.client.get(reverse("api-root"))
         self.assertEqual(status.HTTP_200_OK, root_response.status_code)
         # Every page exists
-        self.assertEqual(set(p[0] for p in pages), set(root_response.data.keys()))
+        self.assertEqual({p[0] for p in pages}, set(root_response.data.keys()))
         for name, code in pages:
             url = root_response.data[name]
             page_response = self.client.get(url)

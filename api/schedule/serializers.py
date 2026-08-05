@@ -68,7 +68,7 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
             )
             for entry in items:
                 if entry.starttime < end and start < entry.endtime():
-                    raise serializers.ValidationError({"duration": "Conflict with '%s'." % entry})
+                    raise serializers.ValidationError({"duration": f"Conflict with '{entry}'."})
         return data
 
 
