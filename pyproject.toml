@@ -28,6 +28,26 @@ dependencies = [
 
 [tool.ruff]
 line-length = 100
+exclude = [
+    # Vendored third-party type stubs. Copies of upstream sources, not our code:
+    # linting or reformatting them only makes the next refresh harder to diff.
+    "typings",
+    # Migrations are archival. They record what was applied to the database and
+    # are never edited after the fact, so the linter has no business in them.
+    "*/migrations",
+]
+# Without this, `ruff check fk/migrations` (or a pre-commit hook passing
+# filenames) would lint the excluded paths anyway.
+force-exclude = true
+
+[tool.ruff.lint]
+ignore = [
+    # Django and DRF are declarative: `fields`, `permission_classes` and
+    # `list_display` are all mutable class attributes by design, and the
+    # frameworks read them off the class. Every occurrence in this codebase is
+    # one of those, so the rule only buys us `ClassVar` noise on ~25 lines.
+    "RUF012",
+]
 
 [tool.pytest]
 minversion = "9.1"
