@@ -175,7 +175,7 @@ class ManageVideoNew(AbstractVideoFormView):
             video = form.save()
             # Success, send to edit page
             return redirect("manage-video-edit", video.id)
-        return self.get(request, form=form, *args, **kwargs)
+        return self.get(request, *args, form=form, **kwargs)
 
 
 def allowed_to_edit(video, user):

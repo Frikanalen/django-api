@@ -86,7 +86,7 @@ class SchedulePurpose(models.Model):
         elif self.type == self.TYPE.videos:
             qs = self.direct_videos.all()
         else:
-            raise Exception("Unhandled type %s" % self.type)
+            raise ValueError(f"Unhandled type {self.type}")
         if max_duration:
             qs = qs.filter(duration__lte=max_duration)
         # Workaround playout not handling broken files correctly
@@ -110,7 +110,7 @@ class SchedulePurpose(models.Model):
             # Get the video which has been scheduled the least
             return qs.annotate(num_sched=models.Count("scheduleitem")).order_by("num_sched").first()
         else:
-            raise Exception("Unhandled strategy %s" % self.strategy)
+            raise ValueError(f"Unhandled strategy {self.strategy}")
 
     def __str__(self):
         return self.name
