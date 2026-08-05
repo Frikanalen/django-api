@@ -7,6 +7,8 @@ from model_utils import Choices
 
 from api.schedule.query_set import ScheduleitemQuerySet
 
+from .organization import Organization
+
 
 class Scheduleitem(models.Model):
     REASON_LEGACY = 1
@@ -91,6 +93,9 @@ class SchedulePurpose(models.Model):
             qs = qs.filter(duration__lte=max_duration)
         # Workaround playout not handling broken files correctly
         qs = qs.filter(proper_import=True)
+        # Nothing airs unattended on behalf of an organization that has
+        # no ansvarlig redaktor to answer for it.
+        qs = qs.filter(organization__in=Organization.objects.with_responsible_editor())
         return qs
 
     def single_video(self, max_duration=None):

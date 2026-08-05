@@ -14,7 +14,7 @@ import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from fk.models import FileFormat, User, Video, VideoFile
+from fk.models import FileFormat, Organization, User, Video, VideoFile
 
 pytestmark = pytest.mark.django_db
 
@@ -29,9 +29,13 @@ def catalogue() -> dict[str, Video]:
     nuug_user = User.objects.create(email="nuug_user@fake.com")
     dummy_user = User.objects.create(email="dummy_user@fake.com")
     staff_user = User.objects.create(email="staff_user@fake.com", is_superuser=True)
+    # The videos need an organization with an active editor, or the
+    # list hides them all; accountability is covered by its own module.
+    organization = Organization.objects.create(name="Filter test org", editor=nuug_user)
 
     tech = Video.objects.create(
         name="tech video",
+        organization=organization,
         creator=nuug_user,
         duration=timedelta(seconds=10, milliseconds=10),
         publish_on_web=True,
@@ -40,6 +44,7 @@ def catalogue() -> dict[str, Video]:
     )
     dummy = Video.objects.create(
         name="dummy video",
+        organization=organization,
         creator=dummy_user,
         duration=timedelta(minutes=1),
         publish_on_web=True,
@@ -49,6 +54,7 @@ def catalogue() -> dict[str, Video]:
     )
     unpublished = Video.objects.create(
         name="unpublished video",
+        organization=organization,
         creator=staff_user,
         duration=timedelta(milliseconds=1),
         publish_on_web=False,
@@ -58,6 +64,7 @@ def catalogue() -> dict[str, Video]:
     )
     broken = Video.objects.create(
         name="broken video",
+        organization=organization,
         creator=staff_user,
         duration=timedelta(seconds=1),
         publish_on_web=False,
