@@ -62,6 +62,14 @@ class UserDetail(generics.RetrieveUpdateDestroyAPIView):
     def get_object(self, queryset=None):
         return self.request.user
 
+    def perform_destroy(self, instance):
+        # Deleting the row would raise ProtectedError for anyone who has
+        # uploaded a video; see User.anonymize for why the account is
+        # scrubbed instead. Still a 204 - from the caller's side the
+        # account is gone.
+        Token.objects.filter(user=instance).delete()
+        instance.anonymize()
+
 
 class UserLogin(CreateAPIView):
     """Sets a session cookie for the user"""
