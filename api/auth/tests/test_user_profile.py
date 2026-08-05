@@ -1,77 +1,117 @@
-import datetime
+"""
+The profile endpoint: reading, updating and deleting your own account.
 
+The old tests called the view through APIRequestFactory and asserted on
+the very same in-memory object the view had mutated, which would have
+kept passing even if nothing were saved. Everything here goes through
+the full stack and asserts on reloaded database state.
+"""
+
+from datetime import UTC, date, datetime
+
+import pytest
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.test import APIClient, APIRequestFactory, APITestCase, force_authenticate
+from rest_framework.test import APIClient
 
-from api.auth.views import UserDetail
 from fk.models import User
 
+pytestmark = pytest.mark.django_db
 
-class UserProfileTests(APITestCase):
-    factory = APIRequestFactory()
-    email = "profile_test_user@fake.com"
-    password = "test"
+EMAIL = "profile@example.test"
+PASSWORD = "correct horse battery staple"
+JOINED = datetime(2015, 1, 1, 10, 0, tzinfo=UTC)
 
-    def setUp(self):
-        self.user = User.objects.create_user(
-            email=self.email, password=self.password, date_of_birth="1900-01-01"
-        )
-        self.user.first_name = "Firstname before change"
-        self.user.last_name = "Lastname before change"
-        self.user.phone_number = "+47 22 22 55 55"
-        self.user.save()
 
-    def tearDown(self):
-        if self.user.id is not None:
-            self.user.delete()
+@pytest.fixture
+def account() -> User:
+    user = User.objects.create_user(email=EMAIL, password=PASSWORD, date_of_birth=date(1990, 6, 7))
+    user.first_name = "Kari"
+    user.last_name = "Nordmann"
+    user.phone_number = "+47 22 22 55 55"
+    user.date_joined = JOINED
+    user.save()
+    return user
 
-    def test_user_can_get_token(self):
-        client = APIClient()
 
-        response = client.post(
-            reverse("api-token-auth"),
-            {"username": self.email, "password": self.password},
-            format="json",
-        )
+@pytest.fixture
+def client(account: User) -> APIClient:
+    client = APIClient()
+    client.force_authenticate(user=account)
+    return client
 
-        self.assertEqual(status.HTTP_200_OK, response.status_code)
-        self.assertEqual(list(response.data.keys()), ["token"])
-        self.assertEqual(len(response.data["token"]), 40)
 
-    def test_user_get_profile(self):
-        req = self.factory.get(reverse("api-user-detail"))
-        force_authenticate(req, user=self.user)
-        res = UserDetail.as_view()(req)
-        self.assertEqual(200, res.status_code)
-        self.assertEqual(res.data["email"], self.user.email)
-        self.assertEqual(res.data["first_name"], self.user.first_name)
-        self.assertEqual(res.data["last_name"], self.user.last_name)
-        self.assertEqual(res.data["phone_number"], self.user.phone_number)
+def test_profile_returns_own_data(client: APIClient, account: User) -> None:
+    response = client.get(reverse("api-user-detail"))
 
-    def test_user_update_profile(self):
-        req = self.factory.put(
-            reverse("api-user-detail"),
-            {
-                "first_name": "Firstname",
-                "last_name": "Lastname",
-                "date_of_birth": "2000-12-15",
-                "phone_number": "+47 22 22 55 55",
-            },
-            format="json",
-        )
-        force_authenticate(req, user=self.user)
-        res = UserDetail.as_view()(req)
-        self.assertEqual(200, res.status_code)
-        self.assertEqual("Firstname", self.user.first_name)
-        self.assertEqual("Lastname", self.user.last_name)
-        self.assertEqual("+47 22 22 55 55", self.user.phone_number)
-        self.assertEqual(datetime.date(2000, 12, 15), self.user.date_of_birth)
-        self.assertEqual("profile_test_user@fake.com", self.user.email)
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {
+        "id": account.pk,
+        "email": EMAIL,
+        "isStaff": False,
+        "dateJoined": "2015-01-01T10:00:00Z",
+        "editorOf": [],
+        "memberOf": [],
+        "firstName": "Kari",
+        "lastName": "Nordmann",
+        "dateOfBirth": "1990-06-07",
+        # Phone numbers come back in E.164, not as entered.
+        "phoneNumber": "+4722225555",
+    }
 
-    def test_user_can_delete(self):
-        req = self.factory.delete(reverse("api-user-detail"), {"id": self.user.id}, format="json")
-        force_authenticate(req, user=self.user)
-        res = UserDetail.as_view()(req)
-        self.assertEqual(status.HTTP_204_NO_CONTENT, res.status_code)
-        self.assertEqual(self.user.id, None)
+
+def test_profile_updates_are_persisted(client: APIClient, account: User) -> None:
+    response = client.patch(
+        reverse("api-user-detail"),
+        {
+            "first_name": "Ola",
+            "last_name": "Nordmann",
+            "date_of_birth": "2000-12-15",
+            "phone_number": "+47 22 22 55 66",
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    account.refresh_from_db()
+    assert account.first_name == "Ola"
+    assert account.last_name == "Nordmann"
+    assert account.date_of_birth == date(2000, 12, 15)
+    assert account.phone_number == "+4722225566"
+
+
+def test_email_cannot_be_changed(client: APIClient, account: User) -> None:
+    # DRF silently ignores writes to read-only fields, so this is a 200
+    # that must change nothing - the update succeeds sans email.
+    response = client.patch(
+        reverse("api-user-detail"), {"email": "changed@example.test"}, format="json"
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    account.refresh_from_db()
+    assert account.email == EMAIL
+
+
+def test_password_updates_are_broken(client: APIClient, account: User) -> None:
+    """
+    Known defect, pinned on purpose: UserSerializer declares password as
+    a writable field but never runs it through set_password, so a PATCH
+    stores the raw string in the password column. The account can then
+    log in with neither the old nor the new password, and the plaintext
+    sits in the database. The fix (hash it, or reject the field) should
+    replace this test.
+    """
+    response = client.patch(reverse("api-user-detail"), {"password": "hunter2"}, format="json")
+
+    assert response.status_code == status.HTTP_200_OK
+    account.refresh_from_db()
+    assert account.password == "hunter2"
+    assert not account.check_password("hunter2")
+    assert not account.check_password(PASSWORD)
+
+
+def test_account_can_be_deleted(client: APIClient, account: User) -> None:
+    response = client.delete(reverse("api-user-detail"))
+
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+    assert not User.objects.filter(pk=account.pk).exists()
