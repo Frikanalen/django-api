@@ -1,10 +1,24 @@
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from fk.models import Organization, Scheduleitem, User, Video
+
+
+@pytest.fixture
+def now_in_the_drafting_week(monkeypatch: pytest.MonkeyPatch) -> datetime:
+    """Pin the clock so the 2015-01-01 fixtures land in the *open*
+    broadcast week: with now in the week of Mon 2014-12-15, the freeze
+    boundary is Mon 2014-12-29 and the open week runs through Sunday
+    2015-01-04 (see agenda.scheduling.policy). Modify-path tests need
+    this; the read path never consults the freeze."""
+    fixed_now = datetime(2014, 12, 17, 12, tzinfo=ZoneInfo("Europe/Oslo"))
+    monkeypatch.setattr(timezone, "now", lambda: fixed_now)
+    return fixed_now
 
 
 @pytest.fixture

@@ -14,6 +14,7 @@ one ceil for a floor changes what actually goes to air.
 """
 
 import datetime
+import random
 from itertools import pairwise
 from zoneinfo import ZoneInfo
 
@@ -135,7 +136,7 @@ def test_two_videos_alternate_to_fill_the_time(db) -> None:
 
     res = jukebox.items_for_gap(START_DATE, end, videos)
 
-    assert [r["id"] for r in res] == [1, 2, 1, 2]
+    assert [r.video.id for r in res] == [1, 2, 1, 2]
 
 
 def test_short_gap_before_scheduled_item_is_left_empty(filler_video: Video) -> None:
@@ -162,8 +163,8 @@ def test_short_gap_before_scheduled_item_is_left_empty(filler_video: Video) -> N
 
     res = jukebox.items_for_gap(start, end, videos)
 
-    assert [r["id"] for r in res] == [1, 3, 1, 3]
-    assert [r["starttime"] for r in res] == [
+    assert [r.video.id for r in res] == [1, 3, 1, 3]
+    assert [r.starttime for r in res] == [
         START_DATE + datetime.timedelta(minutes=m) for m in (4, 6, 7, 9)
     ]
 
@@ -185,21 +186,21 @@ def test_saved_items_carry_the_start_and_duration_that_were_planned(filler_video
         START_DATE + datetime.timedelta(minutes=1 + 61 * n) for n in range(23)
     ]
     assert {item.duration for item in items} == {filler_video.duration}
-    assert [entry["starttime"] for entry in planned] == [item.starttime for item in items]
+    assert [entry.starttime for entry in planned] == [item.starttime for item in items]
 
 
 def test_filling_starts_on_the_minute_after_an_off_minute_start(filler_video: Video) -> None:
-    """`ceil_minute`, not `floor_minute`: a start mid-minute rounds forward."""
+    """`next_whole_minute`, not `floor_minute`: a start mid-minute rounds forward."""
     planned = jukebox.fill_agenda_with_jukebox(START_DATE + datetime.timedelta(seconds=37), days=1)
 
-    assert planned[0]["starttime"] == START_DATE + datetime.timedelta(minutes=1)
+    assert planned[0].starttime == START_DATE + datetime.timedelta(minutes=1)
 
 
 def test_every_filler_in_the_pool_gets_used(member_organization: Organization) -> None:
     """
-    The pool is drawn in random order (`order_by("?")`), so the sequence
-    is not pinned -- only that both videos are drawn and that neither is
-    played twice in a row.
+    The draw is weighted-random (no rng passed, so unseeded), and the
+    sequence is not pinned -- only that both videos are drawn and that
+    RepeatAvoidance keeps either from playing twice in a row.
     """
     first = make_filler(member_organization, name="First filler")
     second = make_filler(member_organization, name="Second filler")
@@ -252,6 +253,40 @@ def test_the_minimum_gap_boundary_is_exclusive(
         starttime__lt=occupied_at, schedulereason=Scheduleitem.REASON_JUKEBOX
     ).exists()
     assert filled is expect_filled
+
+
+def test_an_overrunning_item_hidden_behind_a_nearer_one_still_counts(
+    filler_video: Video, short_filler: Video
+) -> None:
+    """
+    A long item from before the window can overrun into it even when a
+    nearer, non-overlapping item sits between its start and the window.
+    The old expand-to-the-previous-starttime approximation only looked
+    back as far as that nearer item and scheduled over the overrun.
+
+    The two pre-existing items overlap *each other* by construction --
+    that is the shape of the historical dirty data -- so the assertion
+    is only that the jukebox adds no overlap of its own.
+    """
+    occupy(
+        filler_video,
+        START_DATE - datetime.timedelta(hours=3),
+        datetime.timedelta(hours=4),
+    )
+    occupy(
+        short_filler,
+        START_DATE - datetime.timedelta(hours=1),
+        datetime.timedelta(minutes=30),
+    )
+
+    jukebox.fill_agenda_with_jukebox(START_DATE, days=HALF_HOUR + 1 / 24)
+
+    placed = Scheduleitem.objects.filter(schedulereason=Scheduleitem.REASON_JUKEBOX)
+    assert placed.exists()
+    for item in placed:
+        assert item.starttime >= START_DATE + datetime.timedelta(hours=1)
+        conflicts = Scheduleitem.objects.overlapping(item.starttime, item.endtime())
+        assert not conflicts.exclude(pk=item.pk).exists()
 
 
 def test_a_second_run_over_the_same_window_adds_nothing(filler_video: Video) -> None:
@@ -360,20 +395,83 @@ def test_a_positive_filler_shorter_than_a_minute_still_advances(
     assert starts == [START_DATE + datetime.timedelta(minutes=m) for m in range(1, 30)]
 
 
+def test_a_placement_whose_airtime_was_taken_since_planning_is_skipped(
+    filler_video: Video, short_filler: Video
+) -> None:
+    """
+    Between planning and saving, someone else's write can land on
+    airtime the plan counted as free -- there is no database exclusion
+    constraint yet to catch it. Saving re-checks each placement and
+    yields to whatever arrived; the rest of the plan still saves.
+    """
+    planned = jukebox.items_for_gap(
+        START_DATE, START_DATE + datetime.timedelta(hours=3), [filler_video]
+    )
+    assert len(planned) == 2
+    landed_meanwhile = planned[1]
+    occupy(
+        short_filler,
+        landed_meanwhile.starttime + datetime.timedelta(minutes=5),
+        datetime.timedelta(minutes=1),
+    )
+
+    saved = jukebox.save_placements(planned)
+
+    assert saved == [planned[0]]
+    assert overlapping_pairs() == []
+
+
+# --- the weighting rules, wired end to end ---------------------------------
+
+
+def test_an_organization_dominating_the_slots_gets_diluted_filler(
+    member_organization: Organization,
+) -> None:
+    """
+    The selection context seeds from everything already on the air in
+    the window -- so six hours of slot programming from one organization
+    pushes the jukebox toward everyone else's fillers for the rest of
+    the day.  The draw is weighted-random (seeded here), a preference
+    rather than a quota, so the dominant organization still airs.
+    """
+    other_editor = User.objects.create(email="jukebox-other-org@example.test")
+    other_org = Organization.objects.create(name="Other org", fkmember=True, editor=other_editor)
+    slot_programming = make_filler(member_organization, name="Slot programming", is_filler=False)
+    dominant = [make_filler(member_organization, name=f"Dominant {n}", minutes=30) for n in "ab"]
+    minority = [
+        make_filler(other_org, name=f"Minority {n}", minutes=30, creator=other_editor) for n in "ab"
+    ]
+    occupy(slot_programming, START_DATE + datetime.timedelta(hours=1), datetime.timedelta(hours=6))
+
+    jukebox.fill_agenda_with_jukebox(START_DATE, days=1, rng=random.Random(1))
+
+    jukebox_items = Scheduleitem.objects.filter(schedulereason=Scheduleitem.REASON_JUKEBOX)
+    by_org = {
+        org.id: jukebox_items.filter(video__organization=org).count()
+        for org in (member_organization, other_org)
+    }
+    assert by_org[other_org.id] > by_org[member_organization.id]
+    assert by_org[member_organization.id] > 0
+    played = set(jukebox_items.values_list("video_id", flat=True))
+    assert played == {v.id for v in dominant + minority}
+
+
 # --- the entry point the cron actually calls -------------------------------
 
 
-def test_the_management_command_fills_two_days_from_now(
+def test_the_management_command_fills_through_the_open_week(
     monkeypatch: pytest.MonkeyPatch, filler_video: Video
 ) -> None:
     """
     `fill_agenda_with_jukebox` is invoked by a nightly CronJob with no
-    arguments; the command supplies days=2 and lets the view default the
-    start to the current time.
+    arguments and drafts through the scheduling horizon: START_DATE is
+    Sunday noon of the week starting Mon 06-24, so the horizon is
+    Mon 07-15 00:00 -- a 20880-minute window holding 342 hour-long
+    fillers at 61-minute spacing.
     """
     monkeypatch.setattr(jukebox.timezone, "now", lambda: START_DATE)
 
     call_command("fill_agenda_with_jukebox")
 
     starts = list(Scheduleitem.objects.order_by("starttime").values_list("starttime", flat=True))
-    assert starts == [START_DATE + datetime.timedelta(minutes=1 + 61 * n) for n in range(47)]
+    assert starts == [START_DATE + datetime.timedelta(minutes=1 + 61 * n) for n in range(342)]

@@ -10,7 +10,7 @@ from rest_framework.test import APIClient
 
 from fk.models import Organization, Scheduleitem, User, Video
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.usefixtures("now_in_the_drafting_week")]
 
 OSLO = ZoneInfo("Europe/Oslo")
 SCHEDULE_START = datetime(2015, 1, 1, 10, tzinfo=OSLO)

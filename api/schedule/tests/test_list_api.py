@@ -279,6 +279,7 @@ def test_list_serializes_nested_video_details(
             },
             "starttime": "2015-01-02T10:00:00+01:00",
             "endtime": "2015-01-02T11:00:00+01:00",
+            "displaceable": False,
         }
     ]
 

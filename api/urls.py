@@ -83,6 +83,17 @@ urlpatterns += router.urls
 # Format suffixes
 urlpatterns = format_suffix_patterns(urlpatterns, allowed=["json", "api", "xml"])
 
+urlpatterns += [
+    # Registered after the format-suffix expansion on purpose: a
+    # `.json`-style twin would only clutter the OpenAPI schema with a
+    # colliding {format} operation.
+    path(
+        "api/scheduling/policy",
+        schedule_views.SchedulingPolicyView.as_view(),
+        name="api-scheduling-policy",
+    ),
+]
+
 # Default login/logout views
 urlpatterns += [
     # Spectacular API views

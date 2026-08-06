@@ -17,7 +17,7 @@ from rest_framework.test import APIClient
 
 from fk.models import AsRun, Category, Organization, Scheduleitem, Video, VideoFile
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.usefixtures("now_in_the_drafting_week")]
 
 DETAIL_URLS = {
     "video": "api-video-detail",
