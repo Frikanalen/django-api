@@ -15,6 +15,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from agenda.scheduling.jukebox import fill_agenda_with_jukebox
 from fk.models import Organization, Scheduleitem, User, Video
 
 pytestmark = [pytest.mark.django_db, pytest.mark.usefixtures("now_in_the_drafting_week")]
@@ -52,8 +53,9 @@ def staff_client() -> APIClient:
 
 @pytest.fixture
 def other_organization() -> Organization:
+    """fkmember, so its fillers are eligible when the jukebox refills."""
     editor = User.objects.create(email="freeze-other-editor@example.test")
-    return Organization.objects.create(name="Other org", editor=editor)
+    return Organization.objects.create(name="Other org", editor=editor, fkmember=True)
 
 
 def jukebox_filler_at(
@@ -192,6 +194,39 @@ def test_displacement_also_applies_when_moving_an_item(
     assert not Scheduleitem.objects.filter(pk=filler.pk).exists()
     item.refresh_from_db()
     assert item.starttime == target
+
+
+def test_the_nightly_jukebox_repacks_what_a_displacement_orphans(
+    member_client: APIClient, video: Video, other_organization: Organization
+) -> None:
+    """A pick over the last 5 minutes of a 50-minute filler deletes the
+    whole filler, orphaning the ~45 minutes in front of the pick. The
+    nightly jukebox walks the entire window again, so the next run
+    repacks that stretch -- here with the same 50-minute video, twice,
+    leaving only a sub-minimum sliver before the pick.
+    """
+    filler_item = jukebox_filler_at(other_organization, IN_THE_OPEN_WEEK, minutes=50)
+    pick_start = IN_THE_OPEN_WEEK + timedelta(minutes=45)
+
+    response = post_item(member_client, video, pick_start)
+    assert response.status_code == status.HTTP_201_CREATED
+    assert not Scheduleitem.objects.filter(pk=filler_item.pk).exists()
+
+    fill_agenda_with_jukebox(start=IN_THE_OPEN_WEEK - timedelta(hours=1), days=0.25)
+
+    refills = Scheduleitem.objects.filter(
+        schedulereason=Scheduleitem.REASON_JUKEBOX, starttime__lt=pick_start
+    ).order_by("starttime")
+    # 09:01 and 09:52: packed from the whole minute after the window
+    # opens up to the pick, ending 10:42 -- a 3-minute leftover, below
+    # the jukebox's 5-minute minimum.
+    assert [item.starttime for item in refills] == [
+        IN_THE_OPEN_WEEK - timedelta(minutes=59),
+        IN_THE_OPEN_WEEK - timedelta(minutes=8),
+    ]
+    assert refills.last().endtime() <= pick_start
+    later = Scheduleitem.objects.filter(starttime__gte=pick_start).order_by("starttime")
+    assert later.first().starttime == pick_start  # the pick survived intact
 
 
 def test_a_conflict_with_deliberate_programming_still_refuses(
