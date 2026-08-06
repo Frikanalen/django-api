@@ -8,6 +8,12 @@ it, drafts through the end of the open broadcast week (see
 fillers is respected; jukebox fillers are displaced outside the freeze
 boundary, so a newly defined slot does not wait two weeks for airtime
 the jukebox got to first.
+
+Placements carry provenance (Scheduleitem.weekly_slot), and the open
+week is a draft: each nightly run re-picks its own unfrozen placements
+when the purpose's answer has changed, so a `latest` slot drafted
+nearly three weeks out does not go stale. Frozen weeks are never
+touched.
 """
 
 import logging
@@ -70,20 +76,54 @@ def _fill_occurrence(slot, starttime, frozen_until):
 
     with transaction.atomic():
         blocking, displaceable = airtime_conflicts(starttime, end, for_update=True)
-        if blocking:
-            # Something deliberate is on the air across this slot. Note this
-            # includes an item that started *before* the slot and runs into it.
+        # The slot's own earlier placement is not a conflict but a draft
+        # this run may refresh. Anything else deliberate -- member
+        # picks, admin entries, other slots, pre-provenance rows --
+        # keeps the airtime.
+        own = [item for item in blocking if item.weekly_slot_id == slot.pk]
+        foreign = [item for item in blocking if item.weekly_slot_id != slot.pk]
+        if foreign:
+            # Note this includes an item that started *before* the slot
+            # and runs into it.
             logger.info("Already something scheduled across %s; skipping slot", starttime)
             return
-        if displaceable and starttime < frozen_until:
+
+        if starttime < frozen_until:
             # Frozen weeks change as little as possible: only genuinely
             # empty airtime may still be filled.
-            logger.info("Not displacing jukebox fillers at %s inside the frozen weeks", starttime)
+            if own or displaceable:
+                logger.info("Not touching the frozen weeks at %s", starttime)
+                return
+        elif own:
+            _refresh_own_placement(slot, own[0], video, displaceable)
             return
+
         displace(displaceable)
         Scheduleitem.objects.create(
             video=video,
             schedulereason=Scheduleitem.REASON_AUTO,
             starttime=starttime,
             duration=video.duration,
+            weekly_slot=slot,
         )
+
+
+def _refresh_own_placement(slot, placement, video, displaceable):
+    """Re-pick an unfrozen draft placement its purpose no longer stands
+    by: a newer upload under `latest`, or a drafted video that has
+    become ineligible. The open week is a draft, but a standing pick is
+    left alone -- no churn night to night."""
+    if slot.purpose.still_current(placement.video, slot.duration):
+        return
+    logger.info(
+        "Re-picking slot placement at %s: %s replaces %s",
+        placement.starttime,
+        video.id,
+        placement.video_id,
+    )
+    # A longer replacement may reach jukebox fillers that packed in
+    # behind a shorter draft; they give way like anywhere else.
+    displace(displaceable)
+    placement.video = video
+    placement.duration = video.duration
+    placement.save()

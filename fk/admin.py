@@ -75,6 +75,17 @@ class ScheduleitemAdmin(admin.ModelAdmin):
     # exclude = ('video',)
     search_fields = ["video__name", "video__organization__name"]
     ordering = ("starttime",)
+    # Provenance is system-owned: visible for debugging, never
+    # hand-assigned -- an item with a slot recorded is one the nightly
+    # re-pick may replace.
+    readonly_fields = ("weekly_slot",)
+
+    def save_model(self, request, obj, form, change):
+        if change:
+            # An admin edit makes the item deliberate programming, same
+            # as an API edit: the nightly re-pick must not overwrite it.
+            obj.weekly_slot = None
+        super().save_model(request, obj, form, change)
 
 
 class SchedulePurposeAdmin(admin.ModelAdmin):
