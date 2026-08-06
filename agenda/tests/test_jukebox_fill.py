@@ -395,6 +395,32 @@ def test_a_positive_filler_shorter_than_a_minute_still_advances(
     assert starts == [START_DATE + datetime.timedelta(minutes=m) for m in range(1, 30)]
 
 
+def test_a_placement_whose_airtime_was_taken_since_planning_is_skipped(
+    filler_video: Video, short_filler: Video
+) -> None:
+    """
+    Between planning and saving, someone else's write can land on
+    airtime the plan counted as free -- there is no database exclusion
+    constraint yet to catch it. Saving re-checks each placement and
+    yields to whatever arrived; the rest of the plan still saves.
+    """
+    planned = jukebox.items_for_gap(
+        START_DATE, START_DATE + datetime.timedelta(hours=3), [filler_video]
+    )
+    assert len(planned) == 2
+    landed_meanwhile = planned[1]
+    occupy(
+        short_filler,
+        landed_meanwhile.starttime + datetime.timedelta(minutes=5),
+        datetime.timedelta(minutes=1),
+    )
+
+    saved = jukebox.save_placements(planned)
+
+    assert saved == [planned[0]]
+    assert overlapping_pairs() == []
+
+
 # --- the weighting rules, wired end to end ---------------------------------
 
 

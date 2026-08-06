@@ -51,16 +51,33 @@ def fill_agenda_with_jukebox(start=None, days=None, rng=None):
     selector = WeightedSelector(candidates, context, default_rules(now=start), rng=rng)
 
     placements = items_for_gap(start, end, candidates, selector=selector)
+    return save_placements(placements)
+
+
+def save_placements(placements: list["Placement"]) -> list["Placement"]:
+    """Persist planned placements; returns the ones actually saved.
+
+    Airtime that was free at planning time can have been taken since --
+    a member pick landing while the nightly run walks its two-week
+    window -- and there is no database exclusion constraint yet to
+    catch that, so each placement re-checks just before writing. A
+    taken slot is skipped, not fought over: whatever landed there was
+    more deliberate than filler.
+    """
+    saved = []
     for placement in placements:
-        item = Scheduleitem(
+        end = placement.starttime + placement.video.duration
+        if Scheduleitem.objects.overlapping(placement.starttime, end).exists():
+            logger.info("Airtime at %s was taken since planning; skipping", placement.starttime)
+            continue
+        Scheduleitem.objects.create(
             video=placement.video,
             schedulereason=Scheduleitem.REASON_JUKEBOX,
             starttime=placement.starttime,
             duration=placement.video.duration,
         )
-        item.save()
-
-    return placements
+        saved.append(placement)
+    return saved
 
 
 def next_whole_minute(dt):
