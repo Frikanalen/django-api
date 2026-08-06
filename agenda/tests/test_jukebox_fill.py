@@ -14,6 +14,7 @@ one ceil for a floor changes what actually goes to air.
 """
 
 import datetime
+import random
 from itertools import pairwise
 from zoneinfo import ZoneInfo
 
@@ -197,9 +198,9 @@ def test_filling_starts_on_the_minute_after_an_off_minute_start(filler_video: Vi
 
 def test_every_filler_in_the_pool_gets_used(member_organization: Organization) -> None:
     """
-    The pool is drawn in random order (`order_by("?")`), so the sequence
-    is not pinned -- only that both videos are drawn and that neither is
-    played twice in a row.
+    The draw is weighted-random (no rng passed, so unseeded), and the
+    sequence is not pinned -- only that both videos are drawn and that
+    RepeatAvoidance keeps either from playing twice in a row.
     """
     first = make_filler(member_organization, name="First filler")
     second = make_filler(member_organization, name="Second filler")
@@ -358,6 +359,41 @@ def test_a_positive_filler_shorter_than_a_minute_still_advances(
 
     starts = list(Scheduleitem.objects.order_by("starttime").values_list("starttime", flat=True))
     assert starts == [START_DATE + datetime.timedelta(minutes=m) for m in range(1, 30)]
+
+
+# --- the weighting rules, wired end to end ---------------------------------
+
+
+def test_an_organization_dominating_the_slots_gets_diluted_filler(
+    member_organization: Organization,
+) -> None:
+    """
+    The selection context seeds from everything already on the air in
+    the window -- so six hours of slot programming from one organization
+    pushes the jukebox toward everyone else's fillers for the rest of
+    the day.  The draw is weighted-random (seeded here), a preference
+    rather than a quota, so the dominant organization still airs.
+    """
+    other_editor = User.objects.create(email="jukebox-other-org@example.test")
+    other_org = Organization.objects.create(name="Other org", fkmember=True, editor=other_editor)
+    slot_programming = make_filler(member_organization, name="Slot programming", is_filler=False)
+    dominant = [make_filler(member_organization, name=f"Dominant {n}", minutes=30) for n in "ab"]
+    minority = [
+        make_filler(other_org, name=f"Minority {n}", minutes=30, creator=other_editor) for n in "ab"
+    ]
+    occupy(slot_programming, START_DATE + datetime.timedelta(hours=1), datetime.timedelta(hours=6))
+
+    jukebox.fill_agenda_with_jukebox(START_DATE, days=1, rng=random.Random(1))
+
+    jukebox_items = Scheduleitem.objects.filter(schedulereason=Scheduleitem.REASON_JUKEBOX)
+    by_org = {
+        org.id: jukebox_items.filter(video__organization=org).count()
+        for org in (member_organization, other_org)
+    }
+    assert by_org[other_org.id] > by_org[member_organization.id]
+    assert by_org[member_organization.id] > 0
+    played = set(jukebox_items.values_list("video_id", flat=True))
+    assert played == {v.id for v in dominant + minority}
 
 
 # --- the entry point the cron actually calls -------------------------------

@@ -9,12 +9,12 @@ programming that is already scheduled.
 
 import datetime
 import logging
-import random
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 
 from django.utils import timezone
 
+from agenda.scheduling.selection import ScheduleContext, WeightedSelector, default_rules
 from fk.models import Scheduleitem, Video
 
 logger = logging.getLogger(__name__)
@@ -36,9 +36,14 @@ def fill_agenda_with_jukebox(start=None, days=1, rng=None):
     # of Video.objects.fillers() on purpose: that queryset also feeds
     # the jukebox CSV, whose output is a frozen contract.
     candidates = list(Video.objects.fillers().exclude(duration__lte=datetime.timedelta(0)))
-    (rng or random).shuffle(candidates)
 
-    placements = items_for_gap(start, end, candidates)
+    # The context seeds from everything already on the air in the
+    # window -- weekly-slot programming included -- so an organization
+    # the slots favor starts the day with its filler weight down.
+    context = ScheduleContext.from_schedule(start, end)
+    selector = WeightedSelector(candidates, context, default_rules(now=start), rng=rng)
+
+    placements = items_for_gap(start, end, candidates, selector=selector)
     for placement in placements:
         item = Scheduleitem(
             video=placement.video,
@@ -130,11 +135,13 @@ def free_gaps(
         start_of_gap = resume_at
 
 
-def items_for_gap(start, end, candidates):
+def items_for_gap(start, end, candidates, selector=None):
     """Plan (but do not save) filler placements between `start` and `end`.
 
     Returns a list of `Placement`s, skipping any stretch already occupied
-    by an existing Scheduleitem.
+    by an existing Scheduleitem. Videos are chosen by `selector`;
+    without one, a RoundRobinSelector cycles `candidates` in the order
+    given.
     """
     logger.info("Being asked to fill gap from %s to %s", start, end)
 
@@ -148,14 +155,15 @@ def items_for_gap(start, end, candidates):
         ).order_by("starttime")
     ]
 
-    selector = RoundRobinSelector(candidates)
+    if selector is None:
+        selector = RoundRobinSelector(candidates)
     placements = []
     for gap in free_gaps(start, end, occupied):
         placements.extend(_fill_gap(gap, selector))
     return placements
 
 
-def _fill_gap(gap: Gap, selector: "RoundRobinSelector") -> list[Placement]:
+def _fill_gap(gap: Gap, selector) -> list[Placement]:
     """Pack fillers into one gap, advancing minute-aligned after each."""
     logger.info("Filling jukebox from %s to %s", gap.start, gap.end)
     placements = []

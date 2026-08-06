@@ -5,6 +5,7 @@ pin the same behavior end to end through `items_for_gap`.
 """
 
 import datetime
+from itertools import pairwise
 
 from agenda.scheduling.jukebox import RoundRobinSelector
 from fk.models import Video
@@ -37,7 +38,7 @@ def test_no_video_repeats_until_the_rest_have_played() -> None:
 
     drawn = picks(selector, minutes(60), 10)
 
-    assert all(a != b for a, b in zip(drawn, drawn[1:], strict=False))
+    assert all(a != b for a, b in pairwise(drawn))
 
 
 def test_a_video_too_long_for_the_moment_keeps_its_place_in_line() -> None:
