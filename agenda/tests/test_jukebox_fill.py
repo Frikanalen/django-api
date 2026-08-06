@@ -255,6 +255,40 @@ def test_the_minimum_gap_boundary_is_exclusive(
     assert filled is expect_filled
 
 
+def test_an_overrunning_item_hidden_behind_a_nearer_one_still_counts(
+    filler_video: Video, short_filler: Video
+) -> None:
+    """
+    A long item from before the window can overrun into it even when a
+    nearer, non-overlapping item sits between its start and the window.
+    The old expand-to-the-previous-starttime approximation only looked
+    back as far as that nearer item and scheduled over the overrun.
+
+    The two pre-existing items overlap *each other* by construction --
+    that is the shape of the historical dirty data -- so the assertion
+    is only that the jukebox adds no overlap of its own.
+    """
+    occupy(
+        filler_video,
+        START_DATE - datetime.timedelta(hours=3),
+        datetime.timedelta(hours=4),
+    )
+    occupy(
+        short_filler,
+        START_DATE - datetime.timedelta(hours=1),
+        datetime.timedelta(minutes=30),
+    )
+
+    jukebox.fill_agenda_with_jukebox(START_DATE, days=HALF_HOUR + 1 / 24)
+
+    placed = Scheduleitem.objects.filter(schedulereason=Scheduleitem.REASON_JUKEBOX)
+    assert placed.exists()
+    for item in placed:
+        assert item.starttime >= START_DATE + datetime.timedelta(hours=1)
+        conflicts = Scheduleitem.objects.overlapping(item.starttime, item.endtime())
+        assert not conflicts.exclude(pk=item.pk).exists()
+
+
 def test_a_second_run_over_the_same_window_adds_nothing(filler_video: Video) -> None:
     """
     The cron runs nightly over windows that overlap the previous night's,

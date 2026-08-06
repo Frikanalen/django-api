@@ -152,14 +152,12 @@ def items_for_gap(start, end, candidates, selector=None):
     """
     logger.info("Being asked to fill gap from %s to %s", start, end)
 
-    # Include the surrounding items, so that programming which starts
-    # before the window but overruns into it still counts as occupied.
-    startdt, enddt = Scheduleitem.objects.expand_to_surrounding(start, end)
+    # overlapping() is the one definition of occupied airtime, and it
+    # includes programming that starts before the window but overruns
+    # into it.
     occupied = [
         (item.starttime, item.endtime())
-        for item in Scheduleitem.objects.filter(
-            starttime__gte=startdt, starttime__lte=enddt
-        ).order_by("starttime")
+        for item in Scheduleitem.objects.overlapping(start, end).order_by("starttime")
     ]
 
     if selector is None:
