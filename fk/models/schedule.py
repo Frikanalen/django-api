@@ -32,6 +32,14 @@ class Scheduleitem(models.Model):
     schedulereason = models.IntegerField(blank=True, choices=SCHEDULE_REASONS)
     starttime = models.DateTimeField()
     duration = models.DurationField(validators=[MinValueValidator(timedelta(0))])
+    # Which WeeklySlot placed this item, for REASON_AUTO placements made
+    # after this field existed. The nightly filler may re-pick its *own*
+    # unfrozen placements when the purpose's answer changes; an item
+    # with no slot recorded (member picks, admin entries, pre-provenance
+    # rows) is deliberate programming and is never touched. SET_NULL so
+    # deleting a slot definition strands its drafted items as deliberate
+    # programming instead of ripping them off the air.
+    weekly_slot = models.ForeignKey("WeeklySlot", null=True, blank=True, on_delete=models.SET_NULL)
 
     objects = ScheduleitemQuerySet.as_manager()
 
@@ -143,6 +151,21 @@ class SchedulePurpose(models.Model):
         # no ansvarlig redaktor to answer for it.
         qs = qs.filter(organization__in=Organization.objects.with_responsible_editor())
         return qs
+
+    def still_current(self, video, max_duration=None):
+        """Whether a draft placement of `video` still stands.
+
+        `latest` keeps chasing the newest upload, so an outdated pick
+        gets replaced. The other strategies only require the video to
+        remain eligible: re-rolling `random` nightly, or letting
+        `least_scheduled` oscillate with the counts its own placements
+        create, would churn the draft for no editorial gain.
+        """
+        if video is None:
+            return False
+        if self.strategy == self.STRATEGY.latest:
+            return self.single_video(max_duration) == video
+        return self.videos_queryset(max_duration).filter(pk=video.pk).exists()
 
     def single_video(self, max_duration=None):
         """

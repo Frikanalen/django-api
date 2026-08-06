@@ -235,6 +235,149 @@ def test_does_not_displace_jukebox_fillers_in_the_frozen_weeks(
     assert Scheduleitem.objects.filter(pk=published.pk).exists()
 
 
+# --- provenance and the nightly re-pick -------------------------------------
+
+
+def make_upload(organization: Organization, name: str, minutes: int = 25) -> Video:
+    """A fresh upload the `latest` strategy must prefer: the slot-video
+    fixture has no uploaded_time, which `latest` sorts last."""
+    return Video.objects.create(
+        name=name,
+        creator=organization.editor,
+        organization=organization,
+        duration=timedelta(minutes=minutes),
+        proper_import=True,
+        uploaded_time=NOW,
+    )
+
+
+def test_placements_carry_their_slot(video: Video, purpose: SchedulePurpose) -> None:
+    slot = make_slot(purpose)
+
+    fill_next_weeks_agenda(now=NOW)
+
+    assert {item.weekly_slot for item in slot_items()} == {slot}
+
+
+def test_a_rerun_re_picks_the_open_week_when_the_purpose_answer_changed(
+    organization: Organization, video: Video, purpose: SchedulePurpose
+) -> None:
+    """The open week is a draft: a `latest` slot drafted early swaps to
+    a video uploaded afterwards. The frozen week keeps what it has."""
+    make_slot(purpose)
+    fill_next_weeks_agenda(now=NOW)
+    newer = make_upload(organization, "Uploaded after drafting")
+
+    fill_next_weeks_agenda(now=NOW)
+
+    by_start = {item.starttime: item.video for item in slot_items()}
+    assert by_start[FROZEN_OCCURRENCE] == video
+    assert by_start[OPEN_OCCURRENCE] == newer
+
+
+def test_a_rerun_with_an_unchanged_answer_leaves_the_placement_alone(
+    video: Video, purpose: SchedulePurpose
+) -> None:
+    """Same pick, same row: no delete-and-recreate churn night to night."""
+    make_slot(purpose)
+    fill_next_weeks_agenda(now=NOW)
+    original_pks = {item.pk for item in slot_items()}
+
+    fill_next_weeks_agenda(now=NOW)
+
+    assert {item.pk for item in slot_items()} == original_pks
+
+
+def test_a_random_slot_is_not_re_rolled_night_after_night(
+    organization: Organization, video: Video
+) -> None:
+    """Only `latest` chases a better answer. `random` answers
+    differently every call, so 'answer changed' would churn the draft
+    nightly; a standing pick only falls when it becomes ineligible."""
+    make_upload(organization, "Another candidate")
+    random_purpose = SchedulePurpose.objects.create(
+        name="Random purpose",
+        type=SchedulePurpose.TYPE.organization,
+        strategy="random",
+        organization=organization,
+    )
+    make_slot(random_purpose)
+    fill_next_weeks_agenda(now=NOW)
+    drafted = {(item.pk, item.video_id) for item in slot_items()}
+
+    fill_next_weeks_agenda(now=NOW)
+
+    assert {(item.pk, item.video_id) for item in slot_items()} == drafted
+
+
+def test_a_drafted_video_that_became_ineligible_is_replaced(
+    organization: Organization, video: Video, purpose: SchedulePurpose
+) -> None:
+    """A pick the purpose can no longer stand by -- here the video lost
+    its proper import -- gives way to a fresh choice."""
+    make_slot(purpose)
+    fill_next_weeks_agenda(now=NOW)
+    replacement = make_upload(organization, "Still eligible")
+    video.proper_import = False
+    video.save()
+
+    fill_next_weeks_agenda(now=NOW)
+
+    open_item = Scheduleitem.objects.get(starttime=OPEN_OCCURRENCE)
+    assert open_item.video == replacement
+    # The frozen week keeps the now-ineligible video: frozen is frozen.
+    assert Scheduleitem.objects.get(starttime=FROZEN_OCCURRENCE).video == video
+
+
+def test_a_longer_re_pick_displaces_fillers_that_packed_in_behind_the_draft(
+    organization: Organization, video: Video, purpose: SchedulePurpose
+) -> None:
+    make_slot(purpose, duration=timedelta(hours=1))
+    fill_next_weeks_agenda(now=NOW)
+    filler = occupy(
+        video,
+        OPEN_OCCURRENCE + timedelta(minutes=30),
+        timedelta(minutes=10),
+        Scheduleitem.REASON_JUKEBOX,
+    )
+    longer = make_upload(organization, "Longer newer upload", minutes=55)
+
+    fill_next_weeks_agenda(now=NOW)
+
+    refreshed = Scheduleitem.objects.get(starttime=OPEN_OCCURRENCE)
+    assert refreshed.video == longer
+    assert not Scheduleitem.objects.filter(pk=filler.pk).exists()
+
+
+def test_a_pre_provenance_item_is_deliberate_programming(
+    video: Video, purpose: SchedulePurpose
+) -> None:
+    """Legacy REASON_AUTO rows have no slot recorded; the filler must
+    treat them as untouchable, not adopt them."""
+    make_slot(purpose)
+    legacy = occupy(video, OPEN_OCCURRENCE, timedelta(minutes=25), Scheduleitem.REASON_AUTO)
+
+    fill_next_weeks_agenda(now=NOW)
+
+    legacy.refresh_from_db()
+    assert legacy.weekly_slot is None
+    assert Scheduleitem.objects.filter(starttime=OPEN_OCCURRENCE).count() == 1
+
+
+def test_deleting_a_slot_strands_its_placements_as_deliberate_programming(
+    video: Video, purpose: SchedulePurpose
+) -> None:
+    """SET_NULL: drafted items survive their slot's deletion, and a new
+    slot on the same airtime treats them as foreign."""
+    slot = make_slot(purpose)
+    fill_next_weeks_agenda(now=NOW)
+    slot.delete()
+
+    survivors = slot_items()
+    assert [item.starttime for item in survivors] == [FROZEN_OCCURRENCE, OPEN_OCCURRENCE]
+    assert {item.weekly_slot for item in survivors} == {None}
+
+
 # --- the entry points the cron actually calls -------------------------------
 
 

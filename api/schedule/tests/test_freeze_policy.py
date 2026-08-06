@@ -16,7 +16,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from agenda.scheduling.jukebox import fill_agenda_with_jukebox
-from fk.models import Organization, Scheduleitem, User, Video
+from fk.models import Organization, Scheduleitem, User, Video, WeeklySlot
 
 pytestmark = [pytest.mark.django_db, pytest.mark.usefixtures("now_in_the_drafting_week")]
 
@@ -153,6 +153,33 @@ def test_staff_may_change_the_frozen_weeks(staff_client: APIClient, video: Video
 
     assert create_response.status_code == status.HTTP_201_CREATED
     assert delete_response.status_code == status.HTTP_204_NO_CONTENT
+
+
+def test_a_member_edit_strips_slot_provenance(member_client: APIClient, video: Video) -> None:
+    """An edited slot placement becomes deliberate programming: with
+    provenance kept, the nightly re-pick could overwrite the change the
+    member just made on purpose."""
+    slot = WeeklySlot.objects.create(
+        day=0, start_time=IN_THE_OPEN_WEEK.time(), duration=timedelta(hours=1)
+    )
+    item = Scheduleitem.objects.create(
+        video=video,
+        schedulereason=Scheduleitem.REASON_AUTO,
+        starttime=IN_THE_OPEN_WEEK,
+        duration=timedelta(hours=1),
+        weekly_slot=slot,
+    )
+
+    response = member_client.patch(
+        reverse("api-scheduleitem-detail", args=[item.pk]),
+        {"duration": "00:30:00"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    item.refresh_from_db()
+    assert item.weekly_slot is None
+    assert item.duration == timedelta(minutes=30)
 
 
 # --- displacement of jukebox fillers ----------------------------------------

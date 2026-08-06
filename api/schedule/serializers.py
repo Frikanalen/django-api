@@ -99,6 +99,10 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         with transaction.atomic():
             self._claim_airtime(validated_data, instance)
+            # A human edit makes the item deliberate programming: strip
+            # slot provenance so the nightly re-pick cannot overwrite
+            # what someone changed on purpose.
+            instance.weekly_slot = None
             return super().update(instance, validated_data)
 
     def _claim_airtime(self, validated_data, instance):
