@@ -31,11 +31,11 @@ def fill_next_weeks_agenda():
         next_datetime = slot.next_datetime()
         end_next_datetime = next_datetime + slot.duration
 
-        if Scheduleitem.objects.filter(
-            starttime__gte=next_datetime, starttime__lt=end_next_datetime
-        ).exists():
-            # Ouch we have already scheduled something in the slot
-            logger.debug("Already something scheduled in this slot")
+        if Scheduleitem.objects.overlapping(next_datetime, end_next_datetime).exists():
+            # Something is already on the air across this slot. Note this
+            # includes an item that started *before* the slot and runs into
+            # it, which the old starttime-only check could not see.
+            logger.info("Already something scheduled across %s; skipping slot", next_datetime)
             continue
         item = Scheduleitem(
             video=video,

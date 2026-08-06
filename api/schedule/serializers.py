@@ -60,15 +60,14 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
 
             start = data.get("starttime", g("starttime"))
             end = start + data.get("duration", g("duration"))
-            sur_start, sur_end = Scheduleitem.objects.expand_to_surrounding(start, end)
-            items = (
-                Scheduleitem.objects.exclude(pk=g("id"))
-                .filter(starttime__gte=sur_start, starttime__lte=sur_end)
+            conflict = (
+                Scheduleitem.objects.overlapping(start, end)
+                .exclude(pk=g("id"))
                 .order_by("starttime")
+                .first()
             )
-            for entry in items:
-                if entry.starttime < end and start < entry.endtime():
-                    raise serializers.ValidationError({"duration": f"Conflict with '{entry}'."})
+            if conflict:
+                raise serializers.ValidationError({"duration": f"Conflict with '{conflict}'."})
         return data
 
 
