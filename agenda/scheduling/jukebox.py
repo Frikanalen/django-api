@@ -9,12 +9,18 @@ programming that is already scheduled.
 
 import datetime
 import logging
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 
 from django.utils import timezone
 
 from fk.models import Scheduleitem, Video
 
 logger = logging.getLogger(__name__)
+
+# The smallest gap the jukebox will try to fill. The boundary is
+# exclusive: a gap of exactly this length is left empty.
+MINIMUM_GAP = datetime.timedelta(seconds=300)
 
 
 def fill_agenda_with_jukebox(start=None, days=1):
@@ -44,13 +50,75 @@ def fill_agenda_with_jukebox(start=None, days=1):
     return jukebox_choices
 
 
-def ceil_minute(dt):
+def next_whole_minute(dt):
+    """The whole minute strictly after `dt` -- even if `dt` is one already.
+
+    Deliberately not a true ceiling: filling starts on the minute *after*
+    the window opens, and the tests pin that a 12:00:00 start places its
+    first item at 12:01.
+    """
     return floor_minute(dt) + datetime.timedelta(minutes=1)
 
 
 def floor_minute(dt):
     """Returns the datetime with seconds and microseconds cleared"""
     return dt.replace(second=0, microsecond=0)
+
+
+@dataclass(frozen=True)
+class Gap:
+    """A free, minute-aligned stretch of airtime."""
+
+    start: datetime.datetime
+    end: datetime.datetime
+
+    @property
+    def duration(self) -> datetime.timedelta:
+        return self.end - self.start
+
+
+def free_gaps(
+    start: datetime.datetime,
+    end: datetime.datetime,
+    occupied: Iterable[tuple[datetime.datetime, datetime.datetime]],
+) -> Iterator[Gap]:
+    """Yield the usable free intervals inside [start, end].
+
+    `occupied` is (starttime, endtime) pairs of airtime already spoken
+    for, sorted by starttime. Every boundary is a whole-minute rule:
+    filling starts on the whole minute after `start`, a gap ends on the
+    last whole minute before an occupied stretch and resumes on the whole
+    minute after it, and a gap of exactly MINIMUM_GAP is too short to use.
+    """
+    start_of_gap = next_whole_minute(start)
+    end = floor_minute(end)
+    pending = list(occupied)
+
+    while True:
+        end_of_gap = end
+        resume_at = None
+        while pending:
+            occupied_start, occupied_end = pending.pop(0)
+            # Already behind us; an item ending exactly at start_of_gap
+            # still bounds the (then empty) gap, so the comparison is strict.
+            if occupied_end < start_of_gap:
+                continue
+            if occupied_start > end:
+                # Beyond the window, as is everything after it.
+                break
+            end_of_gap = floor_minute(occupied_start)
+            resume_at = next_whole_minute(occupied_end)
+            break
+
+        gap = Gap(start_of_gap, end_of_gap)
+        if gap.duration > MINIMUM_GAP:
+            yield gap
+        else:
+            logger.info("Not filling %d second gap", gap.duration.total_seconds())
+
+        if resume_at is None or end_of_gap >= end:
+            return
+        start_of_gap = resume_at
 
 
 def items_for_gap(start, end, candidates):
@@ -60,58 +128,22 @@ def items_for_gap(start, end, candidates):
     stretch already occupied by an existing Scheduleitem.
     """
     logger.info("Being asked to fill gap from %s to %s", start, end)
-    # The smallest gap this function will try to fill
-    MINIMUM_GAP_SECONDS = 300
 
-    # Get a list of previously scheduled videos
+    # Include the surrounding items, so that programming which starts
+    # before the window but overruns into it still counts as occupied.
     startdt, enddt = Scheduleitem.objects.expand_to_surrounding(start, end)
-    already_scheduled = list(
-        Scheduleitem.objects.filter(starttime__gte=startdt, starttime__lte=enddt).order_by(
-            "starttime"
-        )
-    )
-
-    start_of_gap = ceil_minute(start)
-    end = floor_minute(end)
+    occupied = [
+        (item.starttime, item.endtime())
+        for item in Scheduleitem.objects.filter(
+            starttime__gte=startdt, starttime__lte=enddt
+        ).order_by("starttime")
+    ]
 
     pool = None
     full_items = []
-    while True:
-        end_of_gap = end
-
-        # Get the first video already existing in schedule
-        # that falls within the current time range
-        if len(already_scheduled):
-            extant_video = already_scheduled.pop(0)
-
-            # Keep trying until we find one that ends
-            # inside the range we are working with
-            if extant_video.endtime() < start_of_gap:
-                continue
-
-            # If it doesn't begin until after the
-            # end of our window, the window is
-            # empty; otherwise this video is now
-            # the end of our gap
-            if extant_video.starttime > end:
-                extant_video = None
-            else:
-                end_of_gap = floor_minute(extant_video.starttime)
-
-        gap = (end_of_gap - start_of_gap).total_seconds()
-
-        if gap > MINIMUM_GAP_SECONDS:
-            (items, pool) = _fill_time_with_jukebox(
-                start_of_gap, end_of_gap, candidates, current_pool=pool
-            )
-            full_items.extend(items)
-        else:
-            logger.info("Not filling %d second gap", gap)
-
-        if end_of_gap >= end:
-            break
-
-        start_of_gap = ceil_minute(extant_video.endtime())
+    for gap in free_gaps(start, end, occupied):
+        (items, pool) = _fill_time_with_jukebox(gap.start, gap.end, candidates, current_pool=pool)
+        full_items.extend(items)
     return full_items
 
 
@@ -160,6 +192,6 @@ def _fill_time_with_jukebox(start, end, videos, current_pool=None):
         rejected_videos.extend(new_rejects)
         new_items.append({"id": video.id, "starttime": current_time, "video": video})
         logger.info("Added video %s at curr time %s", video.id, current_time.strftime("%H:%M:%S"))
-        current_time = ceil_minute(current_time + video.duration)
+        current_time = next_whole_minute(current_time + video.duration)
 
     return new_items, rejected_videos + video_pool

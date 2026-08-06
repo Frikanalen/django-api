@@ -189,7 +189,7 @@ def test_saved_items_carry_the_start_and_duration_that_were_planned(filler_video
 
 
 def test_filling_starts_on_the_minute_after_an_off_minute_start(filler_video: Video) -> None:
-    """`ceil_minute`, not `floor_minute`: a start mid-minute rounds forward."""
+    """`next_whole_minute`, not `floor_minute`: a start mid-minute rounds forward."""
     planned = jukebox.fill_agenda_with_jukebox(START_DATE + datetime.timedelta(seconds=37), days=1)
 
     assert planned[0]["starttime"] == START_DATE + datetime.timedelta(minutes=1)
