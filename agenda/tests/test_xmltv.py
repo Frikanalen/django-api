@@ -47,6 +47,19 @@ def schedule(video: Video | None, starttime: datetime, **fields) -> Scheduleitem
     )
 
 
+def child(element: ElementTree.Element, path: str) -> ElementTree.Element:
+    """The named child, which the caller expects to be present.
+
+    find() returns None for a missing child, so without this a contract
+    that has been broken surfaces as an AttributeError on the next
+    attribute access rather than as a failed lookup. Tests that assert a
+    child is *absent* call find() directly.
+    """
+    found = element.find(path)
+    assert found is not None, f"no <{path}> in <{element.tag}>"
+    return found
+
+
 def fetch_feed(url: str) -> ElementTree.Element:
     response = Client().get(url)
     assert response.status_code == 200
@@ -68,10 +81,10 @@ def test_daily_feed_document_structure(video: Video) -> None:
     assert doc.tag == "tv"
     assert doc.attrib == {"generator-info-name": "fkweb.agenda.xmltv"}
 
-    channel = doc.find("channel")
+    channel = child(doc, "channel")
     assert channel.attrib == {"id": "frikanalen.tv"}
     assert [name.text for name in channel.findall("display-name")] == ["Frikanalen"]
-    assert channel.find("url").text == "https://frikanalen.no"
+    assert child(channel, "url").text == "https://frikanalen.no"
 
     with_video, without_video = doc.findall("programme")
 
@@ -80,19 +93,19 @@ def test_daily_feed_document_structure(video: Video) -> None:
         "start": "20150101120000 +0100",
         "stop": "20150101130000 +0100",
     }
-    assert with_video.find("title").attrib == {"lang": "no"}
-    assert with_video.find("title").text == "Documentary"
-    assert with_video.find("desc").text == "About the harbour"
-    assert with_video.find("url").text == f"https://frikanalen.no/video/{video.id}/"
-    assert with_video.find("length").attrib == {"units": "seconds"}
-    assert with_video.find("length").text == "3600"
+    assert child(with_video, "title").attrib == {"lang": "no"}
+    assert child(with_video, "title").text == "Documentary"
+    assert child(with_video, "desc").text == "About the harbour"
+    assert child(with_video, "url").text == f"https://frikanalen.no/video/{video.id}/"
+    assert child(with_video, "length").attrib == {"units": "seconds"}
+    assert child(with_video, "length").text == "3600"
 
     # Items without a video fall back to default_name and carry no
     # description or URL.
     assert without_video.attrib["start"] == "20150101130000 +0100"
     assert without_video.attrib["stop"] == "20150101133000 +0100"
-    assert without_video.find("title").text == "Pause programming"
-    assert without_video.find("length").text == "1800"
+    assert child(without_video, "title").text == "Pause programming"
+    assert child(without_video, "length").text == "1800"
     assert without_video.find("desc") is None
     assert without_video.find("url") is None
 
@@ -121,7 +134,7 @@ def test_missing_video_header_renders_as_the_string_none(video: Video) -> None:
 
     doc = fetch_feed(reverse("xmltv-feed", args=("2015", "01", "01")))
 
-    assert doc.find("programme").find("desc").text == "None"
+    assert child(child(doc, "programme"), "desc").text == "None"
 
 
 def test_upcoming_feed_spans_seven_days_from_today(video: Video) -> None:
@@ -144,7 +157,7 @@ def test_upcoming_feed_spans_seven_days_from_today(video: Video) -> None:
 
     doc = fetch_feed(reverse("xmltv-feed-upcoming"))
 
-    urls = [programme.find("url").text for programme in doc.findall("programme")]
+    urls = [child(programme, "url").text for programme in doc.findall("programme")]
     assert len(urls) == len(included)
 
 

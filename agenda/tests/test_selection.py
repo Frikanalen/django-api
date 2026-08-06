@@ -47,14 +47,19 @@ def minutes(n: float) -> datetime.timedelta:
     return datetime.timedelta(minutes=n)
 
 
+# Freshness scores a video on its age alone. The context is part of the
+# rule protocol but goes unread, so these tests all share one empty.
+NO_CONTEXT = ScheduleContext()
+
+
 # --- Freshness --------------------------------------------------------------
 
 
 def test_a_newer_upload_outweighs_an_older_one() -> None:
     rule = Freshness(now=NOW)
 
-    fresh = rule.weight(video(1, uploaded_days_ago=7), None)
-    stale = rule.weight(video(2, uploaded_days_ago=3000), None)
+    fresh = rule.weight(video(1, uploaded_days_ago=7), NO_CONTEXT)
+    stale = rule.weight(video(2, uploaded_days_ago=3000), NO_CONTEXT)
 
     assert fresh > stale
 
@@ -62,23 +67,23 @@ def test_a_newer_upload_outweighs_an_older_one() -> None:
 def test_freshness_halves_per_half_life() -> None:
     rule = Freshness(now=NOW, half_life=datetime.timedelta(days=100), floor=0.0)
 
-    assert rule.weight(video(1, uploaded_days_ago=0), None) == 1.0
-    assert rule.weight(video(1, uploaded_days_ago=100), None) == 0.5
-    assert rule.weight(video(1, uploaded_days_ago=200), None) == 0.25
+    assert rule.weight(video(1, uploaded_days_ago=0), NO_CONTEXT) == 1.0
+    assert rule.weight(video(1, uploaded_days_ago=100), NO_CONTEXT) == 0.5
+    assert rule.weight(video(1, uploaded_days_ago=200), NO_CONTEXT) == 0.25
 
 
 def test_ancient_and_undated_material_keeps_the_floor_weight() -> None:
     """Old videos are downweighted, never frozen out."""
     rule = Freshness(now=NOW, floor=0.2)
 
-    assert rule.weight(video(1, uploaded_days_ago=100_000), None) > 0.2 * 0.999
-    assert rule.weight(video(1, uploaded_days_ago=None), None) == 0.2
+    assert rule.weight(video(1, uploaded_days_ago=100_000), NO_CONTEXT) > 0.2 * 0.999
+    assert rule.weight(video(1, uploaded_days_ago=None), NO_CONTEXT) == 0.2
 
 
 def test_an_upload_dated_in_the_future_counts_as_brand_new() -> None:
     rule = Freshness(now=NOW)
 
-    assert rule.weight(video(1, uploaded_days_ago=-1), None) == 1.0
+    assert rule.weight(video(1, uploaded_days_ago=-1), NO_CONTEXT) == 1.0
 
 
 # --- OrganizationDiversity --------------------------------------------------
