@@ -77,4 +77,3 @@ class ScheduleitemQuerySet(models.QuerySet):
         return self.annotate(
             _endtime=ExpressionWrapper(F("starttime") + F("duration"), output_field=DateTimeField())
         ).filter(starttime__lt=end_dt, _endtime__gt=start_dt)
-

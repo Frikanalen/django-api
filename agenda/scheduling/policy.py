@@ -14,12 +14,19 @@ the whole policy and fits in three sentences for members:
 
 So at any moment the current and next broadcast weeks are frozen, the
 week after next is open, and later weeks are not yet drafted.
+
+Besides the clock boundaries, this module also owns the displacement
+rule -- what may be scheduled over: automatic jukebox filler gives way,
+deliberate programming never does. The weekly-slot filler and the
+schedule API both apply it from here.
 """
 
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from django.utils import timezone
+
+from fk.models import Scheduleitem
 
 FROZEN_WEEKS = 2  # the current week and the next
 DRAFTED_WEEKS = 3  # ...plus the open week the nightly jobs keep filled
@@ -70,3 +77,43 @@ def _local_midnight(day: date) -> datetime:
     # Built from the wall-clock date and only then localized, so a week
     # containing a DST transition still ends on a true local midnight.
     return datetime.combine(day, time.min, tzinfo=TZ)
+
+
+def is_displaceable(item) -> bool:
+    """Whether a placement may be scheduled over `item`.
+
+    Only automatic jukebox filler gives way; deliberate programming --
+    slot placements, member picks, admin entries -- never does.
+    """
+    return item.schedulereason == Scheduleitem.REASON_JUKEBOX
+
+
+def airtime_conflicts(
+    start: datetime,
+    end: datetime,
+    exclude_pk: int | None = None,
+    for_update: bool = False,
+) -> tuple[list, list]:
+    """What stands in the way of placing something on [start, end).
+
+    Returns (blocking, displaceable), each ordered by starttime: items
+    that refuse the placement, and jukebox fillers that give way to it.
+    `for_update` locks the conflict rows for the enclosing transaction,
+    so concurrent displacements of the same fillers serialize.
+    """
+    conflicts = Scheduleitem.objects.overlapping(start, end).order_by("starttime")
+    if exclude_pk is not None:
+        conflicts = conflicts.exclude(pk=exclude_pk)
+    if for_update:
+        conflicts = conflicts.select_for_update()
+    items = list(conflicts)
+    blocking = [item for item in items if not is_displaceable(item)]
+    displaceable = [item for item in items if is_displaceable(item)]
+    return blocking, displaceable
+
+
+def displace(fillers: list) -> None:
+    """Delete jukebox fillers that a placement is scheduling over. The
+    nightly jukebox repacks whatever slivers this leaves behind."""
+    if fillers:
+        Scheduleitem.objects.filter(pk__in=[item.pk for item in fillers]).delete()

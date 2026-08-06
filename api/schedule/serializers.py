@@ -66,20 +66,12 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
 
             start = data.get("starttime", g("starttime"))
             end = start + data.get("duration", g("duration"))
-            conflicts = list(
-                Scheduleitem.objects.overlapping(start, end)
-                .exclude(pk=g("id"))
-                .order_by("starttime")
-            )
-            blocking = [
-                item for item in conflicts if item.schedulereason != Scheduleitem.REASON_JUKEBOX
-            ]
+            # Jukebox fillers do not block a pick, so only blocking
+            # conflicts refuse here. This early check is for the 400;
+            # save re-checks under lock before displacing.
+            blocking, _ = policy.airtime_conflicts(start, end, exclude_pk=g("id"))
             if blocking:
                 raise serializers.ValidationError({"duration": f"Conflict with '{blocking[0]}'."})
-            # Jukebox fillers do not block a pick: they are displaced
-            # when this saves, and the nightly jukebox repacks whatever
-            # slivers the displacement leaves behind.
-            self._displaced_fillers = conflicts
         return data
 
     def _enforce_freeze(self, data):
@@ -101,18 +93,40 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         with transaction.atomic():
-            self._displace_fillers()
+            self._claim_airtime(validated_data, instance=None)
             return super().create(validated_data)
 
     def update(self, instance, validated_data):
         with transaction.atomic():
-            self._displace_fillers()
+            self._claim_airtime(validated_data, instance)
             return super().update(instance, validated_data)
 
-    def _displace_fillers(self):
-        displaced = getattr(self, "_displaced_fillers", None)
-        if displaced:
-            Scheduleitem.objects.filter(pk__in=[item.pk for item in displaced]).delete()
+    def _claim_airtime(self, validated_data, instance):
+        """Check-and-displace at save time, under row locks.
+
+        validate() already answered once, but without a database
+        exclusion constraint (blocked on historical overlapping rows) a
+        concurrent write between validation and save is the one overlap
+        source the application can still narrow: locking the conflict
+        rows serializes concurrent displacements of the same fillers,
+        and a blocking item that appeared since validation refuses here
+        instead of being scheduled over.
+        """
+
+        def current(field):
+            return validated_data.get(field, instance and getattr(instance, field))
+
+        start, duration = current("starttime"), current("duration")
+        if start is None or duration is None:
+            # A partial update that leaves the airtime untouched cannot
+            # create a new conflict.
+            return
+        blocking, displaceable = policy.airtime_conflicts(
+            start, start + duration, exclude_pk=instance and instance.pk, for_update=True
+        )
+        if blocking:
+            raise serializers.ValidationError({"duration": f"Conflict with '{blocking[0]}'."})
+        policy.displace(displaceable)
 
 
 class ScheduleitemReadSerializer(serializers.ModelSerializer):
@@ -135,7 +149,7 @@ class ScheduleitemReadSerializer(serializers.ModelSerializer):
         )
     )
     def get_displaceable(self, item) -> bool:
-        return item.schedulereason == Scheduleitem.REASON_JUKEBOX
+        return policy.is_displaceable(item)
 
 
 class SchedulingPolicySerializer(serializers.Serializer):

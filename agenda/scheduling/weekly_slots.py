@@ -13,9 +13,15 @@ the jukebox got to first.
 import logging
 from datetime import timedelta
 
+from django.db import transaction
 from django.utils import timezone
 
-from agenda.scheduling.policy import freeze_boundary, scheduling_horizon
+from agenda.scheduling.policy import (
+    airtime_conflicts,
+    displace,
+    freeze_boundary,
+    scheduling_horizon,
+)
 from fk.models import Scheduleitem, WeeklySlot
 
 logger = logging.getLogger(__name__)
@@ -61,24 +67,23 @@ def _fill_occurrence(slot, starttime, frozen_until):
         logger.info("Couldn't get a video to use in slot!")
         return
     end = starttime + slot.duration
-    conflicts = list(Scheduleitem.objects.overlapping(starttime, end))
 
-    if any(item.schedulereason != Scheduleitem.REASON_JUKEBOX for item in conflicts):
-        # Something deliberate is on the air across this slot. Note this
-        # includes an item that started *before* the slot and runs into it.
-        logger.info("Already something scheduled across %s; skipping slot", starttime)
-        return
-    if conflicts:
-        if starttime < frozen_until:
+    with transaction.atomic():
+        blocking, displaceable = airtime_conflicts(starttime, end, for_update=True)
+        if blocking:
+            # Something deliberate is on the air across this slot. Note this
+            # includes an item that started *before* the slot and runs into it.
+            logger.info("Already something scheduled across %s; skipping slot", starttime)
+            return
+        if displaceable and starttime < frozen_until:
             # Frozen weeks change as little as possible: only genuinely
             # empty airtime may still be filled.
             logger.info("Not displacing jukebox fillers at %s inside the frozen weeks", starttime)
             return
-        Scheduleitem.objects.filter(pk__in=[item.pk for item in conflicts]).delete()
-
-    Scheduleitem.objects.create(
-        video=video,
-        schedulereason=Scheduleitem.REASON_AUTO,
-        starttime=starttime,
-        duration=video.duration,
-    )
+        displace(displaceable)
+        Scheduleitem.objects.create(
+            video=video,
+            schedulereason=Scheduleitem.REASON_AUTO,
+            starttime=starttime,
+            duration=video.duration,
+        )
