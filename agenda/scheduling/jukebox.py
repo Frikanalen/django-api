@@ -9,7 +9,8 @@ programming that is already scheduled.
 
 import datetime
 import logging
-from collections.abc import Iterable, Iterator
+import random
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 
 from django.utils import timezone
@@ -23,18 +24,19 @@ logger = logging.getLogger(__name__)
 MINIMUM_GAP = datetime.timedelta(seconds=300)
 
 
-def fill_agenda_with_jukebox(start=None, days=1):
+def fill_agenda_with_jukebox(start=None, days=1, rng=None):
     start = start or timezone.now()
     end = start + datetime.timedelta(days=days)
 
     # A filler must have a length that actually advances the schedule
-    # clock; `_fill_time_with_jukebox` would otherwise place a zero-length
-    # video once a minute for the whole window.  Video.duration defaults
-    # to zero, so this is ordinary unimported data, not corruption --
-    # negative lengths are barred by a check constraint on the model.
-    # Kept out of Video.objects.fillers() on purpose: that queryset also
-    # feeds the jukebox CSV, whose output is a frozen contract.
-    candidates = Video.objects.fillers().exclude(duration__lte=datetime.timedelta(0)).order_by("?")
+    # clock; the planner would otherwise place a zero-length video once
+    # a minute for the whole window.  Video.duration defaults to zero,
+    # so this is ordinary unimported data, not corruption -- negative
+    # lengths are barred by a check constraint on the model.  Kept out
+    # of Video.objects.fillers() on purpose: that queryset also feeds
+    # the jukebox CSV, whose output is a frozen contract.
+    candidates = list(Video.objects.fillers().exclude(duration__lte=datetime.timedelta(0)))
+    (rng or random).shuffle(candidates)
 
     placements = items_for_gap(start, end, candidates)
     for placement in placements:
@@ -146,59 +148,68 @@ def items_for_gap(start, end, candidates):
         ).order_by("starttime")
     ]
 
-    pool = None
-    full_items = []
+    selector = RoundRobinSelector(candidates)
+    placements = []
     for gap in free_gaps(start, end, occupied):
-        (items, pool) = _fill_time_with_jukebox(gap.start, gap.end, candidates, current_pool=pool)
-        full_items.extend(items)
-    return full_items
+        placements.extend(_fill_gap(gap, selector))
+    return placements
 
 
-def _fill_time_with_jukebox(start, end, videos, current_pool=None):
-    current_time = start
-    video_pool = current_pool or list(videos)
-    logger.info("Filling jukebox from %s to %s - %d in pool", start, end, len(video_pool))
-    rejected_videos = []
-    new_items = []
-
-    def plist(video_list):
-        return "[" + " ".join(str(v.id) for v in video_list) + "]"
-
-    def next_vid(first=False):
-        logger.debug("next vid %s rej %s pool %s", first, plist(rejected_videos), plist(video_pool))
-        if len(video_pool) < len(videos) and first:
-            video_pool.extend(list(videos))
-        if len(rejected_videos):
-            return rejected_videos.pop(0)
-        if not len(video_pool):
-            return None
-        return video_pool.pop(0)
-
-    while current_time < end:
-        video = next_vid(True)
-        if not video:
-            # Nothing eligible to draw from; leave the rest of the gap empty
-            # rather than dereferencing None below.
+def _fill_gap(gap: Gap, selector: "RoundRobinSelector") -> list[Placement]:
+    """Pack fillers into one gap, advancing minute-aligned after each."""
+    logger.info("Filling jukebox from %s to %s", gap.start, gap.end)
+    placements = []
+    current_time = gap.start
+    while current_time < gap.end:
+        video = selector.pick(gap.end - current_time)
+        if video is None:
+            # Nothing eligible fits; leave the rest of the gap empty.
             logger.info("No videos available to fill from %s", current_time)
             break
-        new_rejects = []
-
-        while current_time + video.duration > end:
-            logger.debug("end overshoots time %s", current_time + video.duration)
-            if video not in rejected_videos and video not in new_rejects:
-                new_rejects.append(video)
-            video = next_vid()
-            logger.debug(
-                "next vid is %s rejected %s new_rej %s",
-                video,
-                plist(rejected_videos),
-                plist(new_rejects),
-            )
-            if not video:
-                return new_items, rejected_videos + video_pool
-        rejected_videos.extend(new_rejects)
-        new_items.append(Placement(video=video, starttime=current_time))
+        placements.append(Placement(video=video, starttime=current_time))
         logger.info("Added video %s at curr time %s", video.id, current_time.strftime("%H:%M:%S"))
         current_time = next_whole_minute(current_time + video.duration)
+    return placements
 
-    return new_items, rejected_videos + video_pool
+
+class RoundRobinSelector:
+    """Draws videos in the order given, cycling through the whole list.
+
+    No video is drawn again until the rest of the list has had its turn.
+    A video too long for the remaining time keeps its place in line and
+    is retried first at the next pick; the caller supplies the order
+    (shuffled in production, fixed in tests).
+    """
+
+    def __init__(self, candidates: Sequence[Video]):
+        self._candidates = list(candidates)
+        self._pool = list(self._candidates)
+        self._deferred = []
+
+    def pick(self, remaining: datetime.timedelta) -> Video | None:
+        """The next video no longer than `remaining`, or None if none fit."""
+        # Top up before the first draw, so that the pool running dry
+        # mid-pick (everything left too long) ends this pick instead of
+        # retrying the same videos forever.
+        if len(self._pool) < len(self._candidates):
+            self._pool.extend(self._candidates)
+        skipped = []
+        while True:
+            video = self._draw()
+            if video is None:
+                # The too-long videos stay skipped rather than rejoining
+                # the deferred queue: they must not jump the line at a
+                # pick they already failed.
+                return None
+            if video.duration <= remaining:
+                self._deferred.extend(skipped)
+                return video
+            if video not in self._deferred and video not in skipped:
+                skipped.append(video)
+
+    def _draw(self) -> Video | None:
+        if self._deferred:
+            return self._deferred.pop(0)
+        if self._pool:
+            return self._pool.pop(0)
+        return None
