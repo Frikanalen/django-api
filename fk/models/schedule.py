@@ -1,5 +1,7 @@
 from datetime import date, datetime, time, timedelta
 
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext as _
@@ -29,7 +31,7 @@ class Scheduleitem(models.Model):
     video = models.ForeignKey("Video", null=True, blank=True, on_delete=models.SET_NULL)
     schedulereason = models.IntegerField(blank=True, choices=SCHEDULE_REASONS)
     starttime = models.DateTimeField()
-    duration = models.DurationField()
+    duration = models.DurationField(validators=[MinValueValidator(timedelta(0))])
 
     objects = ScheduleitemQuerySet.as_manager()
 
@@ -37,6 +39,15 @@ class Scheduleitem(models.Model):
         verbose_name = "TX schedule entry"
         verbose_name_plural = "TX schedule entries"
         ordering = ("-id",)
+        constraints = [
+            # endtime() would otherwise precede starttime, which makes the
+            # item invisible to the jukebox's gap search and lets it
+            # schedule over programming that is really going out.
+            models.CheckConstraint(
+                condition=models.Q(duration__gte=timedelta(0)),
+                name="scheduleitem_duration_not_negative",
+            ),
+        ]
 
     def __str__(self):
         # %f renders microseconds as six digits; drop four to get hundredths
@@ -47,6 +58,41 @@ class Scheduleitem(models.Model):
         if not self.duration:
             return self.starttime
         return self.starttime + self.duration
+
+    def _timing_changed(self):
+        """Whether this save moves the item in time, for an item that exists."""
+        stored = Scheduleitem.objects.filter(pk=self.pk).values("starttime", "duration").first()
+        if stored is None:
+            return True
+        return stored["starttime"] != self.starttime or stored["duration"] != self.duration
+
+    def clean(self):
+        """Refuse to put two programmes on the air at once.
+
+        ModelForms call this, so it covers the admin. It deliberately does not
+        run on every save: editing an unrelated field on one of the historical
+        overlapping rows would otherwise fail on a conflict the editor neither
+        caused nor can resolve. Only a change of airtime is re-checked, which
+        is the same rule ScheduleitemModifySerializer applies.
+
+        Note this is validation, not enforcement -- save() does not call it.
+        The schedule fillers ask ScheduleitemQuerySet.overlapping() directly
+        and skip, rather than raising.
+        """
+        super().clean()
+        if self.starttime is None or not self.duration:
+            # Missing values are field-level errors, and a zero-length item
+            # occupies no airtime, so it cannot collide with anything.
+            return
+        if self.pk and not self._timing_changed():
+            return
+        conflict = (
+            Scheduleitem.objects.overlapping(self.starttime, self.endtime())
+            .exclude(pk=self.pk)
+            .first()
+        )
+        if conflict:
+            raise ValidationError({"duration": _("Conflict with '%s'.") % conflict})
 
 
 class SchedulePurpose(models.Model):
@@ -137,10 +183,17 @@ class WeeklySlot(models.Model):
         choices=DAY_OF_THE_WEEK,
     )
     start_time = models.TimeField()
-    duration = models.DurationField()
+    duration = models.DurationField(validators=[MinValueValidator(timedelta(0))])
 
     class Meta:
         ordering = ("day", "start_time", "pk")
+        constraints = [
+            # end_time would wrap backwards past start_time.
+            models.CheckConstraint(
+                condition=models.Q(duration__gte=timedelta(0)),
+                name="weeklyslot_duration_not_negative",
+            ),
+        ]
 
     @property
     def end_time(self) -> time:

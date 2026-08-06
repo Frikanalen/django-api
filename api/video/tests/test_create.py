@@ -130,3 +130,29 @@ def test_create_without_organization_fails_for_a_user_with_several(
     # Same shape as the no-organization error: the field is named in attr.
     assert [error["attr"] for error in response.json()["errors"]] == ["organization"]
     assert not Video.objects.exists()
+
+
+def test_create_rejects_a_negative_duration(
+    editor_client: APIClient,
+    organization: Organization,
+    category: Category,
+) -> None:
+    """
+    Video.duration carries a MinValueValidator, so this is a 400 rather
+    than an IntegrityError surfacing as a 500 from the check constraint.
+    """
+    response = create_video(
+        editor_client,
+        {
+            "name": "Negative duration video",
+            "duration": "-00:05:00",
+            "organization": organization.pk,
+            "categories": ["News"],
+        },
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert [(error["attr"], error["code"]) for error in response.json()["errors"]] == [
+        ("duration", "min_value")
+    ]
+    assert not Video.objects.filter(name="Negative duration video").exists()

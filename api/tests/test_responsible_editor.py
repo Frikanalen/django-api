@@ -20,6 +20,7 @@ import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from agenda.scheduling.jukebox import fill_agenda_with_jukebox
 from fk.models import (
     Category,
     Organization,
@@ -164,6 +165,34 @@ def test_videos_stop_being_offered_to_the_jukebox(lose_editor, organization, vid
     assert list(Video.objects.fillers()) == []
     body = APIClient().get(reverse("jukebox-csv")).content.decode()
     assert video.name not in body
+
+
+@pytest.mark.parametrize("lose_editor", LOSS)
+def test_videos_stop_being_scheduled_by_the_agenda_filler(lose_editor, organization, video) -> None:
+    """
+    The other consumer of `Video.objects.fillers()`: the nightly filler
+    that writes jukebox entries into the schedule.  An accountable video
+    from a second organization keeps the pool non-empty, so what is
+    asserted is the choice between the two, not merely an idle run.
+    """
+    accountable_editor = User.objects.create(email="accountable-editor@example.test")
+    accountable_org = Organization.objects.create(
+        name="Still accountable org", fkmember=True, editor=accountable_editor
+    )
+    accountable_video = Video.objects.create(
+        name="Still accountable video",
+        creator=accountable_editor,
+        organization=accountable_org,
+        duration=timedelta(minutes=30),
+        proper_import=True,
+        is_filler=True,
+        has_tono_records=False,
+    )
+
+    lose_editor(organization)
+    fill_agenda_with_jukebox(datetime(2019, 6, 30, 12, tzinfo=UTC), days=1)
+
+    assert set(Scheduleitem.objects.values_list("video_id", flat=True)) == {accountable_video.id}
 
 
 @pytest.mark.parametrize("lose_editor", LOSS)

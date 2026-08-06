@@ -9,7 +9,7 @@ import pytest
 from django.core.management import call_command
 from django.utils import timezone
 
-from agenda.views import fill_next_weeks_agenda
+from agenda.scheduling.weekly_slots import fill_next_weeks_agenda
 from fk.models import (
     Organization,
     Scheduleitem,
@@ -114,6 +114,45 @@ def test_leaves_an_already_occupied_slot_alone(video: Video, purpose: SchedulePu
     fill_next_weeks_agenda()
 
     assert list(Scheduleitem.objects.all()) == [existing]
+
+
+def test_leaves_a_slot_alone_when_an_earlier_item_overruns_into_it(
+    video: Video, purpose: SchedulePurpose
+) -> None:
+    """The case the old starttime-only check could not see.
+
+    An item that begins before the slot and runs past its start occupies the
+    airtime just as surely as one that begins inside it. Observed live: two
+    REASON_AUTO items overlapping by up to 40 seconds.
+    """
+    slot = make_slot(purpose)
+    existing = Scheduleitem.objects.create(
+        video=video,
+        schedulereason=Scheduleitem.REASON_JUKEBOX,
+        starttime=slot.next_datetime() - timedelta(minutes=5),
+        duration=timedelta(minutes=10),
+    )
+
+    fill_next_weeks_agenda()
+
+    assert list(Scheduleitem.objects.all()) == [existing]
+
+
+def test_fills_a_slot_that_an_earlier_item_stops_short_of(
+    video: Video, purpose: SchedulePurpose
+) -> None:
+    """Back-to-back is not a conflict: the bounds are half-open."""
+    slot = make_slot(purpose)
+    Scheduleitem.objects.create(
+        video=video,
+        schedulereason=Scheduleitem.REASON_JUKEBOX,
+        starttime=slot.next_datetime() - timedelta(minutes=10),
+        duration=timedelta(minutes=10),
+    )
+
+    fill_next_weeks_agenda()
+
+    assert Scheduleitem.objects.filter(schedulereason=Scheduleitem.REASON_AUTO).count() == 1
 
 
 def test_management_command_runs_the_filler(video: Video, purpose: SchedulePurpose) -> None:

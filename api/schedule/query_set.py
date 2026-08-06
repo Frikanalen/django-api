@@ -2,7 +2,7 @@ from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from django.db import models
-from django.db.models import Q, Subquery
+from django.db.models import DateTimeField, ExpressionWrapper, F, Q, Subquery
 
 
 class ScheduleitemQuerySet(models.QuerySet):
@@ -60,6 +60,23 @@ class ScheduleitemQuerySet(models.QuerySet):
         return self.filter(
             main_filter | Q(pk__in=Subquery(previous_pk)) | Q(pk__in=Subquery(next_pk))
         ).order_by("starttime")
+
+    def overlapping(self, start_dt: datetime, end_dt: datetime) -> models.QuerySet:
+        """
+        Items whose airtime intersects [start_dt, end_dt).
+
+        This is the one definition of "that airtime is already taken". The
+        bounds are half-open, so an item ending exactly at `start_dt` does not
+        count -- back-to-back programming is not a conflict.
+
+        The annotation is `_endtime` rather than `endtime` on purpose: the
+        model has an `endtime()` *method*, and an annotation of that name
+        would shadow it on every returned instance, turning `item.endtime()`
+        into a TypeError far away from here.
+        """
+        return self.annotate(
+            _endtime=ExpressionWrapper(F("starttime") + F("duration"), output_field=DateTimeField())
+        ).filter(starttime__lt=end_dt, _endtime__gt=start_dt)
 
     def expand_to_surrounding(
         self, start_dt: datetime, end_dt: datetime
