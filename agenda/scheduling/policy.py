@@ -17,16 +17,24 @@ week after next is open, and later weeks are not yet drafted.
 """
 
 from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from django.utils import timezone
 
 FROZEN_WEEKS = 2  # the current week and the next
 DRAFTED_WEEKS = 3  # ...plus the open week the nightly jobs keep filled
 
+# The policy is defined in this zone, not the request's or the
+# process's: fkweb.middleware overrides Django's active timezone to UTC
+# for every /api/ request, so anchoring on timezone.localtime here
+# would put the API's idea of Monday midnight an hour or two off the
+# cron jobs'.
+TZ = ZoneInfo("Europe/Oslo")
+
 
 def week_start(moment: datetime) -> datetime:
-    """Monday 00:00, local time, of the broadcast week containing `moment`."""
-    local = timezone.localtime(moment)
+    """Monday 00:00, Europe/Oslo, of the broadcast week containing `moment`."""
+    local = moment.astimezone(TZ)
     monday = local.date() - timedelta(days=local.weekday())
     return _local_midnight(monday)
 
@@ -48,12 +56,12 @@ def is_frozen(starttime: datetime, now: datetime | None = None) -> bool:
 def freeze_message(boundary: datetime | None = None) -> str:
     """The refusal members see, stating when the open week starts."""
     boundary = boundary or freeze_boundary()
-    open_from = timezone.localtime(boundary).date().isoformat()
+    open_from = boundary.astimezone(TZ).date().isoformat()
     return f"The schedule is frozen before {open_from}; only the week starting then is open."
 
 
 def _weeks_after_week_start(now: datetime | None, weeks: int) -> datetime:
-    local = timezone.localtime(now or timezone.now())
+    local = (now or timezone.now()).astimezone(TZ)
     monday = local.date() - timedelta(days=local.weekday())
     return _local_midnight(monday + timedelta(weeks=weeks))
 
@@ -61,4 +69,4 @@ def _weeks_after_week_start(now: datetime | None, weeks: int) -> datetime:
 def _local_midnight(day: date) -> datetime:
     # Built from the wall-clock date and only then localized, so a week
     # containing a DST transition still ends on a true local midnight.
-    return timezone.make_aware(datetime.combine(day, time.min))
+    return datetime.combine(day, time.min, tzinfo=TZ)

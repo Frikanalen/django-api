@@ -10,6 +10,8 @@ edits, the agenda tests for the nightly fillers.
 import datetime
 from zoneinfo import ZoneInfo
 
+from django.utils import timezone
+
 from agenda.scheduling import policy
 
 OSLO = ZoneInfo("Europe/Oslo")
@@ -75,3 +77,15 @@ def test_boundaries_land_on_local_midnight_across_a_dst_transition() -> None:
 
 def test_the_freeze_message_names_the_open_monday() -> None:
     assert "2019-07-08" in policy.freeze_message(policy.freeze_boundary(NOW))
+
+
+def test_the_policy_ignores_the_active_django_timezone() -> None:
+    """fkweb.middleware overrides the active timezone to UTC for every
+    /api/ request. The policy is defined in Europe/Oslo regardless of
+    caller, or the API and the cron jobs would disagree about Monday
+    midnight by an hour or two."""
+    with timezone.override(datetime.UTC):
+        boundary = policy.freeze_boundary(NOW)
+
+    assert boundary == datetime.datetime(2019, 7, 8, tzinfo=OSLO)
+    assert "2019-07-08" in policy.freeze_message(boundary)
