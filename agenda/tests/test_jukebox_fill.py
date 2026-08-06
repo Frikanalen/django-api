@@ -135,7 +135,7 @@ def test_two_videos_alternate_to_fill_the_time(db) -> None:
 
     res = jukebox.items_for_gap(START_DATE, end, videos)
 
-    assert [r["id"] for r in res] == [1, 2, 1, 2]
+    assert [r.video.id for r in res] == [1, 2, 1, 2]
 
 
 def test_short_gap_before_scheduled_item_is_left_empty(filler_video: Video) -> None:
@@ -162,8 +162,8 @@ def test_short_gap_before_scheduled_item_is_left_empty(filler_video: Video) -> N
 
     res = jukebox.items_for_gap(start, end, videos)
 
-    assert [r["id"] for r in res] == [1, 3, 1, 3]
-    assert [r["starttime"] for r in res] == [
+    assert [r.video.id for r in res] == [1, 3, 1, 3]
+    assert [r.starttime for r in res] == [
         START_DATE + datetime.timedelta(minutes=m) for m in (4, 6, 7, 9)
     ]
 
@@ -185,14 +185,14 @@ def test_saved_items_carry_the_start_and_duration_that_were_planned(filler_video
         START_DATE + datetime.timedelta(minutes=1 + 61 * n) for n in range(23)
     ]
     assert {item.duration for item in items} == {filler_video.duration}
-    assert [entry["starttime"] for entry in planned] == [item.starttime for item in items]
+    assert [entry.starttime for entry in planned] == [item.starttime for item in items]
 
 
 def test_filling_starts_on_the_minute_after_an_off_minute_start(filler_video: Video) -> None:
     """`next_whole_minute`, not `floor_minute`: a start mid-minute rounds forward."""
     planned = jukebox.fill_agenda_with_jukebox(START_DATE + datetime.timedelta(seconds=37), days=1)
 
-    assert planned[0]["starttime"] == START_DATE + datetime.timedelta(minutes=1)
+    assert planned[0].starttime == START_DATE + datetime.timedelta(minutes=1)
 
 
 def test_every_filler_in_the_pool_gets_used(member_organization: Organization) -> None:

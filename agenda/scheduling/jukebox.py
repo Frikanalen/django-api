@@ -36,18 +36,17 @@ def fill_agenda_with_jukebox(start=None, days=1):
     # feeds the jukebox CSV, whose output is a frozen contract.
     candidates = Video.objects.fillers().exclude(duration__lte=datetime.timedelta(0)).order_by("?")
 
-    jukebox_choices = items_for_gap(start, end, candidates)
-    for schedobj in jukebox_choices:
-        video = schedobj["video"]
+    placements = items_for_gap(start, end, candidates)
+    for placement in placements:
         item = Scheduleitem(
-            video=video,
+            video=placement.video,
             schedulereason=Scheduleitem.REASON_JUKEBOX,
-            starttime=schedobj["starttime"],
-            duration=video.duration,
+            starttime=placement.starttime,
+            duration=placement.video.duration,
         )
         item.save()
 
-    return jukebox_choices
+    return placements
 
 
 def next_whole_minute(dt):
@@ -63,6 +62,14 @@ def next_whole_minute(dt):
 def floor_minute(dt):
     """Returns the datetime with seconds and microseconds cleared"""
     return dt.replace(second=0, microsecond=0)
+
+
+@dataclass(frozen=True)
+class Placement:
+    """One planned (not yet saved) filler: this video at this time."""
+
+    video: Video
+    starttime: datetime.datetime
 
 
 @dataclass(frozen=True)
@@ -124,8 +131,8 @@ def free_gaps(
 def items_for_gap(start, end, candidates):
     """Plan (but do not save) filler placements between `start` and `end`.
 
-    Returns a list of `{"id", "starttime", "video"}` dicts, skipping any
-    stretch already occupied by an existing Scheduleitem.
+    Returns a list of `Placement`s, skipping any stretch already occupied
+    by an existing Scheduleitem.
     """
     logger.info("Being asked to fill gap from %s to %s", start, end)
 
@@ -190,7 +197,7 @@ def _fill_time_with_jukebox(start, end, videos, current_pool=None):
             if not video:
                 return new_items, rejected_videos + video_pool
         rejected_videos.extend(new_rejects)
-        new_items.append({"id": video.id, "starttime": current_time, "video": video})
+        new_items.append(Placement(video=video, starttime=current_time))
         logger.info("Added video %s at curr time %s", video.id, current_time.strftime("%H:%M:%S"))
         current_time = next_whole_minute(current_time + video.duration)
 
