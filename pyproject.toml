@@ -59,6 +59,18 @@ xfail_strict = true
 # pool bookkeeping hangs the suite rather than failing it.  Fail instead.
 timeout = "60"
 
+[tool.mypy]
+# Without the plugin, every model field is an untyped descriptor: mypy sees
+# `starttime` as the DateTimeField object rather than a datetime, and the
+# implicit `<fk>_id` attributes Django generates do not exist at all.
+plugins = ["mypy_django_plugin.main"]
+exclude = ["typings/", "migrations/"]
+
+[tool.django-stubs]
+# Any settings module that loads the full app registry will do; the test one
+# needs no database or secrets to import.
+django_settings_module = "fkweb.settings.test"
+
 [tool.coverage.run]
 branch = true
 source = ["agenda", "api", "fk", "fkweb", "news"]
@@ -70,6 +82,7 @@ skip_covered = true
 
 [dependency-groups]
 dev = [
+    "django-stubs[compatible-mypy]>=6.0.7",
     "djangorestframework-stubs~=3.17.1",
     "mypy>=1.17.1",
     "pytest>=9.1.1",
