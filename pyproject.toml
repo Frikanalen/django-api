@@ -93,4 +93,5 @@ dev = [
     "pytest-django>=4.12.0",
     "pytest-timeout>=2.4.0",
     "ruff>=0.16.1",
+    "types-django-filter>=26.1.0.20260713",
 ]
