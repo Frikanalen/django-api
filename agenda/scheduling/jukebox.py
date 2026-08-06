@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 from django.utils import timezone
 
+from agenda.scheduling.policy import scheduling_horizon
 from agenda.scheduling.selection import ScheduleContext, WeightedSelector, default_rules
 from fk.models import Scheduleitem, Video
 
@@ -24,9 +25,15 @@ logger = logging.getLogger(__name__)
 MINIMUM_GAP = datetime.timedelta(seconds=300)
 
 
-def fill_agenda_with_jukebox(start=None, days=1, rng=None):
+def fill_agenda_with_jukebox(start=None, days=None, rng=None):
     start = start or timezone.now()
-    end = start + datetime.timedelta(days=days)
+    if days is None:
+        # The production default: draft through the end of the open
+        # broadcast week, so every week is complete before it opens for
+        # member picks (see agenda.scheduling.policy).
+        end = scheduling_horizon(now=start)
+    else:
+        end = start + datetime.timedelta(days=days)
 
     # A filler must have a length that actually advances the schedule
     # clock; the planner would otherwise place a zero-length video once

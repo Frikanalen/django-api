@@ -399,17 +399,19 @@ def test_an_organization_dominating_the_slots_gets_diluted_filler(
 # --- the entry point the cron actually calls -------------------------------
 
 
-def test_the_management_command_fills_two_days_from_now(
+def test_the_management_command_fills_through_the_open_week(
     monkeypatch: pytest.MonkeyPatch, filler_video: Video
 ) -> None:
     """
     `fill_agenda_with_jukebox` is invoked by a nightly CronJob with no
-    arguments; the command supplies days=2 and lets the view default the
-    start to the current time.
+    arguments and drafts through the scheduling horizon: START_DATE is
+    Sunday noon of the week starting Mon 06-24, so the horizon is
+    Mon 07-15 00:00 -- a 20880-minute window holding 342 hour-long
+    fillers at 61-minute spacing.
     """
     monkeypatch.setattr(jukebox.timezone, "now", lambda: START_DATE)
 
     call_command("fill_agenda_with_jukebox")
 
     starts = list(Scheduleitem.objects.order_by("starttime").values_list("starttime", flat=True))
-    assert starts == [START_DATE + datetime.timedelta(minutes=1 + 61 * n) for n in range(47)]
+    assert starts == [START_DATE + datetime.timedelta(minutes=1 + 61 * n) for n in range(342)]
