@@ -33,7 +33,7 @@ MINIMUM_GAP = datetime.timedelta(seconds=300)
 
 def fill_agenda_with_jukebox(
     start: datetime.datetime | None = None,
-    days: int | None = None,
+    days: float | None = None,
     rng: random.Random | None = None,
 ) -> list["Placement"]:
     start = start or timezone.now()
