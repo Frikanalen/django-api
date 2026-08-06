@@ -7,6 +7,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.core.validators import MinValueValidator
 from django.db import models
 
+from .category import Category
 from .organization import Organization
 
 
@@ -46,7 +47,9 @@ class Video(models.Model):
     header = models.TextField(blank=True, null=True, max_length=2048)
     name = models.CharField(max_length=255)
     description = models.CharField(blank=True, null=True, max_length=2048)
-    categories = models.ManyToManyField("Category")
+    # Quoted so the subscript is never evaluated: ManyToManyField is not
+    # subscriptable at runtime, only to django-stubs.
+    categories: "models.ManyToManyField[Category, models.Model]" = models.ManyToManyField(Category)
     creator = models.ForeignKey(get_user_model(), on_delete=models.PROTECT)
     has_tono_records = models.BooleanField(default=False)
     is_filler = models.BooleanField(
@@ -104,7 +107,12 @@ class Video(models.Model):
 
     upload_token = models.CharField(
         blank=True,
-        default=default_uuid_value.__func__,
+        # Unwrapping the staticmethod is what keeps the default a callable
+        # Django can serialize back to this same name; passing the
+        # descriptor itself makes the autodetector see a changed default
+        # and write a migration on every run. mypy reads the name in the
+        # class body as a plain function, which has no __func__.
+        default=default_uuid_value.__func__,  # type: ignore[attr-defined]
         max_length=32,
         help_text="Video upload token (used by fkupload/frontend)",
     )
@@ -169,7 +177,10 @@ class Video(models.Model):
             return "/static/default_large_thumbnail.png"
         return settings.FK_MEDIA_URLPREFIX + video_file.location(relative=True)
 
-    def ogv_url(self) -> str:
+    def ogv_url(self) -> str | None:
+        # None where the thumbnail methods fall back to a placeholder:
+        # a video with no theora file has no OGV URL to offer, and the
+        # API exposes the field as null. Pinned by test_ogv_url.
         try:
             return settings.FK_MEDIA_URLPREFIX + self.videofile_url("theora")
         except ObjectDoesNotExist:
