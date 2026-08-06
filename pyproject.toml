@@ -64,6 +64,9 @@ timeout = "60"
 # `starttime` as the DateTimeField object rather than a datetime, and the
 # implicit `<fk>_id` attributes Django generates do not exist at all.
 plugins = ["mypy_django_plugin.main"]
+# The vendored stubs; without this on the path they are dead weight and
+# `import environ` reports missing stubs.
+mypy_path = "typings"
 exclude = ["typings/", "migrations/"]
 
 [tool.django-stubs]
