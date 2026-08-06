@@ -17,7 +17,8 @@ touched.
 """
 
 import logging
-from datetime import timedelta
+from collections.abc import Iterator
+from datetime import datetime, timedelta
 
 from django.db import transaction
 from django.utils import timezone
@@ -28,12 +29,12 @@ from agenda.scheduling.policy import (
     freeze_boundary,
     scheduling_horizon,
 )
-from fk.models import Scheduleitem, WeeklySlot
+from fk.models import Scheduleitem, SchedulePurpose, Video, WeeklySlot
 
 logger = logging.getLogger(__name__)
 
 
-def fill_next_weeks_agenda(now=None):
+def fill_next_weeks_agenda(now: datetime | None = None) -> None:
     now = now or timezone.now()
     horizon = scheduling_horizon(now)
     frozen_until = freeze_boundary(now)
@@ -44,14 +45,15 @@ def fill_next_weeks_agenda(now=None):
         return
 
     for slot in slots:
-        if not slot.purpose:
+        purpose = slot.purpose
+        if purpose is None:
             logger.info("No purpose connected, so nothing to fill")
             continue
         for starttime in _occurrences(slot, now, horizon):
-            _fill_occurrence(slot, starttime, frozen_until)
+            _fill_occurrence(slot, purpose, starttime, frozen_until)
 
 
-def _occurrences(slot, now, horizon):
+def _occurrences(slot: WeeklySlot, now: datetime, horizon: datetime) -> Iterator[datetime]:
     """Every time `slot` comes up between `now` and `horizon`."""
     day = slot.next_date(timezone.localtime(now).date())
     if slot.next_datetime(from_date=day) <= now:
@@ -65,10 +67,15 @@ def _occurrences(slot, now, horizon):
         day += timedelta(days=7)
 
 
-def _fill_occurrence(slot, starttime, frozen_until):
+def _fill_occurrence(
+    slot: WeeklySlot,
+    purpose: SchedulePurpose,
+    starttime: datetime,
+    frozen_until: datetime,
+) -> None:
     # Chosen per occurrence, so the least_scheduled strategy sees each
     # placement it just made.
-    video = slot.purpose.single_video(slot.duration)
+    video = purpose.single_video(slot.duration)
     if not video:
         logger.info("Couldn't get a video to use in slot!")
         return
@@ -95,7 +102,7 @@ def _fill_occurrence(slot, starttime, frozen_until):
                 logger.info("Not touching the frozen weeks at %s", starttime)
                 return
         elif own:
-            _refresh_own_placement(slot, own[0], video, displaceable)
+            _refresh_own_placement(slot, purpose, own[0], video, displaceable)
             return
 
         displace(displaceable)
@@ -108,12 +115,18 @@ def _fill_occurrence(slot, starttime, frozen_until):
         )
 
 
-def _refresh_own_placement(slot, placement, video, displaceable):
+def _refresh_own_placement(
+    slot: WeeklySlot,
+    purpose: SchedulePurpose,
+    placement: Scheduleitem,
+    video: Video,
+    displaceable: list[Scheduleitem],
+) -> None:
     """Re-pick an unfrozen draft placement its purpose no longer stands
     by: a newer upload under `latest`, or a drafted video that has
     become ineligible. The open week is a draft, but a standing pick is
     left alone -- no churn night to night."""
-    if slot.purpose.still_current(placement.video, slot.duration):
+    if purpose.still_current(placement.video, slot.duration):
         return
     logger.info(
         "Re-picking slot placement at %s: %s replaces %s",

@@ -16,10 +16,27 @@ import logging
 import random
 from collections import Counter, defaultdict
 from collections.abc import Sequence
+from typing import Protocol
 
 from fk.models import Scheduleitem, Video
 
 logger = logging.getLogger(__name__)
+
+
+class Rule(Protocol):
+    """A scoring rule: a non-negative multiplier on a candidate's weight."""
+
+    def weight(self, video: Video, context: "ScheduleContext") -> float: ...
+
+
+class Selector(Protocol):
+    """What the jukebox planner asks for the next filler.
+
+    Both selectors here satisfy it: the weighted draw below and
+    :class:`agenda.scheduling.jukebox.RoundRobinSelector`.
+    """
+
+    def pick(self, remaining: datetime.timedelta) -> Video | None: ...
 
 
 class ScheduleContext:
@@ -30,14 +47,14 @@ class ScheduleContext:
     downplay an organization the slots already favor.
     """
 
-    def __init__(self):
-        self.org_airtime = defaultdict(datetime.timedelta)
+    def __init__(self) -> None:
+        self.org_airtime: defaultdict[int, datetime.timedelta] = defaultdict(datetime.timedelta)
         self.total_airtime = datetime.timedelta(0)
-        self.times_played = Counter()
-        self.last_video_id = None
+        self.times_played: Counter[int] = Counter()
+        self.last_video_id: int | None = None
 
     @classmethod
-    def from_schedule(cls, start: datetime.datetime, end: datetime.datetime):
+    def from_schedule(cls, start: datetime.datetime, end: datetime.datetime) -> "ScheduleContext":
         context = cls()
         for item in Scheduleitem.objects.overlapping(start, end).select_related("video"):
             context._count(item.video, item.duration)
@@ -78,7 +95,7 @@ class Freshness:
         now: datetime.datetime,
         half_life: datetime.timedelta = datetime.timedelta(days=365),
         floor: float = 0.2,
-    ):
+    ) -> None:
         self.now = now
         self.half_life = half_life
         self.floor = floor
@@ -103,7 +120,7 @@ class OrganizationDiversity:
     RepeatAvoidance via the selector's uniform fallback.
     """
 
-    def __init__(self, strength: float = 1.0, floor: float = 0.05):
+    def __init__(self, strength: float = 1.0, floor: float = 0.05) -> None:
         self.strength = strength
         self.floor = floor
 
@@ -116,7 +133,7 @@ class RepeatAvoidance:
     """Never the same video twice in a row; beyond that, each earlier
     play in the window halves the weight."""
 
-    def __init__(self, penalty: float = 0.5):
+    def __init__(self, penalty: float = 0.5) -> None:
         self.penalty = penalty
 
     def weight(self, video: Video, context: ScheduleContext) -> float:
@@ -125,7 +142,7 @@ class RepeatAvoidance:
         return self.penalty ** context.times_played[video.id]
 
 
-def default_rules(now: datetime.datetime) -> list:
+def default_rules(now: datetime.datetime) -> list[Rule]:
     return [Freshness(now=now), OrganizationDiversity(), RepeatAvoidance()]
 
 
@@ -142,9 +159,9 @@ class WeightedSelector:
         self,
         candidates: Sequence[Video],
         context: ScheduleContext,
-        rules: Sequence,
+        rules: Sequence[Rule],
         rng: random.Random | None = None,
-    ):
+    ) -> None:
         # A non-positive duration cannot advance the schedule clock, so
         # it would be drawn once a minute for the whole window.
         self._candidates = [v for v in candidates if v.duration > datetime.timedelta(0)]
@@ -157,9 +174,8 @@ class WeightedSelector:
         fitting = [v for v in self._candidates if v.duration <= remaining]
         if not fitting:
             return None
-        weights = [self._weight(video) for video in fitting]
-        if not any(weights):
-            weights = None  # uniform
+        scores = [self._weight(video) for video in fitting]
+        weights = scores if any(scores) else None  # None draws uniformly
         video = self._rng.choices(fitting, weights=weights, k=1)[0]
         self._context.record(video)
         return video
