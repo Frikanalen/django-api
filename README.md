@@ -102,19 +102,19 @@ uv run pytest --cov
 
 ## Management commands
 
-In addition to the HTTP API, the following commands are executed periodically as Kubernetes cron jobs in our cluster:
+In addition to the HTTP API, the following commands are executed periodically as Kubernetes cron jobs in our cluster. Together they implement the broadcast-week lifecycle defined in `agenda/scheduling/policy.py`: every week is drafted two Mondays before it airs, stays open for member organizations to replace jukebox fillers with picks of their own for one week, and is frozen from the Monday before airing.
 
 ```sh
 ./manage.py fill_next_weeks_agenda
 ```
 
-This job will fill the next week's schedule with videos as defined by the WeeklySlot model. This will generally be entries like "Fill Mondays 12-13 with the latest videos from NUUG".
+This job places videos as defined by the WeeklySlot model, for every slot occurrence up to the end of the open broadcast week. This will generally be entries like "Fill Mondays 12-13 with the latest videos from NUUG".
 
 ```sh
 ./manage.py fill_agenda_with_jukebox
 ```
 
-This job will fill the remaining unpopulated areas with videos as randomly selected from the set of all videos marked with is_filler=True.
+This job fills the remaining unpopulated airtime up to the end of the open broadcast week, drawing from the videos marked with is_filler=True by a weighted-random draw that prefers fresh uploads and organizations with little airtime that week (see `agenda/scheduling/selection.py`).
 
 ## Test data
 

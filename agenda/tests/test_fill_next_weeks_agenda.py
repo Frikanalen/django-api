@@ -199,9 +199,7 @@ def test_fills_a_slot_that_an_earlier_item_stops_short_of(
     assert OPEN_OCCURRENCE in [item.starttime for item in slot_items()]
 
 
-def test_displaces_jukebox_fillers_in_the_open_week(
-    video: Video, purpose: SchedulePurpose
-) -> None:
+def test_displaces_jukebox_fillers_in_the_open_week(video: Video, purpose: SchedulePurpose) -> None:
     """A newly defined slot must not wait for airtime the jukebox got to
     first: outside the freeze boundary its fillers are deleted."""
     make_slot(purpose)

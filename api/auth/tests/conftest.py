@@ -1,7 +1,9 @@
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from fk.models import (
@@ -14,6 +16,17 @@ from fk.models import (
     Video,
     VideoFile,
 )
+
+
+@pytest.fixture
+def now_in_the_drafting_week(monkeypatch: pytest.MonkeyPatch) -> datetime:
+    """Pin the clock so the 2015-01-01 scheduleitem fixture lands in the
+    open broadcast week (freeze boundary Mon 2014-12-29, see
+    agenda.scheduling.policy) -- the permission matrix is about *who*
+    may modify, so the freeze must not answer first."""
+    fixed_now = datetime(2014, 12, 17, 12, tzinfo=ZoneInfo("Europe/Oslo"))
+    monkeypatch.setattr(timezone, "now", lambda: fixed_now)
+    return fixed_now
 
 
 @pytest.fixture

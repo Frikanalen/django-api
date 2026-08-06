@@ -1,7 +1,9 @@
 from zoneinfo import ZoneInfo
 
+from django.db import transaction
 from rest_framework import serializers
 
+from agenda.scheduling import policy
 from fk.models import AsRun, Category, Organization, Scheduleitem, Video, VideoFile
 
 
@@ -53,6 +55,7 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
         fields = ("id", "video", "schedulereason", "starttime", "endtime", "duration")
 
     def validate(self, data):
+        self._enforce_freeze(data)
         if "starttime" in data or "duration" in data:
 
             def g(v):
@@ -60,15 +63,53 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
 
             start = data.get("starttime", g("starttime"))
             end = start + data.get("duration", g("duration"))
-            conflict = (
+            conflicts = list(
                 Scheduleitem.objects.overlapping(start, end)
                 .exclude(pk=g("id"))
                 .order_by("starttime")
-                .first()
             )
-            if conflict:
-                raise serializers.ValidationError({"duration": f"Conflict with '{conflict}'."})
+            blocking = [
+                item for item in conflicts if item.schedulereason != Scheduleitem.REASON_JUKEBOX
+            ]
+            if blocking:
+                raise serializers.ValidationError({"duration": f"Conflict with '{blocking[0]}'."})
+            # Jukebox fillers do not block a pick: they are displaced
+            # when this saves, and the nightly jukebox repacks whatever
+            # slivers the displacement leaves behind.
+            self._displaced_fillers = conflicts
         return data
+
+    def _enforce_freeze(self, data):
+        """Members may only touch items in the open broadcast week.
+
+        Both positions matter on a move: an item may neither leave nor
+        land inside the frozen weeks. Staff is exempt (the same
+        exemption IsInOrganizationOrReadOnly grants on objects).
+        """
+        request = self.context.get("request")
+        if request is None or request.user.is_staff:
+            return
+        boundary = policy.freeze_boundary()
+        current_start = self.instance.starttime if self.instance else None
+        new_start = data.get("starttime", current_start)
+        for starttime in (current_start, new_start):
+            if starttime is not None and starttime < boundary:
+                raise serializers.ValidationError({"starttime": policy.freeze_message(boundary)})
+
+    def create(self, validated_data):
+        with transaction.atomic():
+            self._displace_fillers()
+            return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        with transaction.atomic():
+            self._displace_fillers()
+            return super().update(instance, validated_data)
+
+    def _displace_fillers(self):
+        displaced = getattr(self, "_displaced_fillers", None)
+        if displaced:
+            Scheduleitem.objects.filter(pk__in=[item.pk for item in displaced]).delete()
 
 
 class ScheduleitemReadSerializer(serializers.ModelSerializer):

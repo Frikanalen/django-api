@@ -1,6 +1,8 @@
 from django.db.models import Prefetch
 from rest_framework import viewsets
+from rest_framework.exceptions import PermissionDenied
 
+from agenda.scheduling import policy
 from api.auth.permissions import IsInOrganizationOrReadOnly, RequireTargetOrganizationMembership
 from api.pagination import FkSchedulePagination
 from api.schedule.filters import ScheduleitemFilter
@@ -47,3 +49,10 @@ class ScheduleitemViewSet(RequireTargetOrganizationMembership, viewsets.ModelVie
         if self.action in ["create", "update", "partial_update"]:
             return ScheduleitemModifySerializer
         return ScheduleitemReadSerializer
+
+    def perform_destroy(self, instance):
+        # Create and update enforce the freeze in the serializer; delete
+        # never reaches one, so the check lives here.
+        if not self.request.user.is_staff and policy.is_frozen(instance.starttime):
+            raise PermissionDenied(policy.freeze_message())
+        instance.delete()

@@ -2,6 +2,11 @@
 # This file is covered by the LGPLv3 or later, read COPYING for details.
 """Filling the broadcast schedule.
 
+When and how far ahead any of this happens is
+:mod:`~agenda.scheduling.policy`'s single say: weeks are drafted two
+Mondays before they air, open to member picks for one week, and frozen
+from the Monday before airing.
+
 Neither half of this runs on the web request path; both are invoked from
 management commands, and thus from the nightly CronJobs, in this order:
 
