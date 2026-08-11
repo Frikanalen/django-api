@@ -38,16 +38,20 @@ OPEN_OCCURRENCE = datetime(2019, 7, 8, 12, tzinfo=OSLO)
 
 
 @pytest.fixture
-def organization() -> Organization:
-    editor = User.objects.create(email="slot-editor@example.test")
+def editor() -> User:
+    return User.objects.create(email="slot-editor@example.test")
+
+
+@pytest.fixture
+def organization(editor: User) -> Organization:
     return Organization.objects.create(name="Slot org", editor=editor)
 
 
 @pytest.fixture
-def video(organization: Organization) -> Video:
+def video(editor: User, organization: Organization) -> Video:
     return Video.objects.create(
         name="Slot video",
-        creator=organization.editor,
+        creator=editor,
         organization=organization,
         duration=timedelta(minutes=25),
         proper_import=True,
@@ -129,11 +133,11 @@ def test_skips_slots_without_a_purpose(video: Video) -> None:
 
 
 def test_skips_slots_whose_purpose_has_no_eligible_video(
-    organization: Organization, purpose: SchedulePurpose
+    editor: User, organization: Organization, purpose: SchedulePurpose
 ) -> None:
     Video.objects.create(
         name="Too long for the slot",
-        creator=organization.editor,
+        creator=editor,
         organization=organization,
         duration=timedelta(hours=2),
         proper_import=True,
@@ -238,12 +242,12 @@ def test_does_not_displace_jukebox_fillers_in_the_frozen_weeks(
 # --- provenance and the nightly re-pick -------------------------------------
 
 
-def make_upload(organization: Organization, name: str, minutes: int = 25) -> Video:
+def make_upload(editor: User, organization: Organization, name: str, minutes: int = 25) -> Video:
     """A fresh upload the `latest` strategy must prefer: the slot-video
     fixture has no uploaded_time, which `latest` sorts last."""
     return Video.objects.create(
         name=name,
-        creator=organization.editor,
+        creator=editor,
         organization=organization,
         duration=timedelta(minutes=minutes),
         proper_import=True,
@@ -260,13 +264,13 @@ def test_placements_carry_their_slot(video: Video, purpose: SchedulePurpose) -> 
 
 
 def test_a_rerun_re_picks_the_open_week_when_the_purpose_answer_changed(
-    organization: Organization, video: Video, purpose: SchedulePurpose
+    editor: User, organization: Organization, video: Video, purpose: SchedulePurpose
 ) -> None:
     """The open week is a draft: a `latest` slot drafted early swaps to
     a video uploaded afterwards. The frozen week keeps what it has."""
     make_slot(purpose)
     fill_next_weeks_agenda(now=NOW)
-    newer = make_upload(organization, "Uploaded after drafting")
+    newer = make_upload(editor, organization, "Uploaded after drafting")
 
     fill_next_weeks_agenda(now=NOW)
 
@@ -289,12 +293,12 @@ def test_a_rerun_with_an_unchanged_answer_leaves_the_placement_alone(
 
 
 def test_a_random_slot_is_not_re_rolled_night_after_night(
-    organization: Organization, video: Video
+    editor: User, organization: Organization, video: Video
 ) -> None:
     """Only `latest` chases a better answer. `random` answers
     differently every call, so 'answer changed' would churn the draft
     nightly; a standing pick only falls when it becomes ineligible."""
-    make_upload(organization, "Another candidate")
+    make_upload(editor, organization, "Another candidate")
     random_purpose = SchedulePurpose.objects.create(
         name="Random purpose",
         type=SchedulePurpose.TYPE.organization,
@@ -311,13 +315,13 @@ def test_a_random_slot_is_not_re_rolled_night_after_night(
 
 
 def test_a_drafted_video_that_became_ineligible_is_replaced(
-    organization: Organization, video: Video, purpose: SchedulePurpose
+    editor: User, organization: Organization, video: Video, purpose: SchedulePurpose
 ) -> None:
     """A pick the purpose can no longer stand by -- here the video lost
     its proper import -- gives way to a fresh choice."""
     make_slot(purpose)
     fill_next_weeks_agenda(now=NOW)
-    replacement = make_upload(organization, "Still eligible")
+    replacement = make_upload(editor, organization, "Still eligible")
     video.proper_import = False
     video.save()
 
@@ -330,7 +334,7 @@ def test_a_drafted_video_that_became_ineligible_is_replaced(
 
 
 def test_a_longer_re_pick_displaces_fillers_that_packed_in_behind_the_draft(
-    organization: Organization, video: Video, purpose: SchedulePurpose
+    editor: User, organization: Organization, video: Video, purpose: SchedulePurpose
 ) -> None:
     make_slot(purpose, duration=timedelta(hours=1))
     fill_next_weeks_agenda(now=NOW)
@@ -340,7 +344,7 @@ def test_a_longer_re_pick_displaces_fillers_that_packed_in_behind_the_draft(
         timedelta(minutes=10),
         Scheduleitem.REASON_JUKEBOX,
     )
-    longer = make_upload(organization, "Longer newer upload", minutes=55)
+    longer = make_upload(editor, organization, "Longer newer upload", minutes=55)
 
     fill_next_weeks_agenda(now=NOW)
 
@@ -393,14 +397,14 @@ def test_management_command_runs_the_filler(
 
 
 def test_jukebox_management_command_fills_to_the_horizon(
-    monkeypatch: pytest.MonkeyPatch, organization: Organization
+    monkeypatch: pytest.MonkeyPatch, editor: User, organization: Organization
 ) -> None:
     monkeypatch.setattr(timezone, "now", lambda: NOW)
     organization.fkmember = True
     organization.save()
     Video.objects.create(
         name="Jukebox filler",
-        creator=organization.editor,
+        creator=editor,
         organization=organization,
         duration=timedelta(hours=1),
         proper_import=True,
@@ -411,9 +415,11 @@ def test_jukebox_management_command_fills_to_the_horizon(
 
     items = Scheduleitem.objects.order_by("starttime")
     assert set(items.values_list("schedulereason", flat=True)) == {Scheduleitem.REASON_JUKEBOX}
+    first, last = items.first(), items.last()
+    assert first is not None and last is not None
     horizon = datetime(2019, 7, 15, tzinfo=OSLO)
-    assert items.first().starttime >= NOW
-    assert items.last().starttime < horizon
+    assert first.starttime >= NOW
+    assert last.starttime < horizon
     # The horizon week is complete: the last filler ends within the last
     # hour-and-a-rounding-minute before it.
-    assert items.last().endtime() > horizon - timedelta(minutes=62)
+    assert last.endtime() > horizon - timedelta(minutes=62)

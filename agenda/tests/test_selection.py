@@ -163,17 +163,28 @@ def selector(candidates, rules, seed=1) -> WeightedSelector:
     return WeightedSelector(candidates, ScheduleContext(), rules, rng=random.Random(seed))
 
 
+def pick_id(chooser: WeightedSelector, remaining: datetime.timedelta) -> int:
+    """The id of a draw the caller expects to succeed.
+
+    pick() returns None when nothing fits; the tests that check for that
+    call it directly.
+    """
+    video = chooser.pick(remaining)
+    assert video is not None
+    return video.id
+
+
 def test_only_videos_that_fit_are_drawn() -> None:
     chooser = selector([video(1, minutes=30), video(2, minutes=5)], rules=[])
 
-    assert chooser.pick(minutes(10)).id == 2
+    assert pick_id(chooser, minutes(10)) == 2
     assert chooser.pick(minutes(3)) is None
 
 
 def test_picks_are_recorded_so_rules_see_them() -> None:
     chooser = selector([video(1), video(2)], rules=[RepeatAvoidance()])
 
-    drawn = [chooser.pick(minutes(60)).id for _ in range(10)]
+    drawn = [pick_id(chooser, minutes(60)) for _ in range(10)]
 
     assert all(a != b for a, b in pairwise(drawn))
 
@@ -183,8 +194,8 @@ def test_a_universally_vetoed_draw_falls_back_to_uniform() -> None:
     just played, it plays again."""
     chooser = selector([video(1)], rules=[RepeatAvoidance()])
 
-    assert chooser.pick(minutes(60)).id == 1
-    assert chooser.pick(minutes(60)).id == 1
+    assert pick_id(chooser, minutes(60)) == 1
+    assert pick_id(chooser, minutes(60)) == 1
 
 
 def test_the_draw_follows_the_weights() -> None:
@@ -196,7 +207,7 @@ def test_the_draw_follows_the_weights() -> None:
 
     chooser = selector([video(1), video(2)], rules=[Favor()], seed=42)
 
-    drawn = [chooser.pick(minutes(60)).id for _ in range(200)]
+    drawn = [pick_id(chooser, minutes(60)) for _ in range(200)]
 
     assert drawn.count(1) > 150
 
