@@ -85,6 +85,7 @@ def vacate(organization: Organization) -> None:
 def disable_editor(organization: Organization) -> None:
     """The other way to end up without one: the editor's account is off."""
     editor = organization.editor
+    assert editor is not None, "fixture should have given the organization an editor"
     editor.is_active = False
     editor.save()
 

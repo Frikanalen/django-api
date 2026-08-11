@@ -26,7 +26,10 @@ OSLO = ZoneInfo("Europe/Oslo")
     ],
 )
 def test_normalize_date(value: object, expected: date | None) -> None:
-    assert Scheduleitem.objects.normalize_date(value) == expected
+    # The 42 case is deliberately outside the declared parameter type:
+    # normalize_date's final `return None` exists to absorb whatever a
+    # query parameter hands it, and this pins that it does.
+    assert Scheduleitem.objects.normalize_date(value) == expected  # type: ignore[arg-type]
 
 
 def test_by_day_without_a_start_date_anchors_on_the_current_oslo_day(
