@@ -154,8 +154,7 @@ class ManageVideoNew(AbstractVideoFormView):
     def get(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         if not request.user.is_authenticated or not request.user.is_superuser:
             return redirect(f"/login/?next={request.path}")
-        initial = {}
-        form = self.get_form(request, initial=initial, form=kwargs.get("form"))
+        form = self.get_form(request, initial={}, form=kwargs.get("form"))
         context = {"form": form, "title": _("New Video")}
         return render(request, "agenda/manage_video_new.html", context)
 
