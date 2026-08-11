@@ -190,6 +190,9 @@ class SchedulingPolicySerializer(serializers.Serializer):
 
 
 class AsRunSerializer(serializers.ModelSerializer):
+    """One entry in the playout log: a video or a named programme, and
+    when it went to air."""
+
     class Meta:
         model = AsRun
         fields = (

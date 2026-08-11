@@ -5,7 +5,6 @@ import csv
 import logging
 
 from django.http import HttpResponse
-from drf_spectacular.utils import extend_schema
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
@@ -91,28 +90,8 @@ def jukebox_csv(request):
 # the front-end.
 
 
-@extend_schema(
-    description=(
-        "AsRun model is a historic log over what was sent through playout.\n"
-        "\n"
-        "Query parameters\n"
-        "----------------\n"
-        "\n"
-        "`page_size` - How many items per page. If set to 0 it will list\n"
-        "              all items.  Default is 50 items.\n"
-        "\n"
-        "`ordering` - You can order the results by any visible field.\n"
-        "             Prepend a minus to order in descending order.  I.e.\n"
-        "             `?ordering=-played_at` to show newest items first."
-    )
-)
 class AsRunViewSet(ModelViewSet):
-    """The playout log, as served to API clients.
-
-    The published description lives on the decorator above rather than
-    in here: this docstring is for whoever reads the code, and that text
-    is for whoever reads the schema.
-    """
+    """A historic log over what was sent through playout."""
 
     queryset = AsRun.objects.all()
     serializer_class = AsRunSerializer
