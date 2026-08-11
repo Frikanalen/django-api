@@ -50,8 +50,10 @@ class VideoFile(models.Model):
     truepeak_lufs = models.FloatField(
         "True peak LUFS of file defined in ITU R.128", blank=True, null=True
     )
+    # Set by Django on every save; the nullability only ever described
+    # legacy imports, of which production had none. See migration 0020.
     created_time = models.DateTimeField(
-        auto_now_add=True, null=True, help_text="Time the video file was created"
+        auto_now_add=True, help_text="Time the video file was created"
     )
     # metadata frames, width, height, framerate? mlt profile name?
     # edl for in/out?
