@@ -68,9 +68,11 @@ class ManageVideoList(TemplateView):
         videos = Video.objects.filter(creator=request.user).order_by("name")
 
         paginator = Paginator(videos, self.VIDEOS_PER_PAGE)
-        requested_page = request.GET.get("page")
-
-        page = paginator.page(int(requested_page) if str(requested_page).isdigit() else 1)
+        # get_page() absorbs whatever the query string carries: a missing
+        # or unparseable ?page= gives the first page, one past the end
+        # gives the last. page() raises on all of those, which is a 500
+        # for a URL a user can type.
+        page = paginator.get_page(request.GET.get("page"))
         context = {"title": _("My videos"), "videos": page.object_list, "page": page}
 
         return render(
