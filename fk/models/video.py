@@ -123,7 +123,7 @@ class Video(models.Model):
     objects = VideoManager()
 
     class Meta:
-        get_latest_by = "uploaded_time"
+        get_latest_by = "created_time"
         ordering = ("-id",)
         constraints = [
             # A negative length is not a shorter programme, it is corrupt

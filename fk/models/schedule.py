@@ -182,10 +182,7 @@ class SchedulePurpose(models.Model):
         """
         qs = self.videos_queryset(max_duration)
         if self.strategy == self.STRATEGY.latest:
-            try:
-                return qs.latest()
-            except qs.model.DoesNotExist:
-                return None
+            return qs.order_by("-created_time", "-id").first()
         elif self.strategy == self.STRATEGY.random:
             # This might be slow, but hopefully few records
             return qs.order_by("?").first()

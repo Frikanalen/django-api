@@ -243,8 +243,8 @@ def test_does_not_displace_jukebox_fillers_in_the_frozen_weeks(
 
 
 def make_upload(editor: User, organization: Organization, name: str, minutes: int = 25) -> Video:
-    """A fresh upload the `latest` strategy must prefer: the slot-video
-    fixture has no uploaded_time, which `latest` sorts last."""
+    """A fresh upload the `latest` strategy must prefer: it is created
+    after the slot-video fixture, and `latest` goes by created_time."""
     return Video.objects.create(
         name=name,
         creator=editor,

@@ -76,11 +76,47 @@ def test_unhandled_type_raises(organization) -> None:
         purpose.videos_queryset()
 
 
-def test_latest_strategy_returns_the_most_recently_uploaded(organization) -> None:
-    make_video(organization, "Old upload", uploaded_time=datetime(2015, 1, 1, tzinfo=UTC))
-    newest = make_video(organization, "New upload", uploaded_time=datetime(2016, 1, 1, tzinfo=UTC))
+def created_at(video: Video, when: datetime) -> Video:
+    """Backdate a record. created_time is auto_now_add, so it can only be
+    set past the model by writing straight to the row."""
+    Video.objects.filter(pk=video.pk).update(created_time=when)
+    video.refresh_from_db()
+    return video
+
+
+def test_latest_strategy_returns_the_most_recently_created(organization) -> None:
+    created_at(make_video(organization, "Old record"), datetime(2015, 1, 1, tzinfo=UTC))
+    newest = created_at(make_video(organization, "New record"), datetime(2016, 1, 1, tzinfo=UTC))
 
     assert org_purpose(organization, "latest").single_video() == newest
+
+
+def test_latest_strategy_ignores_uploaded_time(organization) -> None:
+    """uploaded_time describes the media file and is nullable. Ordering by
+    it put rows that never carried one ahead of every real upload on
+    PostgreSQL, which sorts NULLs first descending."""
+    created_at(
+        make_video(organization, "No upload timestamp", uploaded_time=None),
+        datetime(2015, 1, 1, tzinfo=UTC),
+    )
+    newest = created_at(
+        make_video(
+            organization, "Uploaded long ago", uploaded_time=datetime(2010, 1, 1, tzinfo=UTC)
+        ),
+        datetime(2016, 1, 1, tzinfo=UTC),
+    )
+
+    assert org_purpose(organization, "latest").single_video() == newest
+
+
+def test_latest_strategy_breaks_timestamp_ties_deterministically(organization) -> None:
+    """Bulk imports land many records on one timestamp; without the
+    tiebreak the backend is free to return either."""
+    same_moment = datetime(2015, 1, 1, tzinfo=UTC)
+    created_at(make_video(organization, "First of the batch"), same_moment)
+    last = created_at(make_video(organization, "Last of the batch"), same_moment)
+
+    assert org_purpose(organization, "latest").single_video() == last
 
 
 def test_latest_strategy_returns_none_when_empty(organization) -> None:
