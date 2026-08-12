@@ -72,12 +72,11 @@ class ScheduleContext:
         if video is None:
             return
         self.times_played[video.id] += 1
-        if video.organization_id is not None:
-            self.org_airtime[video.organization_id] += duration
+        self.org_airtime[video.organization_id] += duration
 
-    def organization_share(self, organization_id: int | None) -> float:
+    def organization_share(self, organization_id: int) -> float:
         """The organization's fraction of all airtime counted so far."""
-        if organization_id is None or not self.total_airtime:
+        if not self.total_airtime:
             return 0.0
         return self.org_airtime[organization_id] / self.total_airtime
 

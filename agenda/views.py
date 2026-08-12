@@ -13,7 +13,7 @@ from django.utils.dateparse import parse_datetime
 from django.utils.translation import gettext as _
 from django.views.generic import TemplateView
 
-from fk.models import Organization, Scheduleitem, Video, VideoFile
+from fk.models import Organization, Scheduleitem, User, Video, VideoFile
 
 
 class ProgramguideView(TemplateView):
@@ -176,11 +176,24 @@ class ManageVideoNew(AbstractVideoFormView):
         return self.get(request, *args, form=form, **kwargs)
 
 
-def allowed_to_edit(video, user):
-    return user.is_authenticated and (
-        (video.organization and video.organization.members.filter(pk=user.id).exists())
-        or user.is_superuser
-    )
+def allowed_to_edit(video: Video, user: User) -> bool:
+    """Who may edit a video through the members' pages: staff, and the
+    members of the organization that owns it.
+
+    Narrower than the API's can_administer_organization(), which also
+    admits the organization's editor. Nothing chose that difference --
+    the two checks were written apart -- and it is pinned by
+    test_the_organizations_editor_is_not_admitted so that closing it is
+    a decision rather than an accident.
+    """
+    if not user.is_authenticated:
+        return False
+
+    if user.is_staff:
+        return True
+    # Asked from the user's side so the organization row itself never
+    # has to be fetched -- the video already carries its id.
+    return user.organization_set.filter(pk=video.organization_id).exists()
 
 
 class ManageVideoEdit(AbstractVideoFormView):

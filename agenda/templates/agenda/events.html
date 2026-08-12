@@ -91,7 +91,7 @@
         </b>
         <br/>
         <small>
-          {% if event.video.organization %}
+          {% if event.video %}
                   <a href="{% url 'vod-org-video-list' event.video.organization.id %}">{{ event.video.organization }}</a>
                   {% endif %}
           {% for category in event.video.category_list %}
