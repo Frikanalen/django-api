@@ -61,8 +61,10 @@ def other_organization() -> Organization:
 def jukebox_filler_at(
     organization: Organization, starttime: datetime, minutes: int = 60
 ) -> Scheduleitem:
+    editor = organization.editor
+    assert editor is not None, "fixture should have given the organization an editor"
     filler = Video.objects.create(
-        creator=organization.editor,
+        creator=editor,
         name="Jukebox filler",
         organization=organization,
         duration=timedelta(minutes=minutes),
@@ -251,9 +253,13 @@ def test_the_nightly_jukebox_repacks_what_a_displacement_orphans(
         IN_THE_OPEN_WEEK - timedelta(minutes=59),
         IN_THE_OPEN_WEEK - timedelta(minutes=8),
     ]
-    assert refills.last().endtime() <= pick_start
-    later = Scheduleitem.objects.filter(starttime__gte=pick_start).order_by("starttime")
-    assert later.first().starttime == pick_start  # the pick survived intact
+    last_refill, first_later = (
+        refills.last(),
+        Scheduleitem.objects.filter(starttime__gte=pick_start).order_by("starttime").first(),
+    )
+    assert last_refill is not None and first_later is not None
+    assert last_refill.endtime() <= pick_start
+    assert first_later.starttime == pick_start  # the pick survived intact
 
 
 def test_a_conflict_with_deliberate_programming_still_refuses(

@@ -1,5 +1,7 @@
 from datetime import date, datetime, time, timedelta
+from typing import TYPE_CHECKING
 
+from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
@@ -10,6 +12,11 @@ from model_utils import Choices
 from api.schedule.query_set import ScheduleitemQuerySet
 
 from .organization import Organization
+
+if TYPE_CHECKING:
+    # Only for the direct_videos annotation; a real import here would put
+    # video ahead of schedule in the package's import order.
+    from .video import Video
 
 
 class Scheduleitem(models.Model):
@@ -122,16 +129,18 @@ class SchedulePurpose(models.Model):
     organization = models.ForeignKey(
         "Organization", blank=True, null=True, on_delete=models.SET_NULL
     )
-    direct_videos = models.ManyToManyField("Video", blank=True)
+    # Quoted so the subscript is never evaluated: ManyToManyField is not
+    # subscriptable at runtime, only to django-stubs.
+    direct_videos: "models.ManyToManyField[Video, models.Model]" = models.ManyToManyField(
+        "Video", blank=True
+    )
 
     class Meta:
         ordering = ("-id",)
 
+    @admin.display(description="videos", ordering="videos")
     def videos_str(self):
         return ", ".join([str(x) for x in self.videos_queryset()])
-
-    videos_str.short_description = "videos"
-    videos_str.admin_order_field = "videos"
 
     def videos_queryset(self, max_duration=None):
         """

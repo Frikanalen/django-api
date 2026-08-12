@@ -91,19 +91,7 @@ def jukebox_csv(request):
 
 
 class AsRunViewSet(ModelViewSet):
-    """
-    Query parameters
-    ----------------
-
-    `page_size` - How many items per page. If set to 0 it will list
-                  all items.  Default is 50 items.
-
-    `ordering` - You can order the results by any visible field.
-                 Prepend a minus to order in descending order.  I.e.
-                 `?ordering=-played_at` to show newest items first.
-    """
-
-    __doc__ = AsRun.__doc__ + __doc__
+    """A historic log over what was sent through playout."""
 
     queryset = AsRun.objects.all()
     serializer_class = AsRunSerializer

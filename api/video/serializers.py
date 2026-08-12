@@ -2,14 +2,24 @@ from django.conf import settings
 from rest_framework import serializers
 
 from api.organization.serializers import OrganizationSerializer
-from fk.models import Category, Organization, Video
+from fk.models import Category, Organization, User, Video
 
 
-class VideoSerializer(serializers.ModelSerializer):
-    organization = OrganizationSerializer(read_only=True)
+class BaseVideoSerializer(serializers.ModelSerializer):
+    """Everything the read and write video serializers share.
+
+    They differ in one field: reads nest the whole organization, writes
+    take its primary key. Declaring that field on each subclass rather
+    than having one override the other keeps them siblings, so neither
+    has to contradict the type it inherits. Never used directly -- both
+    subclasses supply the missing `organization`.
+    """
+
     # Attribution, not a choice: the creator is whoever performs the
     # creation, and is never changeable through the API afterwards.
-    creator = serializers.SlugRelatedField(slug_field="email", read_only=True)
+    creator: serializers.SlugRelatedField[User] = serializers.SlugRelatedField(
+        slug_field="email", read_only=True
+    )
     categories = serializers.SlugRelatedField(
         slug_field="name", many=True, queryset=Category.objects.all()
     )
@@ -75,7 +85,16 @@ class VideoSerializer(serializers.ModelSerializer):
         return data
 
 
-class VideoCreateSerializer(VideoSerializer):
+class VideoSerializer(BaseVideoSerializer):
+    """The read serializer: the organization arrives whole."""
+
+    organization = OrganizationSerializer(read_only=True)
+
+
+class VideoCreateSerializer(BaseVideoSerializer):
+    """The write serializer: the organization is named by primary key,
+    or left out entirely for validate() to infer from the creator."""
+
     organization = serializers.PrimaryKeyRelatedField(
         queryset=Organization.objects.all(), required=False
     )

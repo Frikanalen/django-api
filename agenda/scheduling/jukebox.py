@@ -9,13 +9,19 @@ programming that is already scheduled.
 
 import datetime
 import logging
+import random
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 
 from django.utils import timezone
 
 from agenda.scheduling.policy import scheduling_horizon
-from agenda.scheduling.selection import ScheduleContext, WeightedSelector, default_rules
+from agenda.scheduling.selection import (
+    ScheduleContext,
+    Selector,
+    WeightedSelector,
+    default_rules,
+)
 from fk.models import Scheduleitem, Video
 
 logger = logging.getLogger(__name__)
@@ -25,7 +31,11 @@ logger = logging.getLogger(__name__)
 MINIMUM_GAP = datetime.timedelta(seconds=300)
 
 
-def fill_agenda_with_jukebox(start=None, days=None, rng=None):
+def fill_agenda_with_jukebox(
+    start: datetime.datetime | None = None,
+    days: float | None = None,
+    rng: random.Random | None = None,
+) -> list["Placement"]:
     start = start or timezone.now()
     if days is None:
         # The production default: draft through the end of the open
@@ -64,7 +74,7 @@ def save_placements(placements: list["Placement"]) -> list["Placement"]:
     taken slot is skipped, not fought over: whatever landed there was
     more deliberate than filler.
     """
-    saved = []
+    saved: list[Placement] = []
     for placement in placements:
         end = placement.starttime + placement.video.duration
         if Scheduleitem.objects.overlapping(placement.starttime, end).exists():
@@ -80,7 +90,7 @@ def save_placements(placements: list["Placement"]) -> list["Placement"]:
     return saved
 
 
-def next_whole_minute(dt):
+def next_whole_minute(dt: datetime.datetime) -> datetime.datetime:
     """The whole minute strictly after `dt` -- even if `dt` is one already.
 
     Deliberately not a true ceiling: filling starts on the minute *after*
@@ -90,7 +100,7 @@ def next_whole_minute(dt):
     return floor_minute(dt) + datetime.timedelta(minutes=1)
 
 
-def floor_minute(dt):
+def floor_minute(dt: datetime.datetime) -> datetime.datetime:
     """Returns the datetime with seconds and microseconds cleared"""
     return dt.replace(second=0, microsecond=0)
 
@@ -159,7 +169,12 @@ def free_gaps(
         start_of_gap = resume_at
 
 
-def items_for_gap(start, end, candidates, selector=None):
+def items_for_gap(
+    start: datetime.datetime,
+    end: datetime.datetime,
+    candidates: Sequence[Video],
+    selector: Selector | None = None,
+) -> list[Placement]:
     """Plan (but do not save) filler placements between `start` and `end`.
 
     Returns a list of `Placement`s, skipping any stretch already occupied
@@ -179,16 +194,16 @@ def items_for_gap(start, end, candidates, selector=None):
 
     if selector is None:
         selector = RoundRobinSelector(candidates)
-    placements = []
+    placements: list[Placement] = []
     for gap in free_gaps(start, end, occupied):
         placements.extend(_fill_gap(gap, selector))
     return placements
 
 
-def _fill_gap(gap: Gap, selector) -> list[Placement]:
+def _fill_gap(gap: Gap, selector: Selector) -> list[Placement]:
     """Pack fillers into one gap, advancing minute-aligned after each."""
     logger.info("Filling jukebox from %s to %s", gap.start, gap.end)
-    placements = []
+    placements: list[Placement] = []
     current_time = gap.start
     while current_time < gap.end:
         video = selector.pick(gap.end - current_time)
@@ -211,10 +226,10 @@ class RoundRobinSelector:
     (shuffled in production, fixed in tests).
     """
 
-    def __init__(self, candidates: Sequence[Video]):
+    def __init__(self, candidates: Sequence[Video]) -> None:
         self._candidates = list(candidates)
         self._pool = list(self._candidates)
-        self._deferred = []
+        self._deferred: list[Video] = []
 
     def pick(self, remaining: datetime.timedelta) -> Video | None:
         """The next video no longer than `remaining`, or None if none fit."""
@@ -223,7 +238,7 @@ class RoundRobinSelector:
         # retrying the same videos forever.
         if len(self._pool) < len(self._candidates):
             self._pool.extend(self._candidates)
-        skipped = []
+        skipped: list[Video] = []
         while True:
             video = self._draw()
             if video is None:

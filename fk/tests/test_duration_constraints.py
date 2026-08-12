@@ -18,6 +18,7 @@ from datetime import timedelta
 import pytest
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from fk.models import Organization, Scheduleitem, User, Video, WeeklySlot
 
@@ -27,27 +28,31 @@ NEGATIVE = timedelta(minutes=-5)
 
 
 @pytest.fixture
-def organization() -> Organization:
-    editor = User.objects.create(email="duration-editor@example.test")
+def editor() -> User:
+    return User.objects.create(email="duration-editor@example.test")
+
+
+@pytest.fixture
+def organization(editor: User) -> Organization:
     return Organization.objects.create(name="Duration org", fkmember=True, editor=editor)
 
 
 @pytest.fixture
-def video(organization: Organization) -> Video:
+def video(editor: User, organization: Organization) -> Video:
     return Video.objects.create(
         name="Duration video",
-        creator=organization.editor,
+        creator=editor,
         organization=organization,
         duration=timedelta(minutes=30),
         proper_import=True,
     )
 
 
-def test_video_duration_cannot_be_negative(organization: Organization) -> None:
+def test_video_duration_cannot_be_negative(editor: User, organization: Organization) -> None:
     with pytest.raises(IntegrityError), transaction.atomic():
         Video.objects.create(
             name="Negative video",
-            creator=organization.editor,
+            creator=editor,
             organization=organization,
             duration=NEGATIVE,
             proper_import=True,
@@ -58,7 +63,7 @@ def test_scheduleitem_duration_cannot_be_negative(video: Video) -> None:
     with pytest.raises(IntegrityError), transaction.atomic():
         Scheduleitem.objects.create(
             video=video,
-            starttime=video.created_time,
+            starttime=timezone.now(),
             duration=NEGATIVE,
             schedulereason=Scheduleitem.REASON_ADMIN,
         )
@@ -75,7 +80,7 @@ def test_an_existing_row_cannot_be_updated_to_a_negative_duration(video: Video) 
         Video.objects.filter(pk=video.pk).update(duration=NEGATIVE)
 
 
-def test_zero_duration_is_still_allowed(organization: Organization) -> None:
+def test_zero_duration_is_still_allowed(editor: User, organization: Organization) -> None:
     """
     The field defaults to zero and unimported videos rely on it; only
     negatives are rejected.  The jukebox screens zero out separately,
@@ -83,7 +88,7 @@ def test_zero_duration_is_still_allowed(organization: Organization) -> None:
     """
     zero = Video.objects.create(
         name="Zero video",
-        creator=organization.editor,
+        creator=editor,
         organization=organization,
         duration=timedelta(0),
     )

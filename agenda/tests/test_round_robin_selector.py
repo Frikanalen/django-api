@@ -23,8 +23,19 @@ def minutes(n: float) -> datetime.timedelta:
     return datetime.timedelta(minutes=n)
 
 
+def pick_id(selector: RoundRobinSelector, remaining: datetime.timedelta) -> int:
+    """The id of a draw the caller expects to succeed.
+
+    pick() returns None when nothing fits; the tests that check for that
+    call it directly.
+    """
+    video = selector.pick(remaining)
+    assert video is not None
+    return video.id
+
+
 def picks(selector: RoundRobinSelector, remaining: datetime.timedelta, n: int) -> list[int]:
-    return [selector.pick(remaining).id for _ in range(n)]
+    return [pick_id(selector, remaining) for _ in range(n)]
 
 
 def test_draws_in_the_order_given_and_cycles() -> None:
@@ -44,9 +55,9 @@ def test_no_video_repeats_until_the_rest_have_played() -> None:
 def test_a_video_too_long_for_the_moment_keeps_its_place_in_line() -> None:
     selector = RoundRobinSelector([video(1, minutes=30), video(2, minutes=5)])
 
-    assert selector.pick(minutes(10)).id == 2
+    assert pick_id(selector, minutes(10)) == 2
     # With room again, the passed-over video goes first.
-    assert selector.pick(minutes(60)).id == 1
+    assert pick_id(selector, minutes(60)) == 1
 
 
 def test_returns_none_when_nothing_fits() -> None:
@@ -60,7 +71,7 @@ def test_recovers_after_a_pick_that_found_nothing() -> None:
     selector = RoundRobinSelector([video(1, minutes=30)])
 
     assert selector.pick(minutes(10)) is None
-    assert selector.pick(minutes(60)).id == 1
+    assert pick_id(selector, minutes(60)) == 1
 
 
 def test_an_empty_candidate_list_always_yields_none() -> None:

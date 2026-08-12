@@ -1,6 +1,6 @@
 # Copyright (c) 2012-2013 Benjamin Bruheim <grolgh@gmail.com>
 # This file is covered by the LGPLv3 or later, read COPYING for details.
-from django.urls import include, path
+from django.urls import URLPattern, URLResolver, include, path
 from django.urls import re_path as url
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from rest_framework import parsers
@@ -47,7 +47,10 @@ class ObtainAuthTokenJsonOnly(ObtainAuthToken):
     parser_classes = (parsers.JSONParser,)
 
 
-urlpatterns = [
+# Annotated because the opening literal is all patterns, which would fix
+# the inferred type as list[URLPattern]; the router, the format-suffix
+# expansion and include() all contribute resolvers further down.
+urlpatterns: list[URLPattern | URLResolver] = [
     url(r"^api/$", views.api_root, name="api-root"),
     url(r"^api/csrf/$", CsrfView.as_view(), name="api-csrf-detail"),
     url(r"^api/jukebox_csv$", views.jukebox_csv, name="jukebox-csv"),

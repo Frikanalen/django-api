@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from fk.models import Category, FileFormat, Scheduleitem, Video, VideoFile
+from fk.models import Category, FileFormat, Organization, Scheduleitem, Video, VideoFile
 
 pytestmark = pytest.mark.django_db
 
@@ -236,6 +236,7 @@ def test_list_uses_schedule_page_size(
 def test_list_serializes_nested_video_details(
     authenticated_client: APIClient,
     schedule_item_factory: Callable[..., Scheduleitem],
+    organization: Organization,
     video: Video,
 ) -> None:
     target_day = date(2015, 1, 2)
@@ -264,8 +265,8 @@ def test_list_serializes_nested_video_details(
                 "header": None,
                 "description": None,
                 "organization": {
-                    "id": video.organization.pk,
-                    "name": video.organization.name,
+                    "id": organization.pk,
+                    "name": organization.name,
                     "description": "",
                 },
                 "categories": [category.name],

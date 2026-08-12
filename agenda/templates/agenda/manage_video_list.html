@@ -38,7 +38,7 @@ a.create {
 {% endblock style %}
 
 {% block content %}
-<a class=create href="{% url 'create_home' %}">New video</a>
+<a class=create href="{% url 'manage-video-new' %}">New video</a>
 
 <div class="navigation_container">
 {% if page.paginator.num_pages > 1%}
@@ -93,7 +93,7 @@ a.create {
       <li>&nbsp;</li>
     {% endif %}
     <li>{{ video.last_broadcast.starttime }}&nbsp;</li>
-    <li><a href="{% url 'vod-video-detail' video.id %}">public page</a></li>
+    <li><a href="{{ video.get_absolute_url }}">public page</a></li>
     <!--<li> {{ video.last_broadcast.duration }} </li> -->
     <!--
     {% if video.header %}

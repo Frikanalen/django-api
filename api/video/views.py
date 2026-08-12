@@ -95,9 +95,6 @@ class VideoList(RequireTargetOrganizationMembership, generics.ListCreateAPIView)
 
     `q` - Free search query.
 
-    `page_size` - How many items per page. If set to 0 it will list
-                  all items.  Default is 50 items.
-
     `ordering` - Order results by specified field.  Prepend a minus for
                  descending order.  I.e. `?ordering=-id`.
 

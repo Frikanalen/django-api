@@ -16,17 +16,20 @@ MEDIA = "https://upload.frikanalen.no/media/"
 
 
 @pytest.fixture
-def organization() -> Organization:
-    editor = User.objects.create(email="video-model-editor@example.test")
-    organization = Organization.objects.create(name="Video model org", fkmember=True, editor=editor)
-    return organization
+def editor() -> User:
+    return User.objects.create(email="video-model-editor@example.test")
 
 
 @pytest.fixture
-def video(organization: Organization) -> Video:
+def organization(editor: User) -> Organization:
+    return Organization.objects.create(name="Video model org", fkmember=True, editor=editor)
+
+
+@pytest.fixture
+def video(editor: User, organization: Organization) -> Video:
     return Video.objects.create(
         name="Model test video",
-        creator=organization.editor,
+        creator=editor,
         organization=organization,
         duration=timedelta(minutes=5),
         proper_import=True,
@@ -75,18 +78,18 @@ def test_vod_files_lists_only_publishable_formats(video: Video) -> None:
 
 
 def test_public_queryset_requires_web_publishing_and_proper_import(
-    organization: Organization, video: Video
+    editor: User, organization: Organization, video: Video
 ) -> None:
     Video.objects.create(
         name="Unpublished",
-        creator=organization.editor,
+        creator=editor,
         organization=organization,
         proper_import=True,
         publish_on_web=False,
     )
     Video.objects.create(
         name="Improper",
-        creator=organization.editor,
+        creator=editor,
         organization=organization,
         proper_import=False,
         publish_on_web=True,
@@ -95,11 +98,13 @@ def test_public_queryset_requires_web_publishing_and_proper_import(
     assert list(Video.objects.public()) == [video]
 
 
-def test_fillers_queryset_applies_all_four_criteria(organization: Organization) -> None:
+def test_fillers_queryset_applies_all_four_criteria(
+    editor: User, organization: Organization
+) -> None:
     def filler(name: str, **overrides) -> Video:
         fields = {
             "name": name,
-            "creator": organization.editor,
+            "creator": editor,
             "organization": organization,
             "is_filler": True,
             "has_tono_records": False,

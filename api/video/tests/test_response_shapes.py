@@ -60,8 +60,13 @@ def video(editor: User, organization: Organization) -> Video:
 
 
 def expected_video_json(video: Video) -> dict:
+    # Both FKs are nullable on the model; the fixture always sets them,
+    # and a missing one should fail here rather than as an attribute
+    # error halfway through building the expectation.
     organization = video.organization
+    assert organization is not None
     editor = organization.editor
+    assert editor is not None
     return {
         "id": video.pk,
         "name": "Shape test video",

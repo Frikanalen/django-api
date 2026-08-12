@@ -75,6 +75,21 @@ jobs:
         if: always()
         run: uv run ruff format --check
 
+      - name: Type check (advisory)
+        if: always()
+        continue-on-error: true
+        run: |
+          uv run mypy . | tee "$RUNNER_TEMP/mypy.txt"
+          status=${PIPESTATUS[0]}
+          {
+            echo '### Type check'
+            echo ''
+            echo '```'
+            cat "$RUNNER_TEMP/mypy.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
   build:
     name: Build and push Docker image to GHCR
     runs-on: ubuntu-latest

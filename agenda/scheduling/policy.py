@@ -79,7 +79,7 @@ def _local_midnight(day: date) -> datetime:
     return datetime.combine(day, time.min, tzinfo=TZ)
 
 
-def is_displaceable(item) -> bool:
+def is_displaceable(item: Scheduleitem) -> bool:
     """Whether a placement may be scheduled over `item`.
 
     Only automatic jukebox filler gives way; deliberate programming --
@@ -93,7 +93,7 @@ def airtime_conflicts(
     end: datetime,
     exclude_pk: int | None = None,
     for_update: bool = False,
-) -> tuple[list, list]:
+) -> tuple[list[Scheduleitem], list[Scheduleitem]]:
     """What stands in the way of placing something on [start, end).
 
     Returns (blocking, displaceable), each ordered by starttime: items
@@ -112,7 +112,7 @@ def airtime_conflicts(
     return blocking, displaceable
 
 
-def displace(fillers: list) -> None:
+def displace(fillers: list[Scheduleitem]) -> None:
     """Delete jukebox fillers that a placement is scheduling over. The
     nightly jukebox repacks whatever slivers this leaves behind."""
     if fillers:

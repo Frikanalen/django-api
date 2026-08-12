@@ -47,14 +47,19 @@ def minutes(n: float) -> datetime.timedelta:
     return datetime.timedelta(minutes=n)
 
 
+# Freshness scores a video on its age alone. The context is part of the
+# rule protocol but goes unread, so these tests all share one empty.
+NO_CONTEXT = ScheduleContext()
+
+
 # --- Freshness --------------------------------------------------------------
 
 
 def test_a_newer_upload_outweighs_an_older_one() -> None:
     rule = Freshness(now=NOW)
 
-    fresh = rule.weight(video(1, uploaded_days_ago=7), None)
-    stale = rule.weight(video(2, uploaded_days_ago=3000), None)
+    fresh = rule.weight(video(1, uploaded_days_ago=7), NO_CONTEXT)
+    stale = rule.weight(video(2, uploaded_days_ago=3000), NO_CONTEXT)
 
     assert fresh > stale
 
@@ -62,23 +67,23 @@ def test_a_newer_upload_outweighs_an_older_one() -> None:
 def test_freshness_halves_per_half_life() -> None:
     rule = Freshness(now=NOW, half_life=datetime.timedelta(days=100), floor=0.0)
 
-    assert rule.weight(video(1, uploaded_days_ago=0), None) == 1.0
-    assert rule.weight(video(1, uploaded_days_ago=100), None) == 0.5
-    assert rule.weight(video(1, uploaded_days_ago=200), None) == 0.25
+    assert rule.weight(video(1, uploaded_days_ago=0), NO_CONTEXT) == 1.0
+    assert rule.weight(video(1, uploaded_days_ago=100), NO_CONTEXT) == 0.5
+    assert rule.weight(video(1, uploaded_days_ago=200), NO_CONTEXT) == 0.25
 
 
 def test_ancient_and_undated_material_keeps_the_floor_weight() -> None:
     """Old videos are downweighted, never frozen out."""
     rule = Freshness(now=NOW, floor=0.2)
 
-    assert rule.weight(video(1, uploaded_days_ago=100_000), None) > 0.2 * 0.999
-    assert rule.weight(video(1, uploaded_days_ago=None), None) == 0.2
+    assert rule.weight(video(1, uploaded_days_ago=100_000), NO_CONTEXT) > 0.2 * 0.999
+    assert rule.weight(video(1, uploaded_days_ago=None), NO_CONTEXT) == 0.2
 
 
 def test_an_upload_dated_in_the_future_counts_as_brand_new() -> None:
     rule = Freshness(now=NOW)
 
-    assert rule.weight(video(1, uploaded_days_ago=-1), None) == 1.0
+    assert rule.weight(video(1, uploaded_days_ago=-1), NO_CONTEXT) == 1.0
 
 
 # --- OrganizationDiversity --------------------------------------------------
@@ -158,17 +163,28 @@ def selector(candidates, rules, seed=1) -> WeightedSelector:
     return WeightedSelector(candidates, ScheduleContext(), rules, rng=random.Random(seed))
 
 
+def pick_id(chooser: WeightedSelector, remaining: datetime.timedelta) -> int:
+    """The id of a draw the caller expects to succeed.
+
+    pick() returns None when nothing fits; the tests that check for that
+    call it directly.
+    """
+    video = chooser.pick(remaining)
+    assert video is not None
+    return video.id
+
+
 def test_only_videos_that_fit_are_drawn() -> None:
     chooser = selector([video(1, minutes=30), video(2, minutes=5)], rules=[])
 
-    assert chooser.pick(minutes(10)).id == 2
+    assert pick_id(chooser, minutes(10)) == 2
     assert chooser.pick(minutes(3)) is None
 
 
 def test_picks_are_recorded_so_rules_see_them() -> None:
     chooser = selector([video(1), video(2)], rules=[RepeatAvoidance()])
 
-    drawn = [chooser.pick(minutes(60)).id for _ in range(10)]
+    drawn = [pick_id(chooser, minutes(60)) for _ in range(10)]
 
     assert all(a != b for a, b in pairwise(drawn))
 
@@ -178,8 +194,8 @@ def test_a_universally_vetoed_draw_falls_back_to_uniform() -> None:
     just played, it plays again."""
     chooser = selector([video(1)], rules=[RepeatAvoidance()])
 
-    assert chooser.pick(minutes(60)).id == 1
-    assert chooser.pick(minutes(60)).id == 1
+    assert pick_id(chooser, minutes(60)) == 1
+    assert pick_id(chooser, minutes(60)) == 1
 
 
 def test_the_draw_follows_the_weights() -> None:
@@ -191,7 +207,7 @@ def test_the_draw_follows_the_weights() -> None:
 
     chooser = selector([video(1), video(2)], rules=[Favor()], seed=42)
 
-    drawn = [chooser.pick(minutes(60)).id for _ in range(200)]
+    drawn = [pick_id(chooser, minutes(60)) for _ in range(200)]
 
     assert drawn.count(1) > 150
 
