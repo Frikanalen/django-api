@@ -20,6 +20,25 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    # The suite runs on PostgreSQL, so CI has to provide one. Credentials and
+    # database name match the DATABASE_URL committed in .env.local, which is
+    # what both this job and a developer's docker-compose stack read.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: fk
+          POSTGRES_DB: fkweb
+        ports:
+          - 5432:5432
+        # Without this the job can start `uv sync` before the server accepts
+        # connections and the first test errors out on a refused socket.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v7

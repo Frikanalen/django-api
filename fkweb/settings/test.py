@@ -1,13 +1,11 @@
 from .local import *
 
-########## IN-MEMORY TEST DATABASE
-## TODO: Migrate to PostgreSQL
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": ":memory:",
-    },
-}
+########## DATABASE
+# Deliberately not overridden: tests run against the same PostgreSQL that
+# DATABASE_URL points at, so they see the real backend's constraint checking,
+# transaction semantics and type coercion rather than SQLite's looser ones.
+# Django creates and drops a separate `test_`-prefixed database, so the
+# development data in `fkweb` is never touched.
 
 ########## CACHE
 # The site-wide page cache (Update/FetchFromCacheMiddleware) must not
