@@ -11,7 +11,7 @@ import pytest
 from django.test import Client
 from django.urls import reverse
 
-from fk.models import User, Video
+from fk.models import Organization, User, Video
 
 pytestmark = pytest.mark.django_db
 
@@ -26,6 +26,13 @@ def member() -> User:
 
 
 @pytest.fixture
+def organization() -> Organization:
+    """Every video answers to one; which one is beside the point here,
+    where the list is filtered by creator."""
+    return Organization.objects.create(name="Video list org")
+
+
+@pytest.fixture
 def member_client(member: User) -> Client:
     client = Client()
     client.force_login(member)
@@ -33,8 +40,11 @@ def member_client(member: User) -> Client:
 
 
 @pytest.fixture
-def videos(member: User) -> list[Video]:
-    return [Video.objects.create(name=f"Video {n:02}", creator=member) for n in range(VIDEO_COUNT)]
+def videos(member: User, organization: Organization) -> list[Video]:
+    return [
+        Video.objects.create(name=f"Video {n:02}", creator=member, organization=organization)
+        for n in range(VIDEO_COUNT)
+    ]
 
 
 def page_of(client: Client, page: str | None = None):
@@ -49,10 +59,12 @@ def test_anonymous_visitors_are_sent_to_the_login_page() -> None:
     assert response.url == "/login/?next=/members/video/"
 
 
-def test_lists_only_the_members_own_videos(member_client: Client, member: User) -> None:
-    Video.objects.create(name="Mine", creator=member)
+def test_lists_only_the_members_own_videos(
+    member_client: Client, member: User, organization: Organization
+) -> None:
+    Video.objects.create(name="Mine", creator=member, organization=organization)
     stranger = User.objects.create(email="stranger@example.test")
-    Video.objects.create(name="Theirs", creator=stranger)
+    Video.objects.create(name="Theirs", creator=stranger, organization=organization)
 
     response = page_of(member_client)
 

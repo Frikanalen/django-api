@@ -81,7 +81,7 @@ class Video(models.Model):
         default=25000, help_text="Framerate of master video in thousands / second"
     )
     organization = models.ForeignKey(
-        "Organization", null=True, help_text="Organization for video", on_delete=models.PROTECT
+        "Organization", help_text="Organization for video", on_delete=models.PROTECT
     )
     ref_url = models.CharField(blank=True, max_length=1024, help_text="URL for reference")
     duration = models.DurationField(

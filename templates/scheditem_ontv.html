@@ -12,7 +12,6 @@
         &ndash;
         <a href="{{ scheditem.video.get_absolute_url }}">{{ scheditem.video.name }}</a>
     </div>
-    {% if scheditem.video.organization %}
     <div class="ontv-org">
         {% trans "Organization: " %}
         <a href="{{ scheditem.video.organization.get_absolute_url }}">
@@ -21,7 +20,6 @@
         ({{ scheditem.video.organization.orgnr }},
         {{ scheditem.video.organization.homepage|default:"–" }})
     </div>
-    {% endif %}
     <div class="ontv-editor">
         {% trans "Editor: " %}
         {{ scheditem.video.creator.first_name }} {{ scheditem.video.creator.last_name }}

@@ -28,7 +28,7 @@ NOW = datetime.datetime(2019, 6, 30, 12, tzinfo=OSLO)
 def video(
     video_id: int,
     minutes: float = 10,
-    organization_id: int | None = None,
+    organization_id: int = 1,
     uploaded_days_ago: float | None = None,
 ) -> Video:
     uploaded_time = None
@@ -153,7 +153,6 @@ def test_airtime_shares_accumulate_as_picks_land() -> None:
     assert context.organization_share(1) == 0.75
     assert context.organization_share(2) == 0.25
     assert context.organization_share(3) == 0.0
-    assert context.organization_share(None) == 0.0
 
 
 # --- WeightedSelector -------------------------------------------------------
