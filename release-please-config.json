@@ -4,7 +4,12 @@
       "changelog-path": "CHANGELOG.md",
       "release-type": "python",
       "extra-files": [
-        "chart/Chart.yaml"
+        "chart/Chart.yaml",
+        {
+          "path": "uv.lock",
+          "type": "toml",
+          "jsonpath": "$.package[?(@.name.value=='fkweb')].version"
+        }
       ],
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": false,
