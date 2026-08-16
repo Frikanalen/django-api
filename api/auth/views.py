@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema
+from api.auth.serializers import LogoutSerializer
 
 from api.auth.serializers import LoginSerializer, NewUserSerializer, TokenSerializer, UserSerializer
 
@@ -95,8 +96,10 @@ class UserLogin(CreateAPIView):
         return Response(UserSerializer(user).data)
 
 
-@extend_schema(exclude=True)
+@extend_schema(responses=LogoutSerializer)
 class UserLogout(APIView):
     def post(self, request):
         logout(request)
-        return Response()
+        # Return a small JSON confirmation so the endpoint is documented and
+        # the schema generator can describe its response type.
+        return Response({"detail": "Logged out"})

@@ -87,3 +87,9 @@ class UserSerializer(serializers.ModelSerializer):
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField()
+
+
+class LogoutSerializer(serializers.Serializer):
+    """Representation for the logout response: a short human-readable message."""
+
+    detail = serializers.CharField(read_only=True)
