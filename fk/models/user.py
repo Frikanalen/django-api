@@ -123,7 +123,7 @@ class User(AbstractBaseUser):
         self.editor.update(editor=None)
 
     @property
-    def is_staff(self):
+    def is_staff(self) -> bool:
         """Is the user a member of staff?"""
         # Simplest possible answer: All admins are staff
         return self.is_superuser

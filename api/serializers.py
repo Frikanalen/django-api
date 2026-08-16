@@ -14,7 +14,7 @@ class CategorySerializer(serializers.ModelSerializer):
     videocount = serializers.SerializerMethodField("count_videos")
 
     @staticmethod
-    def count_videos(category):
+    def count_videos(category) -> int:
         return Video.objects.public().filter(categories=category).count()
 
     class Meta:
