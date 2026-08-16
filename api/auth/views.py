@@ -96,7 +96,9 @@ class UserLogin(CreateAPIView):
         return Response(UserSerializer(user).data)
 
 
-class UserLogout(APIView):
+class UserLogout(generics.GenericAPIView):
+    serializer_class = LogoutSerializer
+
     @extend_schema(responses=LogoutSerializer)
     def post(self, request):
         logout(request)
