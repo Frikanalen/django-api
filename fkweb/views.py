@@ -5,6 +5,11 @@ from django.views.generic import TemplateView
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework import serializers
+
+
+class CsrfSerializer(serializers.Serializer):
+    csrfToken = serializers.CharField()
 
 from fk.models import Scheduleitem
 
@@ -35,7 +40,9 @@ class Frontpage(TemplateView):
 class CsrfView(RetrieveAPIView):
     permission_classes = [AllowAny]
     authentication_classes = []  # no auth required just to mint token
+    serializer_class = CsrfSerializer
 
     def get(self, request, *args, **kwargs):
         # This ensures the csrftoken cookie is set on the response
-        return Response({"csrfToken": get_token(request)})
+        serializer = self.get_serializer({"csrfToken": get_token(request)})
+        return Response(serializer.data)

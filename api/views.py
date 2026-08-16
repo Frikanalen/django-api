@@ -10,6 +10,8 @@ from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework.viewsets import ModelViewSet
 
+from drf_spectacular.utils import extend_schema, OpenApiTypes
+
 from api.auth.permissions import IsStaffOrReadOnly
 from api.pagination import FkDefaultPagination
 from api.schedule.serializers import AsRunSerializer
@@ -19,6 +21,7 @@ from fk.models import AsRun, Category, Video, VideoFile
 logger = logging.getLogger(__name__)
 
 
+@extend_schema(responses=OpenApiTypes.OBJECT)
 @api_view(["GET"])
 def api_root(request):
     """
@@ -40,6 +43,7 @@ def api_root(request):
     )
 
 
+@extend_schema(exclude=True)
 @api_view(["GET"])
 def jukebox_csv(request):
     response = HttpResponse(content_type="text/csv; charset=utf-8")

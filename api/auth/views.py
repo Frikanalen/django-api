@@ -11,6 +11,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema
 
 from api.auth.serializers import LoginSerializer, NewUserSerializer, TokenSerializer, UserSerializer
 
@@ -94,6 +95,7 @@ class UserLogin(CreateAPIView):
         return Response(UserSerializer(user).data)
 
 
+@extend_schema(exclude=True)
 class UserLogout(APIView):
     def post(self, request):
         logout(request)
