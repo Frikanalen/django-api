@@ -181,9 +181,13 @@ MIDDLEWARE = (
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "fkweb.middleware.api_utc_middleware",
     # "djangorestframework_camel_case.middleware.CamelCaseMiddleWare",
-    "django.middleware.cache.FetchFromCacheMiddleware",
+    "fkweb.middleware.AnonymousOnlyFetchFromCacheMiddleware",
+    # Must stay *inside* both cache middlewares. Django's cache key includes
+    # the active timezone, so with this in between them the pair wrote keys
+    # under TIME_ZONE and read them back under UTC, and no /api/ response was
+    # ever served from the cache.
+    "fkweb.middleware.api_utc_middleware",
 )
 ########## END MIDDLEWARE CONFIGURATION
 
@@ -371,3 +375,10 @@ except ImproperlyConfigured:
     cache_from_env_or_memory = {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
 
 CACHES = {"default": cache_from_env_or_memory}
+
+# How stale an anonymous page may get. This is Django's own default, but it
+# only started to mean anything once the page cache actually began serving
+# responses, so state it here where the cost is visible: a video published
+# now can take this long to appear for logged-out visitors. Authenticated
+# callers bypass the cache entirely and always see current data.
+CACHE_MIDDLEWARE_SECONDS = 600
