@@ -359,7 +359,7 @@ SPECTACULAR_SETTINGS = {
 
 # Everything with the API should be okay, since we don't share
 # the login cookie it's all safe.
-CORS_ORIGIN_ALLOW_ALL = True
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_URLS_REGEX = r"^/api/.*$"  # anyway, only enable CORS for the API
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"

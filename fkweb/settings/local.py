@@ -11,7 +11,7 @@ FK_UPLOAD_URL = "http://localhost:1080/files/"
 # DEBUG CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#debug
 DEBUG = True
-CORS_ORIGIN_ALLOW_ALL = False
+CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_HEADERS = (*default_headers, "Cache-Control", "Cookie")
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = env.str("CORS_ALLOWED_ORIGINS", default="http://localhost:3000").split(",")
