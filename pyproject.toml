@@ -5,7 +5,6 @@ description = "Frikanalen's Django-based backend API"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "dj-database-url==3.1.2",
     "django==5.2.17",
     "django-cors-headers==4.9.0",
     "django-durationfield==0.5.5",
@@ -18,12 +17,15 @@ dependencies = [
     "drf-spectacular==0.30.0",
     "drf-standardized-errors[openapi]>=0.16.0",
     "gunicorn==26.0.0",
+    # Nothing imports this, but DRF picks it up if it is installed and uses it
+    # to render view docstrings in the browsable API. VideoList documents every
+    # filter in backtick code spans, so without it that page shows the literal
+    # backticks instead of formatted markup.
     "markdown==3.10.3",
     "mypy>=1.11",
     "psycopg2-binary>=2.9.10",
     "pymemcache>=4.0.0",
     "python-dateutil==2.9.0.post0",
-    "requests==2.34.2",
 ]
 
 [tool.ruff]
