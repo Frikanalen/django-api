@@ -11,6 +11,7 @@ from rest_framework import serializers
 class CsrfSerializer(serializers.Serializer):
     csrfToken = serializers.CharField()
 
+
 from fk.models import Scheduleitem
 
 
