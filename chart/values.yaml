@@ -35,6 +35,11 @@ env:
   DJANGO_SETTINGS_MODULE: fkweb.settings.production
   ALLOWED_HOSTS: beta.frikanalen.no
   CSRF_TRUSTED_ORIGINS: https://beta.frikanalen.no
+  # Handed to the frontend as a video's uploadUrl. Always set it: the settings
+  # default to the production URL, so leaving it out makes a non-production
+  # deployment advertise production's endpoint. Points at tusd, which the
+  # ingest chart serves under /upload on this same host.
+  FK_UPLOAD_URL: https://beta.frikanalen.no/upload
 
 service:
   type: ClusterIP
