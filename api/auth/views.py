@@ -2,6 +2,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics
 from rest_framework.authentication import BasicAuthentication
 from rest_framework.authtoken.models import Token
@@ -10,11 +11,14 @@ from rest_framework.generics import CreateAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
-from rest_framework.views import APIView
-from drf_spectacular.utils import extend_schema
-from api.auth.serializers import LogoutSerializer
 
-from api.auth.serializers import LoginSerializer, NewUserSerializer, TokenSerializer, UserSerializer
+from api.auth.serializers import (
+    LoginSerializer,
+    LogoutSerializer,
+    NewUserSerializer,
+    TokenSerializer,
+    UserSerializer,
+)
 
 
 class XBasicAuth(BasicAuthentication):

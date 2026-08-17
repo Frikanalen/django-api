@@ -5,12 +5,11 @@ import csv
 import logging
 
 from django.http import HttpResponse
+from drf_spectacular.utils import OpenApiTypes, extend_schema
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework.viewsets import ModelViewSet
-
-from drf_spectacular.utils import extend_schema, OpenApiTypes
 
 from api.auth.permissions import IsStaffOrReadOnly
 from api.pagination import FkDefaultPagination
