@@ -96,4 +96,5 @@ dev = [
     "pytest-timeout>=2.4.0",
     "ruff>=0.16.1",
     "types-django-filter>=26.1.0.20260713",
+    "pre-commit>=3.4",
 ]

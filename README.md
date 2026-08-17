@@ -48,6 +48,30 @@ source .venv/bin/activate
 uv sync
 ```
 
+##### Git hooks (pre-commit)
+
+This repository includes a `.pre-commit-config.yaml` that runs `ruff format` and `ruff check --fix` on staged Python files.
+
+Enable hooks using the project's uv workflow (recommended):
+
+```sh
+# Install pre-commit via uv's tool manager and enable the pre-commit uv plugin
+uv tool install pre-commit --with pre-commit-uv
+# Install the git hooks
+pre-commit install
+# Optionally run the hooks across the entire repository
+uv run pre-commit run --all-files
+```
+
+Notes:
+- `uv tool install ... --with pre-commit-uv` installs the pre-commit tool and the `pre-commit-uv` helper so pre-commit hooks can use tools managed by `uv`.
+- `pre-commit install` registers the hooks with Git for this repository.
+- `uv run pre-commit run --all-files` runs the configured hooks across the repository using uv-managed tools.
+
+pre-commit normally creates isolated venvs for each hook; installing the `pre-commit-uv` helper lets hooks use tools installed and managed by `uv` instead, if configured that way.
+
+If you'd like the hooks to always run Ruff via `uv run ruff` rather than the hook venvs, the configuration can be adjusted — tell me and I'll update the `.pre-commit-config.yaml` accordingly.
+
 #### Initializing database
 
 ```sh
