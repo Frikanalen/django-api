@@ -28,7 +28,10 @@ OPEN_MONDAY = "2014-12-29"
 
 @pytest.fixture
 def member(organization: Organization) -> User:
-    user = User.objects.create(email="freeze-member@example.test")
+    user = User.objects.create(
+        email="freeze-member@example.test",
+        identity_confirmed=True,
+    )
     organization.members.add(user)
     return user
 

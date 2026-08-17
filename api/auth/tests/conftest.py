@@ -37,7 +37,10 @@ def staff_user(db) -> User:
 
 @pytest.fixture
 def member(db) -> User:
-    return User.objects.create(email="matrix-member@example.test")
+    return User.objects.create(
+        email="matrix-member@example.test",
+        identity_confirmed=True,
+    )
 
 
 @pytest.fixture
