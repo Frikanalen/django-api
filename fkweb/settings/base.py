@@ -23,7 +23,8 @@ load_env_from(".env")
 WEB_NO_TONO = True
 
 # Where all the media files are stored (Must have trailing slash)
-FK_MEDIA_URLPREFIX = "https://upload.frikanalen.no/media/"
+FK_MEDIA_URLPREFIX = env.str("FK_MEDIA_URLPREFIX", default="https://frikanalen.no/media/")
+# TODO: Is this in use at all?
 FK_MEDIA_ROOT = "/tank/new_media/media"
 
 # Handed to the frontend as a video's uploadUrl. tusd is served under /upload
