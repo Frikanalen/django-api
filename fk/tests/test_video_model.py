@@ -12,7 +12,7 @@ from fk.models import FileFormat, Organization, User, Video, VideoFile
 
 pytestmark = pytest.mark.django_db
 
-MEDIA = "https://upload.frikanalen.no/media/"
+MEDIA = "https://frikanalen.no/media/"
 
 
 @pytest.fixture
