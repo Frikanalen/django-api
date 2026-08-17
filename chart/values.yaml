@@ -40,6 +40,9 @@ env:
   # deployment advertise production's endpoint. Points at tusd, which the
   # ingest chart serves under /upload on this same host.
   FK_UPLOAD_URL: https://beta.frikanalen.no/upload
+  # Same reasoning as FK_UPLOAD_URL above. Points at the media-server ingress
+  # for this environment's own archive.
+  FK_MEDIA_URLPREFIX: https://beta.frikanalen.no/media/
 
 service:
   type: ClusterIP
