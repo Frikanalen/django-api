@@ -38,7 +38,9 @@ def authenticated_client(staff_user: User) -> APIClient:
 
 @pytest.fixture
 def organization(staff_user: User) -> Organization:
-    return Organization.objects.create(name="Schedule test organization", editor=staff_user)
+    return Organization.objects.create(
+        name="Schedule test organization", editor=staff_user, fkmember=True
+    )
 
 
 @pytest.fixture

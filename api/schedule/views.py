@@ -7,7 +7,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from agenda.scheduling import policy
-from api.auth.permissions import IsInOrganizationOrReadOnly, RequireTargetOrganizationMembership
+from api.auth.permissions import (
+    CanScheduleForOrganizationOrReadOnly,
+    RequireSchedulingEligibility,
+)
 from api.pagination import FkSchedulePagination
 from api.schedule.filters import ScheduleitemFilter
 from api.schedule.serializers import (
@@ -18,7 +21,7 @@ from api.schedule.serializers import (
 from fk.models import Scheduleitem, VideoFile
 
 
-class ScheduleitemViewSet(RequireTargetOrganizationMembership, viewsets.ModelViewSet):
+class ScheduleitemViewSet(RequireSchedulingEligibility, viewsets.ModelViewSet):
     """
     Video events schedule
 
@@ -43,7 +46,7 @@ class ScheduleitemViewSet(RequireTargetOrganizationMembership, viewsets.ModelVie
         ),
     )
     pagination_class = FkSchedulePagination
-    permission_classes = (IsInOrganizationOrReadOnly,)
+    permission_classes = (CanScheduleForOrganizationOrReadOnly,)
     filterset_class = ScheduleitemFilter
     ordering_fields = ["starttime"]
     ordering = ["starttime"]

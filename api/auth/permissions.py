@@ -17,6 +17,19 @@ def can_administer_organization(user, organization) -> bool:
     )
 
 
+def can_schedule_for_organization(user, organization) -> bool:
+    """Whether a user may put an organization's videos on air.
+
+    Uploading is deliberately available before either approval: scheduling
+    is the narrower, consequential capability that requires both a confirmed
+    identity and an approved Frikanalen member organization. Staff retain the
+    site-wide override used by the rest of the scheduling API.
+    """
+    if not can_administer_organization(user, organization):
+        return False
+    return user.is_staff or (user.identity_confirmed and organization.fkmember)
+
+
 class RequireTargetOrganizationMembership:
     """
     View mixin closing the gap the IsInOrganization* classes leave open:
@@ -44,6 +57,59 @@ class RequireTargetOrganizationMembership:
             return
         if not can_administer_organization(self.request.user, organization):
             raise PermissionDenied("You must belong to the organization that owns this content.")
+
+
+class RequireSchedulingEligibility:
+    """Enforce scheduling eligibility against a create or update target.
+
+    Object permissions check the existing schedule item on update. This mixin
+    additionally checks a replacement video, and closes the create-time gap
+    where DRF has no object on which to run an object permission.
+    """
+
+    message = (
+        "Scheduling requires a confirmed identity and a Frikanalen member "
+        "organization that you administer."
+    )
+
+    def perform_create(self, serializer):
+        self._require_scheduling_eligibility(serializer)
+        super().perform_create(serializer)
+
+    def perform_update(self, serializer):
+        self._require_scheduling_eligibility(serializer)
+        super().perform_update(serializer)
+
+    def _require_scheduling_eligibility(self, serializer):
+        user = self.request.user
+        if user.is_staff:
+            return
+
+        data = serializer.validated_data
+        if "video" in data:
+            video = data["video"]
+        elif serializer.instance is None:
+            # A non-staff schedule item must be attributable to an eligible
+            # organization. Without a video there is no such target to check.
+            video = None
+        else:
+            # The object permission already checked the unchanged video.
+            return
+
+        if video is None or not can_schedule_for_organization(user, video.organization):
+            raise PermissionDenied(self.message)
+
+
+class CanScheduleForOrganizationOrReadOnly(permissions.IsAuthenticatedOrReadOnly):
+    """Public reads; eligible organization users and staff may mutate."""
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        if request.user.is_staff:
+            return True
+        video = getattr(obj, "video", None)
+        return video is not None and can_schedule_for_organization(request.user, video.organization)
 
 
 class IsOrganizationEditorOrDisallow(permissions.IsAuthenticatedOrReadOnly):
