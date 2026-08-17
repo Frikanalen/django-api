@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Pre-commit hook: run ruff format and ruff check --fix on staged Python files.
+# Prefers to run via `uv run ruff` when `uv` is available, otherwise falls back to ruff in PATH.
+
+# Find a suitable ruff command
+if command -v uv >/dev/null 2>&1; then
+  RUFF_CMD=(uv run ruff)
+else
+  RUFF_CMD=(ruff)
+fi
+
+# Get list of staged files (Added, Copied, or Modified)
+mapfile -t STAGED < <(git diff --cached --name-only --diff-filter=ACM)
+
+FILES_TO_LINT=()
+for f in "${STAGED[@]}"; do
+  case "${f}" in
+    *.py|*.pyi)
+      # Ensure file exists in working tree (skip deleted files)
+      if [ -f "${f}" ]; then
+        FILES_TO_LINT+=("${f}")
+      fi
+      ;;
+  esac
+done
+
+if [ ${#FILES_TO_LINT[@]} -eq 0 ]; then
+  # Nothing to do
+  exit 0
+fi
+
+echo "Running ruff format on staged Python files..."
+if ! ${RUFF_CMD[@]} format --quiet -- "${FILES_TO_LINT[@]}"; then
+  echo "ruff format failed. Aborting commit." >&2
+  exit 1
+fi
+
+# If formatting changed files, re-add them to the index so the commit includes the formatted code
+git add -- "${FILES_TO_LINT[@]}"
+
+echo "Running ruff check --fix on staged Python files..."
+# Run check --fix to auto-fix remaining problems
+if ! ${RUFF_CMD[@]} check --fix --quiet -- "${FILES_TO_LINT[@]}"; then
+  echo "ruff check --fix reported issues that could not be fixed or ruff failed." >&2
+  echo "Showing remaining issues:" >&2
+  # Show human-readable output of remaining issues
+  ${RUFF_CMD[@]} check "${FILES_TO_LINT[@]}" || true
+  echo "Aborting commit. Please fix the remaining issues and try again." >&2
+  exit 1
+fi
+
+# Add any changes made by check --fix
+git add -- "${FILES_TO_LINT[@]}"
+
+# All good
+exit 0
