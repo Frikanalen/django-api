@@ -26,7 +26,9 @@ WEB_NO_TONO = True
 FK_MEDIA_URLPREFIX = "https://upload.frikanalen.no/media/"
 FK_MEDIA_ROOT = "/tank/new_media/media"
 
-FK_UPLOAD_URL = "https://upload.frikanalen.no/upload"
+# Handed to the frontend as a video's uploadUrl. tusd is served under /upload
+# on the main site, so this differs per environment.
+FK_UPLOAD_URL = env.str("FK_UPLOAD_URL")
 
 AUTH_USER_MODEL = "fk.User"
 LOGIN_URL = "/login/"
