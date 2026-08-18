@@ -15,6 +15,7 @@ FILE_FORMATS = [
     "theora",
     "srt",
     "cloudflare_id",
+    "dash",
 ]
 
 

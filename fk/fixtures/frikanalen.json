@@ -65,6 +65,14 @@
       }
    },
    {
+      "model": "fk.fileformat",
+      "pk": 10,
+      "fields": {
+         "fsname": "dash",
+         "mime_type": "application/dash+xml"
+      }
+   },
+   {
       "model": "fk.category",
       "pk": 119,
       "fields": {
