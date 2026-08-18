@@ -109,3 +109,9 @@ class VideoUploadTokenSerializer(serializers.ModelSerializer):
             "upload_token",
             "upload_url",
         )
+
+
+class UploadTokenVerificationSerializer(serializers.Serializer):
+    """The upload capability presented by ingest for a specific video."""
+
+    upload_token = serializers.CharField(max_length=32, trim_whitespace=False)
