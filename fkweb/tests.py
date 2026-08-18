@@ -87,7 +87,7 @@ def test_frontpage_without_upcoming_programs_still_shows_the_current_one() -> No
 def test_csrf_endpoint_mints_a_token_and_sets_the_cookie() -> None:
     client = Client()
 
-    response = client.get("/api/csrf/")
+    response = client.get("/api/csrf")
 
     assert response.status_code == 200
     assert response.json()["csrfToken"]
