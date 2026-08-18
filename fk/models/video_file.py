@@ -27,6 +27,7 @@ class VideoFileVariant(models.TextChoices):
     SRT = "srt", "SubRip subtitles"
     CLOUDFLARE_ID = "cloudflare_id", "Cloudflare Stream identifier"
     DASH = "dash", "MPEG-DASH manifest"
+    WEBM_MED = "webm_med", "Medium-quality WebM"
 
     @property
     def mime_type(self) -> str | None:

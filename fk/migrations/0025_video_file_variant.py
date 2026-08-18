@@ -44,6 +44,7 @@ VARIANT_NAMES = [
     "srt",
     "cloudflare_id",
     "dash",
+    "webm_med",
 ]
 
 # Mirrors VideoFileVariant.vod_published() and MIME_TYPES. Spelled out
@@ -137,6 +138,7 @@ class Migration(migrations.Migration):
                     ("srt", "SubRip subtitles"),
                     ("cloudflare_id", "Cloudflare Stream identifier"),
                     ("dash", "MPEG-DASH manifest"),
+                    ("webm_med", "Medium-quality WebM"),
                 ],
                 max_length=20,
             ),
