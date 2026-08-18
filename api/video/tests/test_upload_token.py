@@ -31,6 +31,14 @@ def fetch_token(client: APIClient, video: Video):
     return client.get(reverse("api-video-upload-token-detail", args=[video.pk]))
 
 
+def verify_token(client: APIClient, video: Video, upload_token: str):
+    return client.post(
+        reverse("api-video-upload-token-verification", args=[video.pk]),
+        {"uploadToken": upload_token},
+        format="json",
+    )
+
+
 def test_anonymous_users_are_asked_to_authenticate(video: Video) -> None:
     response = fetch_token(APIClient(), video)
 
@@ -68,3 +76,32 @@ def test_staff_can_read_any_token(video: Video) -> None:
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["uploadToken"] == video.upload_token
+
+
+def test_authenticated_client_can_verify_the_correct_token(
+    editor_client: APIClient, video: Video
+) -> None:
+    response = verify_token(editor_client, video, video.upload_token)
+
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+    assert not response.content
+
+
+def test_anonymous_client_cannot_verify_a_token(video: Video) -> None:
+    response = verify_token(APIClient(), video, video.upload_token)
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+def test_incorrect_token_is_indistinguishable_from_a_missing_video(
+    editor_client: APIClient, video: Video
+) -> None:
+    invalid_token = verify_token(editor_client, video, "x" * 32)
+    missing_video = editor_client.post(
+        reverse("api-video-upload-token-verification", args=[video.pk + 1]),
+        {"uploadToken": video.upload_token},
+        format="json",
+    )
+
+    assert invalid_token.status_code == status.HTTP_404_NOT_FOUND
+    assert invalid_token.json() == missing_video.json()
