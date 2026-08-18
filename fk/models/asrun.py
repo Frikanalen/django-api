@@ -54,3 +54,9 @@ class AsRun(TimeStampedModel):
             "-played_at",
             "-id",
         )
+        indexes = [
+            # An append-only playout log, listed newest-first and paged
+            # through. Matching the ordering exactly lets that walk the
+            # index instead of sorting the whole log per request.
+            models.Index(fields=["-played_at", "-id"], name="asrun_played_at_desc_idx"),
+        ]

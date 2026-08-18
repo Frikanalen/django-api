@@ -54,6 +54,10 @@ class Scheduleitem(models.Model):
         verbose_name = "TX schedule entry"
         verbose_name_plural = "TX schedule entries"
         ordering = ("-id",)
+        indexes = [
+            # by_day() and the front page both filter and sort on starttime.
+            models.Index(fields=["starttime"], name="scheduleitem_starttime_idx"),
+        ]
         constraints = [
             # endtime() would otherwise precede starttime, which makes the
             # item invisible to the jukebox's gap search and lets it
