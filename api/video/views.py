@@ -177,10 +177,20 @@ class VideoFilter(djfilters.FilterSet):
         # index scans -- it falls back to scanning every video row
         # regardless of table size. Each UNION branch is planned
         # independently, so each runs against its own GIN index.
+        #
+        # `.order_by()` clears the `id` ordering each branch would
+        # otherwise inherit from Video's Meta -- sorting by id here is
+        # thrown away the moment the ids reach `pk__in` below, but Postgres
+        # doesn't know that and sorts each branch anyway. `union(all=True)`
+        # skips deduplication for the same reason: `pk__in` doesn't care
+        # whether its right-hand side has duplicates, so paying to dedupe
+        # here buys nothing.
         query = SearchQuery(value, config="norwegian", search_type="websearch")
-        own_match = Video.objects.filter(search_document=query).values("pk")
-        organization_match = Video.objects.filter(organization__search_document=query).values("pk")
-        matching_ids = own_match.union(organization_match)
+        own_match = Video.objects.filter(search_document=query).order_by().values("pk")
+        organization_match = (
+            Video.objects.filter(organization__search_document=query).order_by().values("pk")
+        )
+        matching_ids = own_match.union(organization_match, all=True)
 
         video_rank = SearchRank(F("search_document"), query, cover_density=True)
         organization_rank = SearchRank(
