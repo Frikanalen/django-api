@@ -25,6 +25,8 @@ from django.db import migrations, models
 #
 # Either way it stops and names what it found, the way 0021 does. The
 # fix is to correct the data or the enum, then re-run.
+# docs/videofile-variant-preflight.sql asks the same two questions in
+# SQL, so a deploy can find out before it starts rather than halfway in.
 #
 # This one does not reverse. Putting the foreign key back means adding a
 # NOT NULL column to a populated table, which has no answer Django can
