@@ -8,20 +8,24 @@ from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.routers import SimpleRouter
 from rest_framework.urlpatterns import format_suffix_patterns
 
-import api.auth.views
-import api.organization.views
+import api.auth.views as auth_views
+import api.organization.views as organization_views
 import api.schedule.views as schedule_views
-import api.video.views
+import api.video.views as video_views
 import api.videofile.views as videofile_views
 from fkweb.views import CsrfView
 
 from . import views
 
+PK = r"(?P<pk>\d+)"
+
+# Registered under the "api/" prefix that path("api/", include(...)) supplies
+# at the bottom of this file, so none of these repeat it.
 router = SimpleRouter(trailing_slash=False)
-router.register(r"api/asrun", views.AsRunViewSet, "asrun")
-router.register(r"api/categories", views.CategoryViewSet)
-router.register(r"api/scheduleitems", schedule_views.ScheduleitemViewSet, "api-scheduleitem")
-router.register(r"api/videofiles", videofile_views.VideoFileViewSet, "api-videofile")
+router.register(r"asrun", views.AsRunViewSet, "asrun")
+router.register(r"categories", views.CategoryViewSet)
+router.register(r"scheduleitems", schedule_views.ScheduleitemViewSet, "api-scheduleitem")
+router.register(r"videofiles", videofile_views.VideoFileViewSet, "api-videofile")
 
 
 class ObtainAuthTokenJsonOnly(ObtainAuthToken):
@@ -34,73 +38,74 @@ class ObtainAuthTokenJsonOnly(ObtainAuthToken):
 # Annotated because the opening literal is all patterns, which would fix
 # the inferred type as list[URLPattern]; the router, the format-suffix
 # expansion and include() all contribute resolvers further down.
-urlpatterns: list[URLPattern | URLResolver] = [
-    url(r"^api$", views.api_root, name="api-root"),
-    url(r"^api/csrf$", CsrfView.as_view(), name="api-csrf-detail"),
-    url(r"^api/user/register$", api.auth.views.UserCreate.as_view(), name="api-user-create"),
-    url(r"^api/user/login$", api.auth.views.UserLogin.as_view(), name="api-user-login"),
-    url(r"^api/user/logout$", api.auth.views.UserLogout.as_view(), name="api-user-logout"),
-    url(r"^api/user$", api.auth.views.UserDetail.as_view(), name="api-user-detail"),
-    url(r"^api/obtain-token$", ObtainAuthTokenJsonOnly.as_view(), name="api-token-auth"),
-    url(r"^api/videos$", api.video.views.VideoList.as_view(), name="api-video-list"),
+api_patterns: list[URLPattern | URLResolver] = [
+    url(r"^csrf$", CsrfView.as_view(), name="api-csrf-detail"),
+    # Auth
+    url(r"^user/register$", auth_views.UserCreate.as_view(), name="api-user-create"),
+    url(r"^user/login$", auth_views.UserLogin.as_view(), name="api-user-login"),
+    url(r"^user/logout$", auth_views.UserLogout.as_view(), name="api-user-logout"),
+    url(r"^user$", auth_views.UserDetail.as_view(), name="api-user-detail"),
+    url(r"^obtain-token$", ObtainAuthTokenJsonOnly.as_view(), name="api-token-auth"),
+    # Video
+    url(r"^videos$", video_views.VideoList.as_view(), name="api-video-list"),
     url(
-        r"^api/videos/(?P<pk>\d+)/upload_token$",
-        api.video.views.VideoUploadTokenDetail.as_view(),
+        rf"^videos/{PK}/upload_token$",
+        video_views.VideoUploadTokenDetail.as_view(),
         name="api-video-upload-token-detail",
     ),
     url(
-        r"^api/videos/(?P<pk>\d+)/upload_token/verify$",
-        api.video.views.VideoUploadTokenVerification.as_view(),
+        rf"^videos/{PK}/upload_token/verify$",
+        video_views.VideoUploadTokenVerification.as_view(),
         name="api-video-upload-token-verification",
     ),
     url(
-        r"^api/videos/(?P<pk>\d+)/ingest$",
-        api.video.views.VideoIngestJobDetail.as_view(),
+        rf"^videos/{PK}/ingest$",
+        video_views.VideoIngestJobDetail.as_view(),
         name="api-video-ingest-job-detail",
     ),
+    url(rf"^videos/{PK}$", video_views.VideoDetail.as_view(), name="api-video-detail"),
+    # Organization
     url(
-        r"^api/videos/(?P<pk>\d+)$", api.video.views.VideoDetail.as_view(), name="api-video-detail"
-    ),
-    url(
-        r"^api/organization$",
-        api.organization.views.OrganizationList.as_view(),
+        r"^organization$",
+        organization_views.OrganizationList.as_view(),
         name="api-organization-list",
     ),
     url(
-        r"^api/organization/(?P<pk>\d+)$",
-        api.organization.views.OrganizationDetail.as_view(),
+        rf"^organization/{PK}$",
+        organization_views.OrganizationDetail.as_view(),
         name="api-organization-detail",
     ),
 ]
-urlpatterns += router.urls
+api_patterns += router.urls
 
 # Format suffixes
-urlpatterns = format_suffix_patterns(urlpatterns, allowed=["json", "api", "xml"])
+api_patterns = format_suffix_patterns(api_patterns, allowed=["json", "api", "xml"])
 
-urlpatterns += [
+api_patterns += [
     # Registered after the format-suffix expansion on purpose: a
     # `.json`-style twin would only clutter the OpenAPI schema with a
     # colliding {format} operation.
-    path(
-        "api/scheduling/policy",
+    url(
+        r"^scheduling/policy$",
         schedule_views.SchedulingPolicyView.as_view(),
         name="api-scheduling-policy",
     ),
 ]
 
-# Default login/logout views
-urlpatterns += [
-    # Spectacular API views
-    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+api_patterns += [
+    # drf-spectacular schema and docs UIs, plus DRF's own browsable-API
+    # login/logout views - not part of the API surface itself.
+    path("schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
-        "api/schema/swagger-ui/",
-        SpectacularSwaggerView.as_view(url_name="schema"),
-        name="swagger-ui",
+        "schema/swagger-ui/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"
     ),
-    path(
-        "api/schema/redoc/",
-        SpectacularRedocView.as_view(url_name="schema"),
-        name="redoc",
-    ),
-    url(r"^api/api-auth/", include("rest_framework.urls", namespace="rest_framework")),
+    path("schema/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    url(r"^api-auth/", include("rest_framework.urls", namespace="rest_framework")),
+]
+
+urlpatterns: list[URLPattern | URLResolver] = [
+    # Bare "/api", with no trailing slash, lives outside the include() below
+    # since path("api/", ...) can only ever match paths that have the slash.
+    url(r"^api$", views.api_root, name="api-root"),
+    path("api/", include(api_patterns)),
 ]
