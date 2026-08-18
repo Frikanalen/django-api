@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import TYPE_CHECKING
 
 from django.contrib import admin
@@ -19,6 +19,21 @@ if TYPE_CHECKING:
     # Only for the direct_videos annotation; a real import here would put
     # video ahead of schedule in the package's import order.
     from .video import Video
+
+
+def airtime_end(starttime: datetime, duration: timedelta) -> datetime:
+    """When an item starting at `starttime` stops occupying the air.
+
+    Saved rows carry this already, as `Scheduleitem.airtime.upper`; this is
+    for the items validation sees before there is a row to ask.
+
+    It deliberately does not write `starttime + duration`. Python adds a
+    timedelta to an aware datetime in *wall-clock* terms, so an Oslo-aware
+    start -- which is what DRF hands over, given `default_timezone=OSLO` --
+    gains an hour across the autumn transition. Playout, and the generated
+    column, count elapsed time. Converting first pins it to that.
+    """
+    return starttime.astimezone(UTC) + duration
 
 
 class Scheduleitem(models.Model):
@@ -94,8 +109,8 @@ class Scheduleitem(models.Model):
             GistIndex(fields=["airtime"], name="scheduleitem_airtime_gist"),
         ]
         constraints = [
-            # endtime() would otherwise precede starttime, which makes the
-            # item invisible to the jukebox's gap search and lets it
+            # An item's airtime would otherwise end before it began, which
+            # makes it invisible to the jukebox's gap search and lets it
             # schedule over programming that is really going out.
             models.CheckConstraint(
                 condition=models.Q(duration__gte=timedelta(0)),
@@ -107,11 +122,6 @@ class Scheduleitem(models.Model):
         # %f renders microseconds as six digits; drop four to get hundredths
         timestamp = self.starttime.strftime("%Y-%m-%d %H:%M:%S.%f")[:-4]
         return f"{timestamp}: {self.video or self.default_name}"
-
-    def endtime(self):
-        if not self.duration:
-            return self.starttime
-        return self.starttime + self.duration
 
     def _timing_changed(self):
         """Whether this save moves the item in time, for an item that exists."""
@@ -141,7 +151,9 @@ class Scheduleitem(models.Model):
         if self.pk and not self._timing_changed():
             return
         conflict = (
-            Scheduleitem.objects.overlapping(self.starttime, self.endtime())
+            Scheduleitem.objects.overlapping(
+                self.starttime, airtime_end(self.starttime, self.duration)
+            )
             .exclude(pk=self.pk)
             .first()
         )

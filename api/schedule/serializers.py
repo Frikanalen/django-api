@@ -13,6 +13,7 @@ from fk.models import (
     Video,
     VideoFile,
     VideoFileVariant,
+    airtime_end,
 )
 
 OSLO = ZoneInfo("Europe/Oslo")
@@ -63,7 +64,11 @@ class ScheduleitemVideoSerializer(serializers.ModelSerializer):
 
 class ScheduleitemModifySerializer(serializers.ModelSerializer):
     starttime = serializers.DateTimeField(default_timezone=OSLO)
-    endtime = serializers.DateTimeField(default_timezone=OSLO, read_only=True)
+    # Read straight off the generated range column, so the end time the API
+    # reports is the one the conflict queries actually used.
+    endtime = serializers.DateTimeField(
+        source="airtime.upper", default_timezone=OSLO, read_only=True
+    )
 
     class Meta:
         model = Scheduleitem
@@ -77,7 +82,7 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
                 return self.instance and getattr(self.instance, v)
 
             start = data.get("starttime", g("starttime"))
-            end = start + data.get("duration", g("duration"))
+            end = airtime_end(start, data.get("duration", g("duration")))
             # Jukebox fillers do not block a pick, so only blocking
             # conflicts refuse here. This early check is for the 400;
             # save re-checks under lock before displacing.
@@ -138,7 +143,10 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
             # create a new conflict.
             return
         blocking, displaceable = policy.airtime_conflicts(
-            start, start + duration, exclude_pk=instance and instance.pk, for_update=True
+            start,
+            airtime_end(start, duration),
+            exclude_pk=instance and instance.pk,
+            for_update=True,
         )
         if blocking:
             raise serializers.ValidationError({"duration": f"Conflict with '{blocking[0]}'."})
@@ -148,7 +156,11 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
 class ScheduleitemReadSerializer(serializers.ModelSerializer):
     video = ScheduleitemVideoSerializer()
     starttime = serializers.DateTimeField(default_timezone=OSLO)
-    endtime = serializers.DateTimeField(default_timezone=OSLO, read_only=True)
+    # Read straight off the generated range column, so the end time the API
+    # reports is the one the conflict queries actually used.
+    endtime = serializers.DateTimeField(
+        source="airtime.upper", default_timezone=OSLO, read_only=True
+    )
     displaceable = serializers.SerializerMethodField()
 
     class Meta:

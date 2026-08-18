@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from django.utils import timezone as django_timezone
 
-from fk.models import Scheduleitem
+from fk.models import Scheduleitem, airtime_end
 
 pytestmark = pytest.mark.django_db
 
@@ -64,3 +64,25 @@ def test_overlapping_excludes_back_to_back_items(
 
     assert list(abutting) == []
     assert len(straddling) == 1
+
+
+def test_airtime_counts_elapsed_time_across_the_autumn_transition(
+    schedule_item_factory: Callable[..., Scheduleitem],
+) -> None:
+    """Oslo repeats 02:00-03:00 on 2026-10-25.
+
+    An hour of airtime is an hour of real time -- playout does not pause for
+    the clock going back -- so an item starting 02:30 CEST is off the air at
+    01:30 UTC. Python's `starttime + duration` is wall-clock arithmetic and
+    would put it an hour later, which is why `airtime_end` exists.
+    """
+    start = datetime(2026, 10, 25, 2, 30, tzinfo=OSLO)
+    duration = timedelta(hours=1)
+    item = schedule_item_factory(starttime=start, duration=duration)
+    item.refresh_from_db()
+
+    assert item.airtime.upper == datetime(2026, 10, 25, 1, 30, tzinfo=UTC)
+    assert airtime_end(start, duration) == item.airtime.upper
+    # The arithmetic the validation paths used to do, kept here to show what
+    # the helper is guarding against: an hour of wall clock, two of airtime.
+    assert (start + duration).astimezone(UTC) == datetime(2026, 10, 25, 2, 30, tzinfo=UTC)
