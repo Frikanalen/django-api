@@ -50,8 +50,9 @@ def fill_agenda_with_jukebox(
     # a minute for the whole window.  Video.duration defaults to zero,
     # so this is ordinary unimported data, not corruption -- negative
     # lengths are barred by a check constraint on the model.  Kept out
-    # of Video.objects.fillers() on purpose: that queryset also feeds
-    # the jukebox CSV, whose output is a frozen contract.
+    # of Video.objects.fillers() on purpose: that queryset answers "may
+    # this be aired as filler", which is a question about accountability
+    # rather than about whether a given planner can use the video.
     candidates = list(Video.objects.fillers().exclude(duration__lte=datetime.timedelta(0)))
 
     # The context seeds from everything already on the air in the

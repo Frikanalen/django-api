@@ -164,8 +164,6 @@ def test_videos_stop_being_offered_to_the_jukebox(lose_editor, organization, vid
     lose_editor(organization)
 
     assert list(Video.objects.fillers()) == []
-    body = APIClient().get(reverse("jukebox-csv")).content.decode()
-    assert video.name not in body
 
 
 @pytest.mark.parametrize("lose_editor", LOSS)

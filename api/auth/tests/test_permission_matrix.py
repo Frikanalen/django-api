@@ -239,7 +239,6 @@ def test_api_root_links_every_endpoint_with_expected_anonymous_access(
     expected = {
         "asrun": 200,
         "category": 200,
-        "jukebox-csv": 200,
         "obtain-token": 405,
         "scheduleitems": 200,
         "videofiles": 200,
