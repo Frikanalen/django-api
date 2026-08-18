@@ -17,6 +17,6 @@ from .organization import Organization  # noqa: F401
 from .schedule import Scheduleitem, SchedulePurpose, WeeklySlot  # noqa: F401
 from .user import User, UserManager  # noqa: F401
 from .video import Video  # noqa: F401
-from .video_file import FileFormat, VideoFile  # noqa: F401
+from .video_file import VideoFile, VideoFileVariant  # noqa: F401
 
 logger = logging.getLogger(__name__)

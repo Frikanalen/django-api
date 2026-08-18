@@ -1,4 +1,3 @@
-from django.db.models import Prefetch
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, viewsets
@@ -18,7 +17,7 @@ from api.schedule.serializers import (
     ScheduleitemReadSerializer,
     SchedulingPolicySerializer,
 )
-from fk.models import Scheduleitem, VideoFile
+from fk.models import Scheduleitem
 
 
 class ScheduleitemViewSet(RequireSchedulingEligibility, viewsets.ModelViewSet):
@@ -38,12 +37,11 @@ class ScheduleitemViewSet(RequireSchedulingEligibility, viewsets.ModelViewSet):
     """
 
     # Eagerly load the nested relations exposed by ScheduleitemReadSerializer.
+    # The files themselves still need prefetching; their format does not,
+    # now that it is a column on the row rather than a table to join.
     queryset = Scheduleitem.objects.select_related("video__organization").prefetch_related(
         "video__categories",
-        Prefetch(
-            "video__videofile_set",
-            queryset=VideoFile.objects.select_related("format"),
-        ),
+        "video__videofile_set",
     )
     pagination_class = FkSchedulePagination
     permission_classes = (CanScheduleForOrganizationOrReadOnly,)

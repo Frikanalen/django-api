@@ -4,7 +4,7 @@ Wire-format tests for the video endpoints.
 The frontend consumes the rendered JSON, not the serializer's internal
 representation, so these tests assert on response.json(): that includes
 the CamelCaseJSONRenderer pass, which rewrites every key in the payload
-- including the fsname keys of the `files` dict ('large_thumb' becomes
+- including the variant keys of the `files` dict ('large_thumb' becomes
 'largeThumb' on the wire).
 """
 
@@ -14,7 +14,7 @@ import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from fk.models import Category, FileFormat, Organization, User, Video, VideoFile
+from fk.models import Category, Organization, User, Video, VideoFile, VideoFileVariant
 
 pytestmark = pytest.mark.django_db
 
@@ -43,16 +43,12 @@ def video(editor: User, organization: Organization) -> Video:
         uploaded_time=UPLOADED,
     )
     video.categories.add(category)
-    for fsname, filename in (
-        ("original", "master.mp4"),
-        ("large_thumb", "thumb.jpg"),
-        ("theora", "video.ogv"),
+    for variant, filename in (
+        (VideoFileVariant.ORIGINAL, "master.mp4"),
+        (VideoFileVariant.LARGE_THUMB, "thumb.jpg"),
+        (VideoFileVariant.THEORA, "video.ogv"),
     ):
-        VideoFile.objects.create(
-            video=video,
-            format=FileFormat.objects.create(fsname=fsname),
-            filename=filename,
-        )
+        VideoFile.objects.create(video=video, variant=variant, filename=filename)
     # created_time/updated_time are auto-set; pin them so the rendered
     # timestamps are reproducible.
     Video.objects.filter(pk=video.pk).update(created_time=CREATED, updated_time=UPDATED)
@@ -203,11 +199,7 @@ def test_video_without_files_uses_fallback_urls(editor: User, organization: Orga
 def test_a_dash_manifest_is_offered_under_its_own_files_key(video: Video) -> None:
     # 'dash' is one word, so it survives the camel-case renderer intact --
     # unlike 'large_thumb'. The frontend reads the manifest URL from here.
-    VideoFile.objects.create(
-        video=video,
-        format=FileFormat.objects.get(fsname="dash"),
-        filename="manifest.mpd",
-    )
+    VideoFile.objects.create(video=video, variant=VideoFileVariant.DASH, filename="manifest.mpd")
 
     payload = APIClient().get(reverse("api-video-detail", args=[video.pk])).json()
 

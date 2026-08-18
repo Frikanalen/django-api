@@ -9,7 +9,7 @@ import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from fk.models import FileFormat, Organization, User, Video, VideoFile
+from fk.models import Organization, User, Video, VideoFile, VideoFileVariant
 
 pytestmark = pytest.mark.django_db
 
@@ -28,10 +28,12 @@ def video() -> Video:
     )
 
 
-def make_file(video: Video, fsname: str = "original", **fields) -> VideoFile:
+def make_file(
+    video: Video, variant: VideoFileVariant = VideoFileVariant.ORIGINAL, **fields
+) -> VideoFile:
     video_file = VideoFile.objects.create(
         video=video,
-        format=FileFormat.objects.get_or_create(fsname=fsname)[0],
+        variant=variant,
         filename=fields.pop("filename", "file.mp4"),
         **fields,
     )
@@ -49,7 +51,7 @@ def test_videofile_detail_shape(video: Video) -> None:
         "id": video_file.pk,
         "createdTime": "2015-01-01T10:00:00Z",
         "video": video.pk,
-        "format": video_file.format.pk,
+        "variant": "original",
         "filename": "master.mp4",
         "integratedLufs": -23.0,
         "truepeakLufs": None,
@@ -74,15 +76,15 @@ def test_videofile_list_does_not_hide_files_of_improper_videos(video: Video) -> 
 
 
 def test_videofile_list_envelope_and_ordering(video: Video) -> None:
-    first_video_file = make_file(video, fsname="original")
-    second_video_file = make_file(video, fsname="broadcast")
+    first_video_file = make_file(video, VideoFileVariant.ORIGINAL)
+    second_video_file = make_file(video, VideoFileVariant.BROADCAST)
     newer_video = Video.objects.create(
         name="Newer video",
         creator=video.creator,
         organization=video.organization,
         proper_import=True,
     )
-    newer_file = make_file(newer_video, fsname="original")
+    newer_file = make_file(newer_video, VideoFileVariant.ORIGINAL)
 
     response = APIClient().get(reverse("api-videofile-list"))
     payload = response.json()

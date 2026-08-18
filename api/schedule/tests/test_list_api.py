@@ -9,7 +9,14 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from fk.models import Category, FileFormat, Organization, Scheduleitem, Video, VideoFile
+from fk.models import (
+    Category,
+    Organization,
+    Scheduleitem,
+    Video,
+    VideoFile,
+    VideoFileVariant,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -242,10 +249,9 @@ def test_list_serializes_nested_video_details(
     target_day = date(2015, 1, 2)
     category = Category.objects.create(id=1, name="News")
     video.categories.add(category)
-    file_format = FileFormat.objects.create(fsname="original")
     video_file = VideoFile.objects.create(
         video=video,
-        format=file_format,
+        variant=VideoFileVariant.ORIGINAL,
         filename="schedule-test.mp4",
     )
     item = schedule_item_factory(starttime=at(target_day, 10))
@@ -273,7 +279,7 @@ def test_list_serializes_nested_video_details(
                 "files": [
                     {
                         "id": video_file.pk,
-                        "fsname": file_format.fsname,
+                        "variant": "original",
                         "filename": video_file.filename,
                     }
                 ],
@@ -292,8 +298,9 @@ def test_list_query_count_is_constant(
     django_assert_max_num_queries,
 ) -> None:
     target_day = date(2015, 1, 2)
-    file_format = FileFormat.objects.create(fsname="original")
-    VideoFile.objects.create(video=video, format=file_format, filename="schedule-test.mp4")
+    VideoFile.objects.create(
+        video=video, variant=VideoFileVariant.ORIGINAL, filename="schedule-test.mp4"
+    )
     for hour in range(10, 15):
         schedule_item_factory(starttime=at(target_day, hour))
 

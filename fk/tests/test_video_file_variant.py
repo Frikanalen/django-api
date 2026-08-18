@@ -1,6 +1,6 @@
 """
-The names a FileFormat may take, and the 'dash' row that migration 0024
-puts in every database.
+The variants a VideoFile may take, now that they are an enum rather than
+rows in a lookup table.
 """
 
 from datetime import timedelta
@@ -8,7 +8,7 @@ from datetime import timedelta
 import pytest
 from django.core.exceptions import ValidationError
 
-from fk.models import FileFormat, Organization, User, Video, VideoFile
+from fk.models import Organization, User, Video, VideoFile, VideoFileVariant
 
 pytestmark = pytest.mark.django_db
 
@@ -17,8 +17,8 @@ MEDIA = "https://frikanalen.no/media/"
 
 @pytest.fixture
 def video() -> Video:
-    editor = User.objects.create(email="file-format-editor@example.test")
-    organization = Organization.objects.create(name="File format org", editor=editor)
+    editor = User.objects.create(email="file-variant-editor@example.test")
+    organization = Organization.objects.create(name="File variant org", editor=editor)
     return Video.objects.create(
         name="Streaming test video",
         creator=editor,
@@ -28,31 +28,38 @@ def video() -> Video:
     )
 
 
-def test_dash_row_ships_with_the_schema() -> None:
-    # Created by the data migration, so ingest can register a manifest
-    # without anyone adding the format by hand first.
-    dash = FileFormat.objects.get(fsname="dash")
-
-    assert dash.mime_type == "application/dash+xml"
-    # A manifest is not a source a <video> element can play unaided; see
-    # the migration for why it stays out of vod_files().
-    assert dash.vod_publish is False
-    # And 'dash' is a permitted fsname, not just a row that got past the
-    # choices by being written through the ORM.
-    dash.full_clean()
-
-
-def test_an_unlisted_fsname_is_rejected() -> None:
-    with pytest.raises(ValidationError):
-        FileFormat(fsname="hls").full_clean()
-
-
 def test_a_dash_manifest_resolves_under_its_own_directory(video: Video) -> None:
     manifest = VideoFile.objects.create(
         video=video,
-        format=FileFormat.objects.get(fsname="dash"),
+        variant=VideoFileVariant.DASH,
         filename="manifest.mpd",
     )
 
+    # The stored value is the name itself, so no row has to exist first.
+    assert manifest.variant == "dash"
     assert manifest.location(relative=True) == f"{video.pk}/dash/manifest.mpd"
-    assert video.videofile_url("dash") == f"{video.pk}/dash/manifest.mpd"
+    assert video.videofile_url(VideoFileVariant.DASH) == f"{video.pk}/dash/manifest.mpd"
+
+
+def test_an_unlisted_variant_is_rejected(video: Video) -> None:
+    with pytest.raises(ValidationError):
+        VideoFile(video=video, variant="hls", filename="master.m3u8").full_clean()
+
+
+def test_mime_types_are_declared_where_we_have_an_answer() -> None:
+    assert VideoFileVariant.DASH.mime_type == "application/dash+xml"
+    assert VideoFileVariant.THEORA.mime_type == "video/ogg"
+    # Nothing asks what a broadcast master is served as, and inventing an
+    # answer would put it in payloads that never carried one.
+    assert VideoFileVariant.BROADCAST.mime_type is None
+
+
+def test_only_directly_playable_variants_are_published_to_vod(video: Video) -> None:
+    VideoFile.objects.create(video=video, variant=VideoFileVariant.DASH, filename="manifest.mpd")
+    VideoFile.objects.create(video=video, variant=VideoFileVariant.THEORA, filename="video.ogv")
+
+    # A manifest needs a player to interpret it, so it is not a source
+    # vod_files() can hand to a <video> element.
+    assert video.vod_files() == [
+        {"url": f"{MEDIA}{video.pk}/theora/video.ogv", "mime_type": "video/ogg"}
+    ]

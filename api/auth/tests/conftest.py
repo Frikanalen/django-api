@@ -9,12 +9,12 @@ from rest_framework.test import APIClient
 from fk.models import (
     AsRun,
     Category,
-    FileFormat,
     Organization,
     Scheduleitem,
     User,
     Video,
     VideoFile,
+    VideoFileVariant,
 )
 
 
@@ -69,13 +69,10 @@ def video(member: User, organization: Organization) -> Video:
 
 
 @pytest.fixture
-def file_format(db) -> FileFormat:
-    return FileFormat.objects.create(fsname="original")
-
-
-@pytest.fixture
-def videofile(video: Video, file_format: FileFormat) -> VideoFile:
-    return VideoFile.objects.create(video=video, format=file_format, filename="matrix.mp4")
+def videofile(video: Video) -> VideoFile:
+    return VideoFile.objects.create(
+        video=video, variant=VideoFileVariant.ORIGINAL, filename="matrix.mp4"
+    )
 
 
 @pytest.fixture

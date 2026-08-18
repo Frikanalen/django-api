@@ -350,6 +350,9 @@ SPECTACULAR_SETTINGS = {
         # happens to sit on: the generated name would be `StateEnum`,
         # which the next model with a `state` field would collide with.
         "IngestStateEnum": "fk.models.ingest.IngestState.choices",
+        # Same reasoning, and the two serializers that expose a variant
+        # must share one component rather than generate one apiece.
+        "VideoFileVariantEnum": "fk.models.video_file.VideoFileVariant.choices",
         "ValidationErrorEnum": "drf_standardized_errors.openapi_serializers.ValidationErrorEnum.choices",
         "ClientErrorEnum": "drf_standardized_errors.openapi_serializers.ClientErrorEnum.choices",
         "ServerErrorEnum": "drf_standardized_errors.openapi_serializers.ServerErrorEnum.choices",

@@ -7,7 +7,6 @@ from django.contrib.auth.models import Group
 from fk.forms import UserChangeForm, UserCreationForm
 from fk.models import (
     Category,
-    FileFormat,
     IngestJob,
     Organization,
     Scheduleitem,
@@ -133,7 +132,6 @@ class WeeklySlotAdmin(admin.ModelAdmin):
 
 
 admin.site.register(Category)
-admin.site.register(FileFormat)
 admin.site.register(IngestJob, IngestJobAdmin)
 admin.site.register(Organization, OrganizationAdmin)
 admin.site.register(SchedulePurpose, SchedulePurposeAdmin)
