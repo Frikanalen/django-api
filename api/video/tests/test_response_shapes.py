@@ -198,3 +198,17 @@ def test_video_without_files_uses_fallback_urls(editor: User, organization: Orga
     assert payload["files"] == {}
     assert payload["ogvUrl"] is None
     assert payload["largeThumbnailUrl"] == "/static/default_large_thumbnail.png"
+
+
+def test_a_dash_manifest_is_offered_under_its_own_files_key(video: Video) -> None:
+    # 'dash' is one word, so it survives the camel-case renderer intact --
+    # unlike 'large_thumb'. The frontend reads the manifest URL from here.
+    VideoFile.objects.create(
+        video=video,
+        format=FileFormat.objects.get(fsname="dash"),
+        filename="manifest.mpd",
+    )
+
+    payload = APIClient().get(reverse("api-video-detail", args=[video.pk])).json()
+
+    assert payload["files"]["dash"] == f"{MEDIA}/{video.pk}/dash/manifest.mpd"
