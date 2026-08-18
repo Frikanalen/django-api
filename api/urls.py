@@ -21,23 +21,7 @@ router = SimpleRouter(trailing_slash=False)
 router.register(r"api/asrun", views.AsRunViewSet, "asrun")
 router.register(r"api/categories", views.CategoryViewSet)
 router.register(r"api/scheduleitems", schedule_views.ScheduleitemViewSet, "api-scheduleitem")
-
-# I am manually generating these to in order to have the transition to a ViewSet be
-# as compatible as at all possible with legacy frontend etc. until we can phase it out.
-videofile_list = videofile_views.VideoFileViewSet.as_view(
-    {
-        "get": "list",
-        "post": "create",
-    }
-)
-videofile_detail = videofile_views.VideoFileViewSet.as_view(
-    {
-        "get": "retrieve",
-        "put": "update",
-        "patch": "partial_update",
-        "delete": "destroy",
-    }
-)
+router.register(r"api/videofiles", videofile_views.VideoFileViewSet, "api-videofile")
 
 
 class ObtainAuthTokenJsonOnly(ObtainAuthToken):
@@ -77,8 +61,6 @@ urlpatterns: list[URLPattern | URLResolver] = [
     url(
         r"^api/videos/(?P<pk>\d+)$", api.video.views.VideoDetail.as_view(), name="api-video-detail"
     ),
-    url(r"^api/videofiles$", videofile_list, name="api-videofile-list"),
-    url(r"^api/videofiles/(?P<pk>\d+)$", videofile_detail, name="api-videofile-detail"),
     url(
         r"^api/organization$",
         api.organization.views.OrganizationList.as_view(),
