@@ -1,7 +1,7 @@
 from hmac import compare_digest
 
 from django.contrib.postgres.search import SearchQuery, SearchRank
-from django.db.models import F, Q
+from django.db.models import F
 from django.db.models.functions import Greatest
 from django_filters import rest_framework as djfilters
 from drf_spectacular.utils import OpenApiResponse, extend_schema
@@ -168,14 +168,27 @@ class VideoFilter(djfilters.FilterSet):
         # `websearch` accepts ordinary web-style input, including quoted
         # phrases, and deliberately never treats malformed input as SQL
         # syntax. The vectors are generated columns backed by GIN indexes.
+        #
+        # Matching ids are collected via UNION rather than a single
+        # `Q(search_document=query) | Q(organization__search_document=query)`.
+        # That single-query form (including the `organization__in=` subquery
+        # variant) puts both tsvector checks behind one join, and Postgres
+        # can't decompose an OR spanning two tables back into per-table
+        # index scans -- it falls back to scanning every video row
+        # regardless of table size. Each UNION branch is planned
+        # independently, so each runs against its own GIN index.
         query = SearchQuery(value, config="norwegian", search_type="websearch")
+        own_match = Video.objects.filter(search_document=query).values("pk")
+        organization_match = Video.objects.filter(organization__search_document=query).values("pk")
+        matching_ids = own_match.union(organization_match)
+
         video_rank = SearchRank(F("search_document"), query, cover_density=True)
         organization_rank = SearchRank(
             F("organization__search_document"), query, cover_density=True
         )
         return (
-            queryset.annotate(search_rank=Greatest(video_rank, organization_rank))
-            .filter(Q(search_document=query) | Q(organization__search_document=query))
+            queryset.filter(pk__in=matching_ids)
+            .annotate(search_rank=Greatest(video_rank, organization_rank))
             .order_by("-search_rank", "-id")
         )
 
