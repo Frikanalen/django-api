@@ -2,6 +2,8 @@ from datetime import date, datetime, time, timedelta
 from typing import TYPE_CHECKING
 
 from django.contrib import admin
+from django.contrib.postgres.fields import DateTimeRangeField
+from django.contrib.postgres.indexes import GistIndex
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
@@ -48,6 +50,37 @@ class Scheduleitem(models.Model):
     # programming instead of ripping them off the air.
     weekly_slot = models.ForeignKey("WeeklySlot", null=True, blank=True, on_delete=models.SET_NULL)
 
+    # The airtime this item occupies, as a half-open range, so "is that
+    # slot taken" is one indexed `&&` against a GiST index rather than a
+    # scan computing every row's end time. Derived rather than stored:
+    # starttime and duration remain the writable truth, and a generated
+    # column cannot drift from them.
+    #
+    # The arithmetic is pinned to UTC because `timestamptz + interval` is
+    # merely *stable* -- adding a day component consults the session
+    # TimeZone -- and a generation expression must be immutable. This
+    # changes nothing: Django runs its connections in UTC (USE_TZ without
+    # a per-database TIME_ZONE), so the pinned expression is exactly what
+    # the old `starttime + duration` annotation already evaluated to.
+    airtime = models.GeneratedField(
+        expression=models.Func(
+            models.F("starttime"),
+            models.Func(
+                models.Value("UTC"),
+                models.ExpressionWrapper(
+                    models.Func(models.Value("UTC"), models.F("starttime"), function="timezone")
+                    + models.F("duration"),
+                    output_field=models.DateTimeField(),
+                ),
+                function="timezone",
+            ),
+            models.Value("[)"),
+            function="tstzrange",
+        ),
+        output_field=DateTimeRangeField(),
+        db_persist=True,
+    )
+
     objects = ScheduleitemQuerySet.as_manager()
 
     class Meta:
@@ -55,8 +88,10 @@ class Scheduleitem(models.Model):
         verbose_name_plural = "TX schedule entries"
         ordering = ("-id",)
         indexes = [
-            # by_day() and the front page both filter and sort on starttime.
+            # by_day() and the front page both filter and sort on starttime;
+            # a GiST index over airtime answers neither, having no ordering.
             models.Index(fields=["starttime"], name="scheduleitem_starttime_idx"),
+            GistIndex(fields=["airtime"], name="scheduleitem_airtime_gist"),
         ]
         constraints = [
             # endtime() would otherwise precede starttime, which makes the

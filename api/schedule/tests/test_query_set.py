@@ -43,3 +43,24 @@ def test_by_day_without_a_start_date_anchors_on_the_current_oslo_day(
     expected = schedule_item_factory(starttime=datetime.combine(today, time(0, 1), tzinfo=OSLO))
 
     assert list(Scheduleitem.objects.by_day(days=1)) == [expected]
+
+
+def test_overlapping_excludes_back_to_back_items(
+    schedule_item_factory: Callable[..., Scheduleitem],
+) -> None:
+    """The bounds are half-open, so an item ending exactly when the window
+    opens is not a conflict. Pinned here because the check moved from a
+    pair of scalar comparisons to a range `&&`."""
+    schedule_item_factory(
+        starttime=datetime(2015, 1, 1, 10, tzinfo=OSLO), duration=timedelta(hours=1)
+    )
+
+    abutting = Scheduleitem.objects.overlapping(
+        datetime(2015, 1, 1, 11, tzinfo=OSLO), datetime(2015, 1, 1, 12, tzinfo=OSLO)
+    )
+    straddling = Scheduleitem.objects.overlapping(
+        datetime(2015, 1, 1, 10, 30, tzinfo=OSLO), datetime(2015, 1, 1, 11, 30, tzinfo=OSLO)
+    )
+
+    assert list(abutting) == []
+    assert len(straddling) == 1

@@ -4,7 +4,7 @@ Durations may not be negative, on any of the three models that carry one.
 A negative length is not a shorter programme, it is corrupt data, and
 every scheduler in the codebase does arithmetic on these fields: the
 jukebox filler walked its clock backwards and looped forever on one, and
-a Scheduleitem whose endtime() precedes its starttime is invisible to
+a Scheduleitem whose airtime ends before it starts is invisible to
 the gap search that is supposed to route around it.
 
 Two layers enforce it, and both are tested here because they catch
@@ -17,7 +17,7 @@ from datetime import timedelta
 
 import pytest
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import DataError, IntegrityError, transaction
 from django.utils import timezone
 
 from fk.models import Organization, Scheduleitem, User, Video, WeeklySlot
@@ -60,7 +60,15 @@ def test_video_duration_cannot_be_negative(editor: User, organization: Organizat
 
 
 def test_scheduleitem_duration_cannot_be_negative(video: Video) -> None:
-    with pytest.raises(IntegrityError), transaction.atomic():
+    """Refused by the generated `airtime` column, not the check constraint.
+
+    Postgres computes a generated column while building the row, so the
+    tstzrange constructor rejects the inverted bounds before
+    `scheduleitem_duration_not_negative` is ever evaluated. The row is
+    still refused either way; only the error differs, and the field's
+    MinValueValidator is what keeps that off the API surface.
+    """
+    with pytest.raises(DataError), transaction.atomic():
         Scheduleitem.objects.create(
             video=video,
             starttime=timezone.now(),
