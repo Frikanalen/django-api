@@ -20,7 +20,8 @@ WITH expected(fsname, vod_publish, mime_type) AS (
            ('theora',        true,  'video/ogg'),
            ('srt',           false, NULL),
            ('cloudflare_id', false, NULL),
-           ('dash',          false, 'application/dash+xml')
+           ('dash',          false, 'application/dash+xml'),
+           ('webm_med',      false, NULL)
 )
 SELECT f.fsname,
        (SELECT count(*) FROM fk_videofile vf WHERE vf.format_id = f.id) AS files,
