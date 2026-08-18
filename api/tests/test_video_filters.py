@@ -14,7 +14,7 @@ import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from fk.models import FileFormat, Organization, User, Video, VideoFile
+from fk.models import Organization, User, Video, VideoFile, VideoFileVariant
 
 pytestmark = pytest.mark.django_db
 
@@ -72,12 +72,12 @@ def catalogue() -> dict[str, Video]:
         ref_url="ab",
     )
 
-    original = FileFormat.objects.create(fsname="original")
-    broadcast = FileFormat.objects.create(fsname="broadcast")
-    VideoFile.objects.create(video=tech, format=original, filename="tech_video.mp4")
-    VideoFile.objects.create(video=dummy, format=original, filename="dummy_video.mov")
-    VideoFile.objects.create(video=unpublished, format=broadcast, filename="unpublished_video.dv")
-    VideoFile.objects.create(video=broken, format=original, filename="broken_video.mov")
+    original = VideoFileVariant.ORIGINAL
+    broadcast = VideoFileVariant.BROADCAST
+    VideoFile.objects.create(video=tech, variant=original, filename="tech_video.mp4")
+    VideoFile.objects.create(video=dummy, variant=original, filename="dummy_video.mov")
+    VideoFile.objects.create(video=unpublished, variant=broadcast, filename="unpublished_video.dv")
+    VideoFile.objects.create(video=broken, variant=original, filename="broken_video.mov")
 
     return {"tech": tech, "dummy": dummy, "unpublished": unpublished, "broken": broken}
 
@@ -126,7 +126,7 @@ def test_video_list_filters(catalogue, lookup: str, expected: list[str]) -> None
 VIDEOFILE_LOOKUPS = [
     ("?video_id={tech_pk}", ["tech_video.mp4"]),
     ("?video_id={dummy_pk}", ["dummy_video.mov"]),
-    ("?format__fsname=broadcast", ["unpublished_video.dv"]),
+    ("?variant=broadcast", ["unpublished_video.dv"]),
 ]
 
 
@@ -140,3 +140,11 @@ def test_videofile_list_filters(catalogue, lookup: str, expected: list[str]) -> 
 
     assert response.status_code == 200, lookup
     assert [item["filename"] for item in response.json()["results"]] == expected
+
+
+def test_videofile_variant_filter_rejects_an_unlisted_name(catalogue) -> None:
+    """The filter takes its choices from the enum, so a name outside it
+    is a bad request rather than a silently empty result."""
+    response = APIClient().get(reverse("api-videofile-list") + "?variant=hls")
+
+    assert response.status_code == 400

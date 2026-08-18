@@ -148,7 +148,7 @@ def test_only_staff_may_create_categories(role, expected_status, role_client):
     ],
 )
 def test_creation_on_organization_owned_endpoints_requires_membership(
-    role, expected_status, role_client, organization, video, file_format
+    role, expected_status, role_client, organization, video
 ):
     """
     Replaces the pinned create hole: creating a video in an organization,
@@ -163,7 +163,7 @@ def test_creation_on_organization_owned_endpoints_requires_membership(
         ),
         (
             "api-videofile-list",
-            {"video": video.pk, "format": file_format.pk, "filename": "created.mov"},
+            {"video": video.pk, "variant": "original", "filename": "created.mov"},
         ),
         (
             "api-scheduleitem-list",
@@ -239,7 +239,6 @@ def test_api_root_links_every_endpoint_with_expected_anonymous_access(
     expected = {
         "asrun": 200,
         "category": 200,
-        "jukebox-csv": 200,
         "obtain-token": 405,
         "scheduleitems": 200,
         "videofiles": 200,

@@ -1,13 +1,15 @@
-from rest_framework.serializers import ModelSerializer, PrimaryKeyRelatedField
+from rest_framework.serializers import ChoiceField, ModelSerializer, PrimaryKeyRelatedField
 
-from fk.models import FileFormat, Video, VideoFile
+from fk.models import Video, VideoFile, VideoFileVariant
 
 
 class VideoFileSerializer(ModelSerializer):
-    # this gives a much better DX, but we have to remain compatible with the Django 3.x backend.
-    # should be removed when we drop support for the old Django backend.
-    # format = serializers.SlugRelatedField(slug_field="fsname", queryset=FileFormat.objects.all())
-    format = PrimaryKeyRelatedField(queryset=FileFormat.objects.all())
+    # The variant is its name -- "broadcast", "dash" -- where this used
+    # to be `format` carrying the primary key of a row in a lookup
+    # table. Named explicitly rather than left to ModelSerializer so
+    # that the schema points at one shared enum component, see
+    # ENUM_NAME_OVERRIDES.
+    variant = ChoiceField(choices=VideoFileVariant.choices)
     video = PrimaryKeyRelatedField(queryset=Video.objects.all())
 
     class Meta:
@@ -19,7 +21,7 @@ class VideoFileSerializer(ModelSerializer):
         fields = (
             *read_only_fields,
             "video",
-            "format",
+            "variant",
             "filename",
             "integrated_lufs",
             "truepeak_lufs",

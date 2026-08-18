@@ -33,7 +33,7 @@ class BaseVideoSerializer(serializers.ModelSerializer):
     @staticmethod
     def get_files(video) -> dict[str, str]:
         return {
-            vf.format.fsname: settings.FK_MEDIA_URLPREFIX + vf.location(relative=True)
+            vf.variant: settings.FK_MEDIA_URLPREFIX + vf.location(relative=True)
             for vf in video.videofile_set.all()
         }
 
