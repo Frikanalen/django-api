@@ -5,18 +5,30 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from agenda.scheduling import policy
-from fk.models import AsRun, Category, Organization, Scheduleitem, Video, VideoFile
+from fk.models import (
+    AsRun,
+    Category,
+    Organization,
+    Scheduleitem,
+    Video,
+    VideoFile,
+    VideoFileVariant,
+)
 
 OSLO = ZoneInfo("Europe/Oslo")
 
 
 class ScheduleitemVideoFileSerializer(serializers.ModelSerializer):
-    fsname = serializers.CharField(source="format.fsname", read_only=True)
+    # Was `fsname`, reading through the format table that no longer
+    # exists. Renamed to match the videofile endpoint, which calls the
+    # same value `variant`: one name for one thing, now that both are
+    # the same enum.
+    variant = serializers.ChoiceField(choices=VideoFileVariant.choices, read_only=True)
 
     class Meta:
         model = VideoFile
-        fields = ("id", "fsname", "filename")
-        read_only_fields = ("id", "fsname", "filename")
+        fields = ("id", "variant", "filename")
+        read_only_fields = ("id", "variant", "filename")
 
 
 class ScheduleitemOrganizationSerializer(serializers.ModelSerializer):

@@ -1,78 +1,5 @@
 [
    {
-      "model": "fk.fileformat",
-      "pk": 1,
-      "fields": {
-         "fsname": "large_thumb"
-      }
-   },
-   {
-      "model": "fk.fileformat",
-      "pk": 2,
-      "fields": {
-         "fsname": "broadcast"
-      }
-   },
-   {
-      "model": "fk.fileformat",
-      "pk": 3,
-      "fields": {
-         "fsname": "vc1"
-      }
-   },
-   {
-      "model": "fk.fileformat",
-      "pk": 4,
-      "fields": {
-         "fsname": "med_thumb"
-      }
-   },
-   {
-      "model": "fk.fileformat",
-      "pk": 5,
-      "fields": {
-         "fsname": "small_thumb"
-      }
-   },
-   {
-      "model": "fk.fileformat",
-      "pk": 6,
-      "fields": {
-         "fsname": "original"
-      }
-   },
-   {
-      "model": "fk.fileformat",
-      "pk": 7,
-      "fields": {
-         "fsname": "theora",
-         "mime_type": "video/ogg",
-         "vod_publish": true
-      }
-   },
-   {
-      "model": "fk.fileformat",
-      "pk": 8,
-      "fields": {
-         "fsname": "srt"
-      }
-   },
-   {
-      "model": "fk.fileformat",
-      "pk": 9,
-      "fields": {
-         "fsname": "cloudflare_id"
-      }
-   },
-   {
-      "model": "fk.fileformat",
-      "pk": 10,
-      "fields": {
-         "fsname": "dash",
-         "mime_type": "application/dash+xml"
-      }
-   },
-   {
       "model": "fk.category",
       "pk": 119,
       "fields": {
@@ -141,5 +68,5 @@
       "fields": {
          "name": "Annet"
       }
-   }  
+   }
 ]

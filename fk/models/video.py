@@ -9,6 +9,7 @@ from django.db import models
 
 from .category import Category
 from .organization import Organization
+from .video_file import VideoFileVariant
 
 
 class VideoManager(models.Manager):
@@ -163,19 +164,19 @@ class Video(models.Model):
     def last_broadcast(self):
         return self.scheduleitem_set.all().order_by("-starttime").first()
 
-    def videofile_url(self, fsname) -> str:
-        return self.videofile_set.get(format__fsname=fsname).location(relative=True)
+    def videofile_url(self, variant: VideoFileVariant) -> str:
+        return self.videofile_set.get(variant=variant).location(relative=True)
 
     def small_thumbnail_url(self) -> str:
         try:
-            video_file = self.videofile_set.get(video=self, format__fsname="small_thumb")
+            video_file = self.videofile_set.get(video=self, variant=VideoFileVariant.SMALL_THUMB)
         except ObjectDoesNotExist:
             return "/static/default_small_thumbnail.png"
         return settings.FK_MEDIA_URLPREFIX + video_file.location(relative=True)
 
     def large_thumbnail_url(self) -> str:
         try:
-            video_file = self.videofile_set.get(video=self, format__fsname="large_thumb")
+            video_file = self.videofile_set.get(video=self, variant=VideoFileVariant.LARGE_THUMB)
         except ObjectDoesNotExist:
             return "/static/default_large_thumbnail.png"
         return settings.FK_MEDIA_URLPREFIX + video_file.location(relative=True)
@@ -185,7 +186,7 @@ class Video(models.Model):
         # a video with no theora file has no OGV URL to offer, and the
         # API exposes the field as null. Pinned by test_ogv_url.
         try:
-            return settings.FK_MEDIA_URLPREFIX + self.videofile_url("theora")
+            return settings.FK_MEDIA_URLPREFIX + self.videofile_url(VideoFileVariant.THEORA)
         except ObjectDoesNotExist:
             return None
 
@@ -203,9 +204,11 @@ class Video(models.Model):
         """
 
         vodfiles = []
-        for videofile in self.videofile_set.all().filter(format__vod_publish=True):
+        published = VideoFileVariant.vod_published()
+        for videofile in self.videofile_set.all().filter(variant__in=published):
             url = settings.FK_MEDIA_URLPREFIX + videofile.location(relative=True)
-            vodfiles.append({"url": url, "mime_type": videofile.format.mime_type})
+            mime_type = VideoFileVariant(videofile.variant).mime_type
+            vodfiles.append({"url": url, "mime_type": mime_type})
         return vodfiles
 
     def get_absolute_url(self):
