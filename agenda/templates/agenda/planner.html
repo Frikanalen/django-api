@@ -259,7 +259,7 @@ PlannerViewModel = function() {
     };
 
     self.loadVideos = function() {
-        url = "/api/videos/"
+        url = "/api/videos"
         if (self.video_search_query()) {
             url = url + "?q="+self.video_search_query();
         }
@@ -275,7 +275,7 @@ PlannerViewModel = function() {
     self.loadEvents = function() {
         date = self.editing_date().format("YYYYMMDD")
         self.events()
-        $.getJSON("/api/scheduleitems/?days=1&surrounding=1&page_size=0&date="+date, function(data) {
+        $.getJSON("/api/scheduleitems?days=1&surrounding=1&page_size=0&date="+date, function(data) {
             // First process the json
             programevents = []
             $.each(data.results, function(i, v) {
@@ -368,12 +368,12 @@ PlannerViewModel = function() {
         console.log(jsData);
         jsonData = ko.toJSON(jsData)
         console.log(jsonData);
-        url = "/api/scheduleitems/"
         if (jsData.id) {
-            url = url + jsData.id;
+            url = "/api/scheduleitems/" + jsData.id;
             method = "PUT";
         }
         else {
+            url = "/api/scheduleitems";
             method = "POST";
         };
 

@@ -37,7 +37,7 @@ needs a player — it is not a source a bare `<video>` element can load.
 
 ## 1. Videofile payloads
 
-`/api/videofiles/` — list, detail, create, update; request and response.
+`/api/videofiles` — list, detail, create, update; request and response.
 
 ```diff
 -{ "id": 12, "video": 5, "format": 2, "filename": "master.mp4" }
@@ -50,7 +50,7 @@ named `FORMAT_ID`. Send the name.
 
 ## 2. Schedule payloads
 
-`/api/scheduleitems/` nests each video's files. The key was `fsname`.
+`/api/scheduleitems` nests each video's files. The key was `fsname`.
 
 ```diff
 -{ "id": 12, "fsname": "original", "filename": "master.mp4" }
@@ -60,8 +60,8 @@ named `FORMAT_ID`. Send the name.
 ## 3. The list filter
 
 ```diff
--GET /api/videofiles/?format__fsname=broadcast
-+GET /api/videofiles/?variant=broadcast
+-GET /api/videofiles?format__fsname=broadcast
++GET /api/videofiles?variant=broadcast
 ```
 
 A name outside the set above is now `400`, where it used to return an
@@ -89,8 +89,8 @@ that only half-migrates fails here rather than silently writing nothing.
 ## 5. The jukebox CSV feed is gone
 
 `GET /api/jukebox_csv` returns `404` and no longer appears in the index at
-`GET /api/`. It listed filler videos with their broadcast file. The
-nearest equivalent is `/api/videos/?is_filler=true` plus each video's
+`GET /api`. It listed filler videos with their broadcast file. The
+nearest equivalent is `/api/videos?is_filler=true` plus each video's
 `files.broadcast`, but it is not exact: the feed also required the video
 to be properly imported, free of TONO records, and owned by a member
 organization with a responsible editor. Ask before reimplementing those

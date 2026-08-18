@@ -17,7 +17,7 @@ from fkweb.views import CsrfView
 
 from . import views
 
-router = SimpleRouter()
+router = SimpleRouter(trailing_slash=False)
 router.register(r"api/asrun", views.AsRunViewSet, "asrun")
 router.register(r"api/categories", views.CategoryViewSet)
 router.register(r"api/scheduleitems", schedule_views.ScheduleitemViewSet, "api-scheduleitem")
@@ -51,14 +51,14 @@ class ObtainAuthTokenJsonOnly(ObtainAuthToken):
 # the inferred type as list[URLPattern]; the router, the format-suffix
 # expansion and include() all contribute resolvers further down.
 urlpatterns: list[URLPattern | URLResolver] = [
-    url(r"^api/$", views.api_root, name="api-root"),
-    url(r"^api/csrf/$", CsrfView.as_view(), name="api-csrf-detail"),
+    url(r"^api$", views.api_root, name="api-root"),
+    url(r"^api/csrf$", CsrfView.as_view(), name="api-csrf-detail"),
     url(r"^api/user/register$", api.auth.views.UserCreate.as_view(), name="api-user-create"),
     url(r"^api/user/login$", api.auth.views.UserLogin.as_view(), name="api-user-login"),
     url(r"^api/user/logout$", api.auth.views.UserLogout.as_view(), name="api-user-logout"),
     url(r"^api/user$", api.auth.views.UserDetail.as_view(), name="api-user-detail"),
     url(r"^api/obtain-token$", ObtainAuthTokenJsonOnly.as_view(), name="api-token-auth"),
-    url(r"^api/videos/$", api.video.views.VideoList.as_view(), name="api-video-list"),
+    url(r"^api/videos$", api.video.views.VideoList.as_view(), name="api-video-list"),
     url(
         r"^api/videos/(?P<pk>\d+)/upload_token$",
         api.video.views.VideoUploadTokenDetail.as_view(),
@@ -77,10 +77,10 @@ urlpatterns: list[URLPattern | URLResolver] = [
     url(
         r"^api/videos/(?P<pk>\d+)$", api.video.views.VideoDetail.as_view(), name="api-video-detail"
     ),
-    url(r"^api/videofiles/$", videofile_list, name="api-videofile-list"),
+    url(r"^api/videofiles$", videofile_list, name="api-videofile-list"),
     url(r"^api/videofiles/(?P<pk>\d+)$", videofile_detail, name="api-videofile-detail"),
     url(
-        r"^api/organization/$",
+        r"^api/organization$",
         api.organization.views.OrganizationList.as_view(),
         name="api-organization-list",
     ),
