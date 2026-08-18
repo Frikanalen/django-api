@@ -1,10 +1,8 @@
 # Copyright (c) 2012-2013 Benjamin Bruheim <grolgh@gmail.com>
 # This file is covered by the LGPLv3 or later, read COPYING for details.
 
-import csv
 import logging
 
-from django.http import HttpResponse
 from drf_spectacular.utils import OpenApiTypes, extend_schema
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -15,7 +13,7 @@ from api.auth.permissions import IsStaffOrReadOnly
 from api.pagination import FkDefaultPagination
 from api.schedule.serializers import AsRunSerializer
 from api.serializers import CategorySerializer
-from fk.models import AsRun, Category, Video, VideoFile
+from fk.models import AsRun, Category
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +28,6 @@ def api_root(request):
         {
             "asrun": reverse("asrun-list", request=request),
             "category": reverse("category-list", request=request),
-            "jukebox-csv": reverse("jukebox-csv", request=request),
             "obtain-token": reverse("api-token-auth", request=request),
             "scheduleitems": reverse("api-scheduleitem-list", request=request),
             "videofiles": reverse("api-videofile-list", request=request),
@@ -40,52 +37,6 @@ def api_root(request):
             "user/register": reverse("api-user-create", request=request),
         }
     )
-
-
-@extend_schema(exclude=True)
-@api_view(["GET"])
-def jukebox_csv(request):
-    response = HttpResponse(content_type="text/csv; charset=utf-8")
-    response["Content-Disposition"] = "filename=jukebox.csv"
-    fields = (
-        "id",
-        "name",
-        "has_tono_records",
-        "video_id",
-        "type_id",
-        "version",
-        "creation_began",
-        "creation_finished",
-        "offset",
-        "duration",
-        "location",
-    )
-    writer = csv.DictWriter(response, fields, delimiter="|")
-    writer.writeheader()
-    for video in Video.objects.fillers():
-        try:
-            videofile = video.videofile_set.get(format__fsname="broadcast")
-        except VideoFile.DoesNotExist:
-            continue
-        # NB: this is bytes, so it interpolates below as b'...'. Kept verbatim
-        # to leave this endpoint's long-standing output untouched.
-        encoded_filename = videofile.filename.encode("utf-8")
-        writer.writerow(
-            {
-                "id": video.id,
-                "name": video.name.encode("utf-8"),
-                "has_tono_records": {False: "f", True: "t"}[video.has_tono_records],
-                "video_id": video.id,
-                "type_id": videofile.format.id,
-                "version": 1,  # What is this for?
-                "creation_began": video.created_time,  # ??
-                "creation_finished": None,  # ??
-                "offset": 0,
-                "duration": video.duration.total_seconds(),
-                "location": f"http://frontend.frikanalen.tv/media/{encoded_filename}",
-            }
-        )
-    return response
 
 
 # This class generates an invalid WWW-Authentication header, so that the
