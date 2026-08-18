@@ -8,6 +8,7 @@ from fk.forms import UserChangeForm, UserCreationForm
 from fk.models import (
     Category,
     FileFormat,
+    IngestJob,
     Organization,
     Scheduleitem,
     SchedulePurpose,
@@ -88,6 +89,31 @@ class ScheduleitemAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
+class IngestJobAdmin(admin.ModelAdmin):
+    """The operator's view of what ingest is doing, and what it said when
+    it stopped. `status_text` is here rather than in the API precisely so
+    that ffmpeg's output has somewhere to be read without showing it to
+    the organization that uploaded the file."""
+
+    list_display = ("video", "state", "percentage_done", "error_code", "updated_time")
+    list_filter = ("state",)
+    search_fields = ("video__name", "error_code")
+    ordering = ("-updated_time",)
+    # Ingest owns every one of these. An operator reads them to find out
+    # what happened; editing them here would only lie to the uploader.
+    readonly_fields = (
+        "video",
+        "state",
+        "percentage_done",
+        "status_text",
+        "error_code",
+        "updated_time",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+
 class SchedulePurposeAdmin(admin.ModelAdmin):
     list_display = (
         "__str__",
@@ -108,6 +134,7 @@ class WeeklySlotAdmin(admin.ModelAdmin):
 
 admin.site.register(Category)
 admin.site.register(FileFormat)
+admin.site.register(IngestJob, IngestJobAdmin)
 admin.site.register(Organization, OrganizationAdmin)
 admin.site.register(SchedulePurpose, SchedulePurposeAdmin)
 admin.site.register(Scheduleitem, ScheduleitemAdmin)

@@ -2,7 +2,7 @@ from django.conf import settings
 from rest_framework import serializers
 
 from api.organization.serializers import OrganizationSerializer
-from fk.models import Category, Organization, User, Video
+from fk.models import Category, IngestJob, IngestState, Organization, User, Video
 
 
 class BaseVideoSerializer(serializers.ModelSerializer):
@@ -115,3 +115,48 @@ class UploadTokenVerificationSerializer(serializers.Serializer):
     """The upload capability presented by ingest for a specific video."""
 
     upload_token = serializers.CharField(max_length=32, trim_whitespace=False)
+
+
+class IngestJobSerializer(serializers.ModelSerializer):
+    """What ingest reports about an upload, and what its uploader is shown.
+
+    `status_text` is write-only deliberately: it carries ffmpeg's
+    complaints and the archive paths behind them, which belong in the
+    admin and the logs rather than in a response to an organization's
+    members. What they get instead is `error_code`, which the frontend
+    turns into words -- ingest has no business choosing the Norwegian.
+    """
+
+    # Null until ingest has reported anything at all -- which is the state
+    # every video uploaded before this endpoint existed is in. The model
+    # field cannot express that, because a saved row always has a time.
+    updated_time = serializers.DateTimeField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = IngestJob
+        fields = (
+            "video",
+            "state",
+            "percentage_done",
+            "status_text",
+            "error_code",
+            "updated_time",
+        )
+        read_only_fields = ("video", "updated_time")
+        extra_kwargs = {
+            "status_text": {"write_only": True},
+            # The model defaults this to `pending`, which would make an
+            # otherwise empty report mean something. A report that does not
+            # say what state it describes is not a report.
+            "state": {"required": True},
+        }
+
+    def validate(self, data):
+        # The same rule as the ingest_job_error_code_only_when_failed
+        # constraint, stated where it produces a 400 rather than the 500 an
+        # IntegrityError would surface as.
+        if data.get("error_code") and data.get("state") != IngestState.FAILED:
+            raise serializers.ValidationError(
+                {"error_code": "Only a failed ingest may carry an error code."}
+            )
+        return data

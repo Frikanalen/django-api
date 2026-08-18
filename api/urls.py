@@ -71,6 +71,11 @@ urlpatterns: list[URLPattern | URLResolver] = [
         name="api-video-upload-token-verification",
     ),
     url(
+        r"^api/videos/(?P<pk>\d+)/ingest$",
+        api.video.views.VideoIngestJobDetail.as_view(),
+        name="api-video-ingest-job-detail",
+    ),
+    url(
         r"^api/videos/(?P<pk>\d+)$", api.video.views.VideoDetail.as_view(), name="api-video-detail"
     ),
     url(r"^api/videofiles/$", videofile_list, name="api-videofile-list"),
