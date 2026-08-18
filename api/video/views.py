@@ -8,18 +8,20 @@ from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 
 from api.auth.permissions import (
+    IngestJobPermission,
     IsInOrganizationOrDisallow,
     IsInOrganizationOrReadOnly,
     RequireTargetOrganizationMembership,
 )
 from api.pagination import FkDefaultPagination
 from api.video.serializers import (
+    IngestJobSerializer,
     UploadTokenVerificationSerializer,
     VideoCreateSerializer,
     VideoSerializer,
     VideoUploadTokenSerializer,
 )
-from fk.models import Category, Video
+from fk.models import Category, IngestJob, Video
 
 
 class VideoDetail(generics.RetrieveUpdateDestroyAPIView):
@@ -79,6 +81,55 @@ class VideoUploadTokenVerification(generics.GenericAPIView):
             raise NotFound()
 
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class VideoIngestJobDetail(generics.RetrieveUpdateAPIView):
+    """Where an upload has got to, reported by ingest and read by its uploader.
+
+    Reading and writing are two different audiences here: ingest declares
+    the state it is in, and the organization behind the video finds out
+    what became of the file it sent. Nobody else gets either.
+    """
+
+    queryset = Video.objects.all()
+    serializer_class = IngestJobSerializer
+    permission_classes = (IngestJobPermission,)
+    # No PATCH: a partial report invites the half-updated row where the
+    # state has moved on but the percentage has not. A whole-state PUT is
+    # also what makes ingest's retries free of consequence.
+    http_method_names = ["get", "put", "head", "options"]
+
+    def get_object(self) -> IngestJob:
+        video = generics.get_object_or_404(Video.objects.all(), pk=self.kwargs["pk"])
+        # Unsaved when ingest has never reported; saving it is the PUT's
+        # business, and a reader must not create rows by looking.
+        job = IngestJob.for_video(video)
+        self.check_object_permissions(self.request, job)
+        return job
+
+    @extend_schema(
+        operation_id="videos_ingest_retrieve",
+        summary="Read a video's ingest state",
+        description=(
+            "How far ingest has got with the video's uploaded file. Videos that were "
+            "ingested before this endpoint existed report `done`; videos nothing has "
+            "uploaded to report `pending`."
+        ),
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    @extend_schema(
+        operation_id="videos_ingest_report",
+        summary="Report a video's ingest state",
+        description=(
+            "Replaces the video's ingest state with the one given. Reserved for the "
+            "ingest service; the whole state is sent every time, so a retried report "
+            "is indistinguishable from the first."
+        ),
+    )
+    def put(self, request, *args, **kwargs):
+        return super().put(request, *args, **kwargs)
 
 
 class VideoFilter(djfilters.FilterSet):

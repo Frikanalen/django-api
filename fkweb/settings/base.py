@@ -346,6 +346,10 @@ SPECTACULAR_SETTINGS = {
     # This will avoid multiple warnings raised by drf-spectacular due to
     # the same set of error codes appearing in multiple operations.
     "ENUM_NAME_OVERRIDES": {
+        # Named after what it describes rather than after the field it
+        # happens to sit on: the generated name would be `StateEnum`,
+        # which the next model with a `state` field would collide with.
+        "IngestStateEnum": "fk.models.ingest.IngestState.choices",
         "ValidationErrorEnum": "drf_standardized_errors.openapi_serializers.ValidationErrorEnum.choices",
         "ClientErrorEnum": "drf_standardized_errors.openapi_serializers.ClientErrorEnum.choices",
         "ServerErrorEnum": "drf_standardized_errors.openapi_serializers.ServerErrorEnum.choices",

@@ -204,3 +204,29 @@ class IsStaffOrReadOnly(permissions.BasePermission):
 
     def has_permission(self, request, view):
         return request.method in permissions.SAFE_METHODS or request.user and request.user.is_staff
+
+
+class IngestJobPermission(permissions.BasePermission):
+    """Reads for the video's organization, writes for the ingest service.
+
+    The write side is the narrow one, and it is narrower than it looks:
+    reporting ingest progress is a machine's job, but `is_staff` is the
+    only identity this User model can express for a machine. `has_perm`
+    answers `is_superuser` and nothing else -- there are no groups and no
+    per-model permissions behind it -- so a `fk.change_ingestjob` check
+    would mean exactly this while implying more. Keeping the check here
+    rather than reusing IsStaffOrReadOnly leaves one place to narrow, once
+    there is something to narrow it to.
+    """
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        return request.method in permissions.SAFE_METHODS or request.user.is_staff
+
+    def has_object_permission(self, request, view, obj):
+        if request.method not in permissions.SAFE_METHODS:
+            return request.user.is_staff
+        # An ingest job has no organization of its own; the delegate walks
+        # to the one behind its video.
+        return IsInOrganizationOrDisallow().has_object_permission(request, view, obj)
