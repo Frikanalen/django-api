@@ -1,6 +1,8 @@
 from hmac import compare_digest
 
-from django.db.models import Q
+from django.contrib.postgres.search import SearchQuery, SearchRank
+from django.db.models import F, Q
+from django.db.models.functions import Greatest
 from django_filters import rest_framework as djfilters
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import generics, status
@@ -160,25 +162,22 @@ class VideoFilter(djfilters.FilterSet):
         }
 
     def filter_search(self, queryset, name, value):
-        terms = self.normalize_query(value)
-        queries = [
-            Q(name__icontains=term)
-            | Q(description__icontains=term)
-            | Q(organization__name__icontains=term)
-            | Q(header__icontains=term)
-            for term in terms
-        ]
-        query = queries.pop()
-        for item in queries:
-            query &= item
-        return queryset.filter(query).order_by("-id")
+        if not value.strip():
+            return queryset
 
-    @staticmethod
-    def normalize_query(query_string):
-        """Split the query string into individual keywords, grouping quoted terms."""
-        import shlex
-
-        return shlex.split(query_string)
+        # `websearch` accepts ordinary web-style input, including quoted
+        # phrases, and deliberately never treats malformed input as SQL
+        # syntax. The vectors are generated columns backed by GIN indexes.
+        query = SearchQuery(value, config="norwegian", search_type="websearch")
+        video_rank = SearchRank(F("search_document"), query, cover_density=True)
+        organization_rank = SearchRank(
+            F("organization__search_document"), query, cover_density=True
+        )
+        return (
+            queryset.annotate(search_rank=Greatest(video_rank, organization_rank))
+            .filter(Q(search_document=query) | Q(organization__search_document=query))
+            .order_by("-search_rank", "-id")
+        )
 
 
 class VideoList(RequireTargetOrganizationMembership, generics.ListCreateAPIView):
