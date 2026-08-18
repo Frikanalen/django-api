@@ -1,4 +1,6 @@
 from django.conf import settings
+from django.contrib.postgres.indexes import GinIndex
+from django.contrib.postgres.search import SearchVector, SearchVectorField
 from django.db import models
 from django.urls import reverse
 
@@ -30,6 +32,11 @@ class Organization(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, max_length=255)
+    search_document = models.GeneratedField(
+        expression=SearchVector("name", config="norwegian", weight="A"),
+        output_field=SearchVectorField(),
+        db_persist=True,
+    )
 
     members = models.ManyToManyField(
         settings.AUTH_USER_MODEL, blank=True
@@ -63,6 +70,7 @@ class Organization(models.Model):
 
     class Meta:
         ordering = ("name", "-id")
+        indexes = [GinIndex(fields=["search_document"], name="org_search_document_gin")]
 
     def __str__(self):
         return self.name

@@ -3,6 +3,8 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.postgres.indexes import GinIndex
+from django.contrib.postgres.search import SearchVector, SearchVectorField
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.validators import MinValueValidator
 from django.db import models
@@ -48,6 +50,19 @@ class Video(models.Model):
     header = models.TextField(blank=True, null=True, max_length=2048)
     name = models.CharField(max_length=255)
     description = models.CharField(blank=True, null=True, max_length=2048)
+    # A stored vector means PostgreSQL can answer searches with the GIN
+    # index below rather than re-tokenizing every video on every request.
+    # Organization names have their own vector because an index cannot span
+    # the foreign-key join.
+    search_document = models.GeneratedField(
+        expression=(
+            SearchVector("name", config="norwegian", weight="A")
+            + SearchVector("header", config="norwegian", weight="B")
+            + SearchVector("description", config="norwegian", weight="B")
+        ),
+        output_field=SearchVectorField(),
+        db_persist=True,
+    )
     # Quoted so the subscript is never evaluated: ManyToManyField is not
     # subscriptable at runtime, only to django-stubs.
     categories: "models.ManyToManyField[Category, models.Model]" = models.ManyToManyField(Category)
@@ -126,6 +141,7 @@ class Video(models.Model):
     class Meta:
         get_latest_by = "created_time"
         ordering = ("-id",)
+        indexes = [GinIndex(fields=["search_document"], name="video_search_document_gin")]
         constraints = [
             # A negative length is not a shorter programme, it is corrupt
             # data, and the schedulers do arithmetic on this field.

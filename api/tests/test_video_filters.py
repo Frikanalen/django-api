@@ -123,6 +123,71 @@ def test_video_list_filters(catalogue, lookup: str, expected: list[str]) -> None
     assert [video["name"] for video in response.json()["results"]] == expected
 
 
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ("nametoken", ["title-only nametoken"]),
+        ("headertoken", ["title-only nametoken"]),
+        ("descriptiontoken", ["title-only nametoken"]),
+        ("organizationtoken", ["quoted phrase two words", "title-only nametoken"]),
+        ("nametoken headertoken", ["title-only nametoken"]),
+        ('"two words"', ["quoted phrase two words"]),
+        ('"unterminated', []),
+    ],
+)
+def test_video_list_free_text_searches_video_and_organization_fields(
+    query: str, expected: list[str]
+) -> None:
+    user = User.objects.create(email="search_user@fake.com")
+    organization = Organization.objects.create(name="organizationtoken", editor=user)
+
+    Video.objects.create(
+        name="title-only nametoken",
+        header="headertoken",
+        description="descriptiontoken",
+        organization=organization,
+        creator=user,
+        proper_import=True,
+    )
+    Video.objects.create(
+        name="quoted phrase two words",
+        organization=organization,
+        creator=user,
+        proper_import=True,
+    )
+
+    response = APIClient().get(reverse("api-video-list"), {"q": query})
+
+    assert response.status_code == 200
+    assert [video["name"] for video in response.json()["results"]] == expected
+
+
+def test_video_list_free_text_ranks_title_matches_above_description_matches() -> None:
+    user = User.objects.create(email="ranking_user@fake.com")
+    organization = Organization.objects.create(name="Ranking test org", editor=user)
+    Video.objects.create(
+        name="rankingtoken title match",
+        organization=organization,
+        creator=user,
+        proper_import=True,
+    )
+    Video.objects.create(
+        name="Description match",
+        description="rankingtoken",
+        organization=organization,
+        creator=user,
+        proper_import=True,
+    )
+
+    response = APIClient().get(reverse("api-video-list"), {"q": "rankingtoken"})
+
+    assert response.status_code == 200
+    assert [video["name"] for video in response.json()["results"]] == [
+        "rankingtoken title match",
+        "Description match",
+    ]
+
+
 VIDEOFILE_LOOKUPS = [
     ("?video_id={tech_pk}", ["tech_video.mp4"]),
     ("?video_id={dummy_pk}", ["dummy_video.mov"]),
