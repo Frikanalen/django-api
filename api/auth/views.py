@@ -1,10 +1,8 @@
 from django.contrib.auth import authenticate, login, logout
-from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics
-from rest_framework.authentication import BasicAuthentication
 from rest_framework.authtoken.models import Token
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.generics import CreateAPIView
@@ -16,32 +14,8 @@ from api.auth.serializers import (
     LoginSerializer,
     LogoutSerializer,
     NewUserSerializer,
-    TokenSerializer,
     UserSerializer,
 )
-
-
-class XBasicAuth(BasicAuthentication):
-    def authenticate_header(self, request):
-        return "XXXBasic"
-
-
-@method_decorator(never_cache, name="get")
-class ObtainAuthToken(generics.RetrieveAPIView):
-    """
-    Get a token you can use as a header instead of basic auth.
-
-    Use the header with HTTP like:
-        Authorization: Token 000000000000...
-    """
-
-    queryset = Token.objects.all()
-    serializer_class = TokenSerializer
-    authentication_classes = [XBasicAuth]
-    permission_classes = (IsAuthenticated,)
-
-    def get_object(self, queryset=None):
-        return get_object_or_404(Token, user=self.request.user)
 
 
 class UserCreate(generics.CreateAPIView):
