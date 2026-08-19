@@ -123,6 +123,37 @@ class Scheduleitem(models.Model):
         timestamp = self.starttime.strftime("%Y-%m-%d %H:%M:%S.%f")[:-4]
         return f"{timestamp}: {self.video or self.default_name}"
 
+    @property
+    def endtime(self) -> datetime:
+        """When this item stops occupying the air.
+
+        Read off the generated column wherever there is one, so the instant
+        the API reports is the instant the conflict queries used.
+
+        A zero-length item makes an *empty* range, and an empty range has no
+        bounds at all -- `upper` is None, not the starttime. It ends where it
+        begins, which is what this has always reported for one. The remaining
+        branch is for items the database has not seen yet.
+        """
+        if self.airtime is not None and self.airtime.upper is not None:
+            return self.airtime.upper
+        if not self.duration:
+            return self.starttime
+        return airtime_end(self.starttime, self.duration)
+
+    def save(self, *args, **kwargs):
+        """Keep `airtime` in step with the row it describes.
+
+        Postgres recomputes a generated column on every write, but Django
+        only reads one back on INSERT. After an UPDATE the in-memory value
+        would still describe where the item used to air -- which is the
+        value the API hands back to whoever just moved it.
+        """
+        updating = not self._state.adding
+        super().save(*args, **kwargs)
+        if updating:
+            self.refresh_from_db(fields=["airtime"])
+
     def _timing_changed(self):
         """Whether this save moves the item in time, for an item that exists."""
         stored = Scheduleitem.objects.filter(pk=self.pk).values("starttime", "duration").first()
