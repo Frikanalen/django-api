@@ -95,7 +95,7 @@ def occupy(video: Video, starttime: datetime.datetime, duration: datetime.timede
 def overlapping_pairs() -> list[tuple[datetime.datetime, datetime.datetime]]:
     """Every adjacent pair in the schedule whose first item runs into the second."""
     items = list(Scheduleitem.objects.order_by("starttime"))
-    return [(a.starttime, b.starttime) for a, b in pairwise(items) if a.endtime() > b.starttime]
+    return [(a.starttime, b.starttime) for a, b in pairwise(items) if a.airtime.upper > b.starttime]
 
 
 def test_fills_a_whole_day(filler_video: Video) -> None:
@@ -285,7 +285,7 @@ def test_an_overrunning_item_hidden_behind_a_nearer_one_still_counts(
     assert placed.exists()
     for item in placed:
         assert item.starttime >= START_DATE + datetime.timedelta(hours=1)
-        conflicts = Scheduleitem.objects.overlapping(item.starttime, item.endtime())
+        conflicts = Scheduleitem.objects.overlapping(item.starttime, item.airtime.upper)
         assert not conflicts.exclude(pk=item.pk).exists()
 
 

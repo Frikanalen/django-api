@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from django.utils import timezone as django_timezone
 
-from fk.models import Scheduleitem
+from fk.models import Scheduleitem, airtime_end
 
 pytestmark = pytest.mark.django_db
 
@@ -43,3 +43,46 @@ def test_by_day_without_a_start_date_anchors_on_the_current_oslo_day(
     expected = schedule_item_factory(starttime=datetime.combine(today, time(0, 1), tzinfo=OSLO))
 
     assert list(Scheduleitem.objects.by_day(days=1)) == [expected]
+
+
+def test_overlapping_excludes_back_to_back_items(
+    schedule_item_factory: Callable[..., Scheduleitem],
+) -> None:
+    """The bounds are half-open, so an item ending exactly when the window
+    opens is not a conflict. Pinned here because the check moved from a
+    pair of scalar comparisons to a range `&&`."""
+    schedule_item_factory(
+        starttime=datetime(2015, 1, 1, 10, tzinfo=OSLO), duration=timedelta(hours=1)
+    )
+
+    abutting = Scheduleitem.objects.overlapping(
+        datetime(2015, 1, 1, 11, tzinfo=OSLO), datetime(2015, 1, 1, 12, tzinfo=OSLO)
+    )
+    straddling = Scheduleitem.objects.overlapping(
+        datetime(2015, 1, 1, 10, 30, tzinfo=OSLO), datetime(2015, 1, 1, 11, 30, tzinfo=OSLO)
+    )
+
+    assert list(abutting) == []
+    assert len(straddling) == 1
+
+
+def test_airtime_counts_elapsed_time_across_the_autumn_transition(
+    schedule_item_factory: Callable[..., Scheduleitem],
+) -> None:
+    """Oslo repeats 02:00-03:00 on 2026-10-25.
+
+    An hour of airtime is an hour of real time -- playout does not pause for
+    the clock going back -- so an item starting 02:30 CEST is off the air at
+    01:30 UTC. Python's `starttime + duration` is wall-clock arithmetic and
+    would put it an hour later, which is why `airtime_end` exists.
+    """
+    start = datetime(2026, 10, 25, 2, 30, tzinfo=OSLO)
+    duration = timedelta(hours=1)
+    item = schedule_item_factory(starttime=start, duration=duration)
+    item.refresh_from_db()
+
+    assert item.airtime.upper == datetime(2026, 10, 25, 1, 30, tzinfo=UTC)
+    assert airtime_end(start, duration) == item.airtime.upper
+    # The arithmetic the validation paths used to do, kept here to show what
+    # the helper is guarding against: an hour of wall clock, two of airtime.
+    assert (start + duration).astimezone(UTC) == datetime(2026, 10, 25, 2, 30, tzinfo=UTC)

@@ -55,7 +55,10 @@ MIME_TYPES = {
 class VideoFile(models.Model):
     id = models.AutoField(primary_key=True)
     # uploader = models.ForeignKey(User) # Not migrated
-    video = models.ForeignKey("Video", on_delete=models.CASCADE)
+    # No index of its own: unique_variant_per_video below is a btree on
+    # (video, variant), and a video_id-only lookup uses its leading column
+    # just as well. A second index on video_id would only cost writes.
+    video = models.ForeignKey("Video", on_delete=models.CASCADE, db_index=False)
     variant = models.CharField(max_length=20, choices=VideoFileVariant)
     filename = models.CharField(max_length=256)
     # source = video = models.ForeignKey("VideoFile")

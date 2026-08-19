@@ -2,7 +2,8 @@ from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from django.db import models
-from django.db.models import DateTimeField, ExpressionWrapper, F, Q, Subquery
+from django.db.backends.postgresql.psycopg_any import DateTimeTZRange
+from django.db.models import Q, Subquery
 
 
 class ScheduleitemQuerySet(models.QuerySet):
@@ -69,11 +70,10 @@ class ScheduleitemQuerySet(models.QuerySet):
         bounds are half-open, so an item ending exactly at `start_dt` does not
         count -- back-to-back programming is not a conflict.
 
-        The annotation is `_endtime` rather than `endtime` on purpose: the
-        model has an `endtime()` *method*, and an annotation of that name
-        would shadow it on every returned instance, turning `item.endtime()`
-        into a TypeError far away from here.
+        Asked of `airtime`, the generated range column, so the question is
+        one indexed `&&` against its GiST index. The predicate this replaces
+        compared `starttime + duration` row by row, which no index could
+        answer -- the starttime half is unbounded to the left, so settling
+        "is this slot free" meant reading every item ever broadcast.
         """
-        return self.annotate(
-            _endtime=ExpressionWrapper(F("starttime") + F("duration"), output_field=DateTimeField())
-        ).filter(starttime__lt=end_dt, _endtime__gt=start_dt)
+        return self.filter(airtime__overlap=DateTimeTZRange(start_dt, end_dt, "[)"))

@@ -422,4 +422,4 @@ def test_jukebox_management_command_fills_to_the_horizon(
     assert last.starttime < horizon
     # The horizon week is complete: the last filler ends within the last
     # hour-and-a-rounding-minute before it.
-    assert last.endtime() > horizon - timedelta(minutes=62)
+    assert last.airtime.upper > horizon - timedelta(minutes=62)

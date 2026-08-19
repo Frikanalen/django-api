@@ -261,7 +261,7 @@ def test_the_nightly_jukebox_repacks_what_a_displacement_orphans(
         Scheduleitem.objects.filter(starttime__gte=pick_start).order_by("starttime").first(),
     )
     assert last_refill is not None and first_later is not None
-    assert last_refill.endtime() <= pick_start
+    assert last_refill.airtime.upper <= pick_start
     assert first_later.starttime == pick_start  # the pick survived intact
 
 
