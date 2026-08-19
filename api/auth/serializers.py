@@ -1,18 +1,7 @@
 from django.contrib.auth import get_user_model, update_session_auth_hash
 from rest_framework import serializers
-from rest_framework.authtoken.models import Token
 
 from fk.models import Organization, User
-
-
-class TokenSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Token
-        fields = (
-            "created",
-            "key",
-            "user",
-        )
 
 
 class NewUserSerializer(serializers.ModelSerializer):
