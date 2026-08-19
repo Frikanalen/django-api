@@ -111,7 +111,7 @@ MEDIA_URL = "/media/"
 STATIC_ROOT = normpath(join(PROJECT_ROOT, "collected_staticfiles"))
 
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#static-url
-STATIC_URL = "/static/"
+STATIC_URL = "/api/static/"
 
 # See: https://docs.djangoproject.com/en/dev/ref/contrib/staticfiles/#std:setting-STATICFILES_DIRS
 STATICFILES_DIRS = (normpath(join(SITE_ROOT, "static")),)
