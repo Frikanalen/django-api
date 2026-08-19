@@ -9,7 +9,7 @@
     <programme
       channel="{{ channel_id }}"
       start="{{ program.starttime|date:'YmdHis O' }}"
-      stop="{{ program.airtime.upper|date:'YmdHis O' }}">
+      stop="{{ program.endtime|date:'YmdHis O' }}">
     {% if program.video %}
       <title lang="no">{{ program.video.name }}</title>
       <desc lang="no">{{ program.video.header }}</desc>

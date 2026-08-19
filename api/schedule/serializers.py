@@ -64,11 +64,7 @@ class ScheduleitemVideoSerializer(serializers.ModelSerializer):
 
 class ScheduleitemModifySerializer(serializers.ModelSerializer):
     starttime = serializers.DateTimeField(default_timezone=OSLO)
-    # Read straight off the generated range column, so the end time the API
-    # reports is the one the conflict queries actually used.
-    endtime = serializers.DateTimeField(
-        source="airtime.upper", default_timezone=OSLO, read_only=True
-    )
+    endtime = serializers.DateTimeField(default_timezone=OSLO, read_only=True)
 
     class Meta:
         model = Scheduleitem
@@ -156,11 +152,7 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
 class ScheduleitemReadSerializer(serializers.ModelSerializer):
     video = ScheduleitemVideoSerializer()
     starttime = serializers.DateTimeField(default_timezone=OSLO)
-    # Read straight off the generated range column, so the end time the API
-    # reports is the one the conflict queries actually used.
-    endtime = serializers.DateTimeField(
-        source="airtime.upper", default_timezone=OSLO, read_only=True
-    )
+    endtime = serializers.DateTimeField(default_timezone=OSLO, read_only=True)
     displaceable = serializers.SerializerMethodField()
 
     class Meta:

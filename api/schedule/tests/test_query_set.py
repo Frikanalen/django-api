@@ -86,3 +86,52 @@ def test_airtime_counts_elapsed_time_across_the_autumn_transition(
     # The arithmetic the validation paths used to do, kept here to show what
     # the helper is guarding against: an hour of wall clock, two of airtime.
     assert (start + duration).astimezone(UTC) == datetime(2026, 10, 25, 2, 30, tzinfo=UTC)
+
+
+def test_a_zero_length_item_ends_where_it_starts(
+    schedule_item_factory: Callable[..., Scheduleitem],
+) -> None:
+    """A zero-length item generates an *empty* range, whose bounds are both
+    None rather than the starttime. Reading `airtime.upper` straight would
+    report no end time at all -- null over the API, an empty `stop` in the
+    XMLTV feed, and a TypeError in the jukebox's gap search.
+    """
+    item = schedule_item_factory(
+        starttime=datetime(2015, 1, 1, 10, tzinfo=OSLO), duration=timedelta(0)
+    )
+    item.refresh_from_db()
+
+    assert item.airtime.upper is None
+    assert item.endtime == item.starttime
+
+
+def test_a_zero_length_item_occupies_no_airtime(
+    schedule_item_factory: Callable[..., Scheduleitem],
+) -> None:
+    """It cannot collide with anything, which is the rule Scheduleitem.clean()
+    has always stated. An empty range overlaps nothing, so the column enforces
+    it rather than each caller having to remember."""
+    schedule_item_factory(starttime=datetime(2015, 1, 1, 10, tzinfo=OSLO), duration=timedelta(0))
+
+    around_it = Scheduleitem.objects.overlapping(
+        datetime(2015, 1, 1, 9, tzinfo=OSLO), datetime(2015, 1, 1, 11, tzinfo=OSLO)
+    )
+
+    assert list(around_it) == []
+
+
+def test_airtime_follows_an_item_that_is_moved(
+    schedule_item_factory: Callable[..., Scheduleitem],
+) -> None:
+    """Django reads a generated column back on INSERT but not on UPDATE, so
+    without help the moved item still reports where it used to air -- and that
+    is the value the API hands back to whoever just moved it."""
+    item = schedule_item_factory(
+        starttime=datetime(2015, 1, 1, 10, tzinfo=OSLO), duration=timedelta(hours=1)
+    )
+
+    item.starttime = datetime(2015, 1, 1, 14, tzinfo=OSLO)
+    item.save()
+
+    assert item.endtime == datetime(2015, 1, 1, 15, tzinfo=OSLO)
+    assert item.airtime.lower == datetime(2015, 1, 1, 14, tzinfo=OSLO)

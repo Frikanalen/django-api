@@ -189,7 +189,7 @@ def items_for_gap(
     # includes programming that starts before the window but overruns
     # into it.
     occupied = [
-        (item.starttime, item.airtime.upper)
+        (item.starttime, item.endtime)
         for item in Scheduleitem.objects.overlapping(start, end).order_by("starttime")
     ]
 
