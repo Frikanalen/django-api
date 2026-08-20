@@ -168,7 +168,24 @@ class VideoFilter(djfilters.FilterSet):
         # `websearch` accepts ordinary web-style input, including quoted
         # phrases, and deliberately never treats malformed input as SQL
         # syntax. The vectors are generated columns backed by GIN indexes.
-        #
+        query = SearchQuery(value, config="norwegian", search_type="websearch")
+        video_rank = SearchRank(F("search_document"), query, cover_density=True)
+
+        # A caller who has named the organization already knows whose
+        # videos these are, so matching its name here only dilutes the
+        # result: a query that happened to match it would hand back the
+        # organization's whole catalogue rather than the videos the words
+        # actually appear in. `organization`'s own filter is what narrows
+        # the rows; dropping the name vector leaves no cross-table OR to
+        # defeat the index either, so this is a single GIN scan instead of
+        # the UNION below.
+        if self.form.cleaned_data.get("organization"):
+            return (
+                queryset.filter(search_document=query)
+                .annotate(search_rank=video_rank)
+                .order_by("-search_rank", "-id")
+            )
+
         # Matching ids are collected via UNION rather than a single
         # `Q(search_document=query) | Q(organization__search_document=query)`.
         # That single-query form (including the `organization__in=` subquery
@@ -185,14 +202,12 @@ class VideoFilter(djfilters.FilterSet):
         # skips deduplication for the same reason: `pk__in` doesn't care
         # whether its right-hand side has duplicates, so paying to dedupe
         # here buys nothing.
-        query = SearchQuery(value, config="norwegian", search_type="websearch")
         own_match = Video.objects.filter(search_document=query).order_by().values("pk")
         organization_match = (
             Video.objects.filter(organization__search_document=query).order_by().values("pk")
         )
         matching_ids = own_match.union(organization_match, all=True)
 
-        video_rank = SearchRank(F("search_document"), query, cover_density=True)
         organization_rank = SearchRank(
             F("organization__search_document"), query, cover_density=True
         )
@@ -227,7 +242,11 @@ class VideoList(RequireTargetOrganizationMembership, generics.ListCreateAPIView)
 
     `name__icontains` - substring is part of name/title of the video
 
-    `organization` - Frikanalen ID of organization behind video
+    `organization` - Frikanalen ID of organization behind video.  Given
+                     alongside `q`, it also narrows the search to that
+                     organization's own videos: the organization's name
+                     stops counting as a match, since it would otherwise
+                     return the whole catalogue.
 
     `played_count_web` - the number of times this video was played on the web
 

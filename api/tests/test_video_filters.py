@@ -162,6 +162,72 @@ def test_video_list_free_text_searches_video_and_organization_fields(
     assert [video["name"] for video in response.json()["results"]] == expected
 
 
+@pytest.fixture
+def two_organizations() -> dict[str, Organization]:
+    """Two organizations with distinctive names, one video apiece
+    carrying a shared search token, plus a silent extra in the first."""
+    user = User.objects.create(email="scoped_search_user@fake.com")
+    kringkaster = Organization.objects.create(name="Kringkasterhuset", editor=user)
+    nabo = Organization.objects.create(name="Nabokanalen", editor=user)
+
+    Video.objects.create(
+        name="vidtoken opptak",
+        organization=kringkaster,
+        creator=user,
+        proper_import=True,
+    )
+    Video.objects.create(
+        name="stille opptak",
+        organization=kringkaster,
+        creator=user,
+        proper_import=True,
+    )
+    Video.objects.create(
+        name="vidtoken hos naboen",
+        organization=nabo,
+        creator=user,
+        proper_import=True,
+    )
+
+    return {"kringkaster": kringkaster, "nabo": nabo}
+
+
+def test_video_list_free_text_honours_the_organization_filter(two_organizations) -> None:
+    response = APIClient().get(
+        reverse("api-video-list"),
+        {"q": "vidtoken", "organization": two_organizations["kringkaster"].pk},
+    )
+
+    assert response.status_code == 200
+    assert [video["name"] for video in response.json()["results"]] == ["vidtoken opptak"]
+
+
+def test_video_list_free_text_scoped_to_an_organization_ignores_its_name(
+    two_organizations,
+) -> None:
+    """Naming the organization takes its name out of the search.
+
+    Unscoped, an organization name match returns everything it owns -
+    that is the point of indexing the name at all.  Scoped to that same
+    organization, the caller has already said whose videos they want, so
+    the name match would only return the whole catalogue again.
+    """
+    kringkaster = two_organizations["kringkaster"]
+
+    unscoped = APIClient().get(reverse("api-video-list"), {"q": "Kringkasterhuset"})
+    scoped = APIClient().get(
+        reverse("api-video-list"), {"q": "Kringkasterhuset", "organization": kringkaster.pk}
+    )
+
+    assert unscoped.status_code == 200
+    assert [video["name"] for video in unscoped.json()["results"]] == [
+        "stille opptak",
+        "vidtoken opptak",
+    ]
+    assert scoped.status_code == 200
+    assert [video["name"] for video in scoped.json()["results"]] == []
+
+
 def test_video_list_free_text_ranks_title_matches_above_description_matches() -> None:
     user = User.objects.create(email="ranking_user@fake.com")
     organization = Organization.objects.create(name="Ranking test org", editor=user)
