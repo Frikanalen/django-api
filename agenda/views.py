@@ -94,6 +94,12 @@ class VideoFormForUsers(ModelForm):
             "publish_on_web",
             "header",
             "ref_url",
+            # Offered to the uploading organization rather than kept for
+            # staff: nobody else knows what language a programme is in or
+            # whether it is fit for children, and both are published in
+            # the TV-Anytime EPG.
+            "spoken_language",
+            "minimum_age",
             "duration",
         )
 
@@ -111,6 +117,8 @@ class VideoFormForAdmin(ModelForm):
             "publish_on_web",
             "header",
             "ref_url",
+            "spoken_language",
+            "minimum_age",
             "duration",
         )
 

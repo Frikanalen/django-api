@@ -57,6 +57,11 @@ class BaseVideoSerializer(serializers.ModelSerializer):
             "publish_on_web",
             "is_filler",
             "ref_url",
+            # Both feed the TV-Anytime EPG and are only ever as good as
+            # what the uploading organization tells us, so they are
+            # writable here rather than staff-only in the admin.
+            "spoken_language",
+            "minimum_age",
             "created_time",
             "updated_time",
             "uploaded_time",

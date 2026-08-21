@@ -8,6 +8,7 @@ from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.routers import SimpleRouter
 from rest_framework.urlpatterns import format_suffix_patterns
 
+import agenda.tvanytime.views as tvanytime_views
 import api.auth.views as auth_views
 import api.organization.views as organization_views
 import api.schedule.views as schedule_views
@@ -89,6 +90,18 @@ api_patterns += [
         r"^scheduling/policy$",
         schedule_views.SchedulingPolicyView.as_view(),
         name="api-scheduling-policy",
+    ),
+    # Same reasoning, and more so: these only ever render XML, so a
+    # `.json` suffix would advertise a representation that cannot exist.
+    url(
+        r"^tvanytime$",
+        tvanytime_views.TVAnytimeUpcomingView.as_view(),
+        name="api-tvanytime-upcoming",
+    ),
+    url(
+        r"^tvanytime/(?P<year>\d{4})/(?P<month>\d{2})/(?P<day>\d{2})$",
+        tvanytime_views.TVAnytimeDateView.as_view(),
+        name="api-tvanytime-date",
     ),
 ]
 

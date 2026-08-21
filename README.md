@@ -124,6 +124,20 @@ To run the full suite with branch coverage and missing-line reporting:
 uv run pytest --cov
 ```
 
+## Schedule feeds
+
+The broadcast schedule is published in two machine-readable formats.
+
+- **NorDig TV-Anytime** at `/api/tvanytime` (and `/api/tvanytime/YYYY/MM/DD`),
+  which is what Nordic distributors pull an EPG in. It describes each
+  programme once, says separately when it airs and whether it is available
+  on demand, and carries genre, subtitles, credits and actual broadcast
+  times. See [docs/tvanytime.md](docs/tvanytime.md), and
+  [docs/tvanytime-model-proposals.md](docs/tvanytime-model-proposals.md)
+  for the model changes that would enrich it further.
+- **XMLTV** at `/xmltv/upcoming/` (and `/xmltv/YYYY/MM/DD`), a flat list of
+  programme slots, kept for the consumers already using it.
+
 ## Management commands
 
 In addition to the HTTP API, the following commands are executed periodically as Kubernetes cron jobs in our cluster. Together they implement the broadcast-week lifecycle defined in `agenda/scheduling/policy.py`: every week is drafted two Mondays before it airs, stays open for member organizations to replace jukebox fillers with picks of their own for one week, and is frozen from the Monday before airing.

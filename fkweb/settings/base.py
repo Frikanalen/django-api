@@ -44,6 +44,47 @@ CHANNEL_DISPLAY_NAMES = ["Frikanalen"]
 # URL to the website for references in feeds (No trailing slash)
 SITE_URL = "https://frikanalen.no"
 
+########## TV-ANYTIME / NorDig EPG METADATA
+# The NorDig EPG/Event metadata exchange format (NorDig TVA Implementation
+# Guidelines 1.4) is TV-Anytime, ETSI TS 102 822-3-1. What follows is the
+# per-broadcaster part of it: everything a consumer needs to attribute the
+# feed to us and to tell our two services apart.
+
+# The CRID authority. Every crid:// we mint is `crid://<authority>/<data>`,
+# and it is the domain -- not the data -- that makes the identifier globally
+# unique, so this must stay a domain we actually control (Guidelines 2.3.1).
+# Deliberately not CHANNEL_ID: "frikanalen.tv" is an RFC 2838 broadcast URI,
+# not a registered domain, and minting CRIDs under it would claim a namespace
+# that is not ours. Changing this orphans every CRID already published.
+TVA_AUTHORITY = "frikanalen.no"
+
+# Attribution, carried in MetadataOriginationInformationTable.
+TVA_PUBLISHER = "Foreningen Frikanalen"
+TVA_RIGHTS_OWNER = "Foreningen Frikanalen"
+TVA_COPYRIGHT_NOTICE = (
+    "Sendeskjemaet kan gjengis fritt med kildehenvisning til Frikanalen. "
+    "Rettighetene til programmene tilhører den enkelte medlemsorganisasjonen."
+)
+
+# Our two TVA services. The ids are `<authority>/<service>`, which is the
+# convention the NorDig example files use (e.g. "nrk.no/NRK1"), and they are
+# what ScheduleEvent/OnDemandProgram reference by serviceIDRef.
+TVA_LINEAR_SERVICE_ID = f"{TVA_AUTHORITY}/frikanalen"
+TVA_ONDEMAND_SERVICE_ID = f"{TVA_AUTHORITY}/vod"
+
+# ServiceURL entries, keyed by the `name` attribute that says which carrier
+# each one describes. A DVB triplet for our DTT carriage belongs here as
+# "DTT": dvb://<original_network_id>.<transport_stream_id>.<service_id>, but
+# we do not have ours on file, and a guessed triplet would point receivers at
+# somebody else's service -- so the key is simply absent until someone can
+# supply it.
+TVA_LINEAR_SERVICE_URLS = {"WWW": f"{SITE_URL}/"}
+TVA_ONDEMAND_SERVICE_URLS = {"WWW": f"{SITE_URL}/"}
+
+# Spoken language assumed for a video whose own field is blank, and the
+# document language of the feed itself.
+TVA_DEFAULT_LANGUAGE = "no"
+
 ########## PATH CONFIGURATION
 # Absolute filesystem path to the Django project directory:
 DJANGO_ROOT = dirname(dirname(abspath(__file__)))

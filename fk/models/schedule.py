@@ -65,6 +65,16 @@ class Scheduleitem(models.Model):
     # programming instead of ripping them off the air.
     weekly_slot = models.ForeignKey("WeeklySlot", null=True, blank=True, on_delete=models.SET_NULL)
 
+    # Published as <Live> in the TV-Anytime feed. A property of the
+    # transmission, not of the video, which is why it sits here: the same
+    # recording can go out live once and as a repeat afterwards, and a live
+    # transmission often has no video row at all (see default_name).
+    is_live = models.BooleanField(
+        "Live broadcast",
+        default=False,
+        help_text="Whether this item goes out live rather than from a file.",
+    )
+
     # The airtime this item occupies, as a half-open range, so "is that
     # slot taken" is one indexed `&&` against a GiST index rather than a
     # scan computing every row's end time. Derived rather than stored:

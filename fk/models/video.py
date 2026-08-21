@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.postgres.indexes import GinIndex
 from django.contrib.postgres.search import SearchVector, SearchVectorField
 from django.core.exceptions import ObjectDoesNotExist
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, RegexValidator
 from django.db import models
 
 from .category import Category
@@ -100,6 +100,48 @@ class Video(models.Model):
         "Organization", help_text="Organization for video", on_delete=models.PROTECT
     )
     ref_url = models.CharField(blank=True, max_length=1024, help_text="URL for reference")
+
+    # Published as <Language> in the TV-Anytime feed. A free-text tag rather
+    # than a choice list because Frikanalen carries minority-language
+    # programming -- Sami, Kven, and the languages its immigrant member
+    # organizations broadcast in -- and a fixed list would quietly push all
+    # of those into "other".
+    spoken_language = models.CharField(
+        "Spoken language",
+        blank=True,
+        max_length=32,
+        default="no",
+        validators=[
+            RegexValidator(
+                # BCP 47 in the shape TV-Anytime accepts: a primary subtag,
+                # optionally refined. Deliberately permissive about which
+                # tags exist -- this rules out prose in the field, not
+                # unusual languages.
+                regex=r"^[a-zA-Z]{2,8}(-[a-zA-Z0-9]{1,8})*$",
+                message="Use a language tag such as 'no', 'nn', 'se' or 'en-GB'.",
+            )
+        ],
+        help_text=(
+            "Language tag for the speech in this programme, e.g. 'no', 'nn', "
+            "'se' (Northern Sami) or 'en'. Leave blank if there is no speech."
+        ),
+    )
+
+    # Published as <ParentalGuidance><MinimumAge>. Null means we are not
+    # making a claim, which is not the same as a 0 rating: Frikanalen does
+    # not rate its members' programmes centrally, so most rows stay null.
+    minimum_age = models.PositiveSmallIntegerField(
+        "Minimum age",
+        blank=True,
+        null=True,
+        choices=[(0, "All ages"), (6, "6"), (9, "9"), (12, "12"), (15, "15"), (18, "18")],
+        help_text=(
+            "Norwegian age rating (Medietilsynet's scale). Leave blank when the "
+            "programme has not been rated -- blank publishes no rating at all, "
+            "while 'All ages' publishes one."
+        ),
+    )
+
     duration = models.DurationField(
         blank=True,
         default=timedelta(0),
