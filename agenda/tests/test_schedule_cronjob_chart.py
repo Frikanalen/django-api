@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 CHART_TEMPLATES = Path(__file__).parents[2] / "chart" / "templates"
@@ -15,3 +16,14 @@ def test_chart_has_one_ordered_oslo_schedule_draft_cronjob() -> None:
     assert "- draft_broadcast_schedule" in manifest
     assert "fill_next_weeks_agenda" not in manifest
     assert "fill_agenda_with_jukebox" not in manifest
+
+
+def test_ingress_exposes_only_the_operational_django_surfaces() -> None:
+    manifest = (CHART_TEMPLATES / "ingress.yaml").read_text()
+
+    assert re.findall(r"^\s+- path: (\S+)$", manifest, flags=re.MULTILINE) == [
+        "/admin",
+        "/api",
+        "/static",
+        "/xmltv",
+    ]

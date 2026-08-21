@@ -1,40 +1,12 @@
 from django.middleware.csrf import get_token
-from django.utils import timezone
-from django.utils.translation import gettext as _
-from django.views.generic import TemplateView
 from rest_framework import serializers
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from fk.models import Scheduleitem
-
 
 class CsrfSerializer(serializers.Serializer):
     csrfToken = serializers.CharField()
-
-
-class Frontpage(TemplateView):
-    template_name = "frontpage.html"
-
-    def get_context_data(self, *args, **kwargs):
-        context = super().get_context_data(*args, **kwargs)
-        context["title"] = _("TV for alle")
-        try:
-            current, prev = Scheduleitem.objects.filter(starttime__lt=timezone.now()).order_by(
-                "-starttime"
-            )[:2]
-            context["curr_scheditem"] = current
-            context["prev_scheditem"] = prev
-            context["next_scheditem"] = Scheduleitem.objects.filter(
-                starttime__gte=timezone.now()
-            ).order_by("starttime")[0]
-        except ValueError:
-            pass
-        except IndexError:
-            pass
-
-        return context
 
 
 class CsrfView(RetrieveAPIView):

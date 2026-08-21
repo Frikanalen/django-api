@@ -2,7 +2,6 @@ from django.conf import settings
 from django.contrib.postgres.indexes import GinIndex
 from django.contrib.postgres.search import SearchVector, SearchVectorField
 from django.db import models
-from django.urls import reverse
 
 
 class OrganizationQuerySet(models.QuerySet):
@@ -74,6 +73,3 @@ class Organization(models.Model):
 
     def __str__(self):
         return self.name
-
-    def get_absolute_url(self):
-        return reverse("vod-org-video-list", kwargs={"orgid": self.id})

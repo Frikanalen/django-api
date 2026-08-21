@@ -1,9 +1,9 @@
-<!doctype html>
-<meta charset=utf-8>
-<title>{% trans "500 internal server error" %}</title>
+{% extends "service_base.html" %}
 
-<div style="width:200px; margin: 40px auto;">
-<h1>{% trans "500, internal server error :-(" %}</h1>
+{% block title %}{% trans "Internal server error" %} · Frikanalen{% endblock title %}
 
-<p>{% trans "Something went wrong. If this is a big problem, please contact us." %}</p>
-</div>
+{% block heading-title %}<h1>{% trans "Internal server error" %}</h1>{% endblock heading-title %}
+
+{% block content %}
+  <p>{% trans "Something went wrong. If this is a big problem, please contact us." %}</p>
+{% endblock content %}
