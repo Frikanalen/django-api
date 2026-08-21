@@ -48,7 +48,7 @@ class UserAdmin(BaseUserAdmin):
 
 
 class VideoFileInline(admin.StackedInline):
-    fields = ("format", "filename")
+    fields = ("variant", "filename")
     model = VideoFile
     extra = 0
 
