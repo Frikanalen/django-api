@@ -132,21 +132,20 @@ metadata actually entered.
 
 **Fills:** `RelatedMaterial` with the `HowRelatedNordigCS:2022` roles.
 
+**Implemented for videos.** `ProgramImage` stores archive metadata, role and
+measured dimensions. Image bytes follow the existing tusd → ingest → archive
+path, and only ingest may register a successfully published file through
+`/api/videos/{video_id}/images`. The feed emits each image as typed
+`RelatedMaterial`.
+Series currently have one URL-based show image; moving that image through the
+same archive-backed model, and adding a separately maintained channel logo,
+remain follow-up work.
+
 Covered at length in [tvanytime.md](tvanytime.md#imagery). The short
 version: NorDig defines a dozen image roles — channel logo, show logo, show
 still, episode still, key art with and without titling, behind the scenes,
-portraits at three crops, cast ensemble — and we publish one auto-extracted
-frame mapped to *show still*. Key art is what a modern EPG grid renders.
-
-```python
-class ProgramImage(models.Model):
-    video = models.ForeignKey(Video, null=True, blank=True, related_name="images", ...)
-    organization = models.ForeignKey(Organization, null=True, blank=True, ...)
-    role = models.CharField(max_length=32, choices=ImageRole)  # HowRelatedNordigCS 19.x
-    filename = models.CharField(max_length=256)
-    width = models.PositiveSmallIntegerField()
-    height = models.PositiveSmallIntegerField()
-```
+portraits at three crops, cast ensemble. Auto-extracted frames remain
+*show-still* fallbacks alongside the member-supplied images.
 
 **Why not another `VideoFileVariant`.** Two reasons, and the first is a hard
 block: `VideoFile` has a `unique_variant_per_video` constraint on

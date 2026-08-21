@@ -14,6 +14,7 @@ from .asrun import AsRun  # noqa: F401
 from .category import Category  # noqa: F401
 from .ingest import IngestJob, IngestState  # noqa: F401
 from .organization import Organization  # noqa: F401
+from .program_image import ImageMediaType, ImageRole, ProgramImage  # noqa: F401
 from .schedule import (  # noqa: F401
     Scheduleitem,
     SchedulePurpose,

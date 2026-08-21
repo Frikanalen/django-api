@@ -11,6 +11,7 @@ from rest_framework.urlpatterns import format_suffix_patterns
 import agenda.tvanytime.views as tvanytime_views
 import api.auth.views as auth_views
 import api.organization.views as organization_views
+import api.program_image.views as program_image_views
 import api.schedule.views as schedule_views
 import api.series.views as series_views
 import api.video.views as video_views
@@ -50,6 +51,23 @@ api_patterns: list[URLPattern | URLResolver] = [
     url(r"^obtain-token$", ObtainAuthTokenJsonOnly.as_view(), name="api-token-auth"),
     # Video
     url(r"^videos$", video_views.VideoList.as_view(), name="api-video-list"),
+    url(
+        r"^videos/(?P<video_id>\d+)/images$",
+        program_image_views.ProgramImageViewSet.as_view({"get": "list", "post": "create"}),
+        name="api-program-image-list",
+    ),
+    url(
+        r"^videos/(?P<video_id>\d+)/images/(?P<pk>\d+)$",
+        program_image_views.ProgramImageViewSet.as_view(
+            {
+                "get": "retrieve",
+                "put": "update",
+                "patch": "partial_update",
+                "delete": "destroy",
+            }
+        ),
+        name="api-program-image-detail",
+    ),
     url(
         rf"^videos/{PK}/upload_token$",
         video_views.VideoUploadTokenDetail.as_view(),

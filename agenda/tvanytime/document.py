@@ -30,7 +30,7 @@ from zoneinfo import ZoneInfo
 from django.conf import settings
 from django.db.models import Count, Min, Q
 
-from fk.models import Scheduleitem, Series, Video, VideoFileVariant
+from fk.models import ImageRole, Scheduleitem, Series, Video, VideoFileVariant
 
 from . import cs
 
@@ -209,16 +209,39 @@ def _offered_on_demand(video: Video) -> bool:
     return _has_responsible_editor(video)
 
 
-def _still_images(video: Video) -> list[tuple[str, str | None]]:
-    """(url, mime type) for each thumbnail the video has, largest first."""
+def _still_images(
+    video: Video,
+) -> list[tuple[str, str, str | None, int | None, int | None]]:
+    """Role, URL, MIME type and dimensions for each programme image."""
+
+    images: list[tuple[str, str, str | None, int | None, int | None]] = [
+        (
+            ImageRole(image.role).how_related,
+            settings.FK_MEDIA_URLPREFIX + image.filename,
+            image.media_type,
+            image.width,
+            image.height,
+        )
+        for image in video.images.all()
+    ]
+
+    # Ingest thumbnails remain useful fallbacks alongside the editorial
+    # images. Their dimensions predate the image model and are unknown.
     by_variant = {file.variant: file for file in video.videofile_set.all()}
-    images = []
     for variant in THUMBNAIL_VARIANTS:
         file = by_variant.get(variant)
         if file is None:
             continue
         url = settings.FK_MEDIA_URLPREFIX + file.location(relative=True)
-        images.append((url, mimetypes.guess_type(file.filename)[0]))
+        images.append(
+            (
+                cs.HOW_RELATED_SHOW_STILL,
+                url,
+                mimetypes.guess_type(file.filename)[0],
+                None,
+                None,
+            )
+        )
     return images
 
 
@@ -286,9 +309,11 @@ def _add_basic_description(parent: ET.Element, video: Video) -> None:
     item = _sub(credits_list, "CreditsItem", role=cs.ROLE_PRODUCER)
     _sub(item, "OrganizationName", video.organization.name)
 
-    for url, media_type in _still_images(video):
+    for role, url, media_type, width, height in _still_images(video):
         image = {"href": media_type} if media_type else {}
-        _add_related_material(description, cs.HOW_RELATED_SHOW_STILL, url, **image)
+        if width is not None and height is not None:
+            image.update(horizontalSize=str(width), verticalSize=str(height))
+        _add_related_material(description, role, url, **image)
 
     if video.ref_url:
         _add_related_material(description, cs.HOW_RELATED_PROGRAMME_WEBSITE, video.ref_url)
