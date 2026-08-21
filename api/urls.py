@@ -11,6 +11,7 @@ from rest_framework.urlpatterns import format_suffix_patterns
 import agenda.tvanytime.views as tvanytime_views
 import api.auth.views as auth_views
 import api.organization.views as organization_views
+import api.program_image.views as program_image_views
 import api.schedule.views as schedule_views
 import api.series.views as series_views
 import api.video.views as video_views
@@ -26,6 +27,7 @@ PK = r"(?P<pk>\d+)"
 router = SimpleRouter(trailing_slash=False)
 router.register(r"asrun", views.AsRunViewSet, "asrun")
 router.register(r"categories", views.CategoryViewSet)
+router.register(r"program-images", program_image_views.ProgramImageViewSet, "api-program-image")
 router.register(r"scheduleitems", schedule_views.ScheduleitemViewSet, "api-scheduleitem")
 router.register(r"videofiles", videofile_views.VideoFileViewSet, "api-videofile")
 

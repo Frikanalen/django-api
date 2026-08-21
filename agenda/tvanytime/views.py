@@ -63,6 +63,7 @@ def schedule_queryset():
         "video__series",
     ).prefetch_related(
         "video__categories",
+        "video__images",
         "video__videofile_set",
     )
 

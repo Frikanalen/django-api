@@ -9,6 +9,7 @@ from fk.models import (
     Category,
     IngestJob,
     Organization,
+    ProgramImage,
     Scheduleitem,
     SchedulePurpose,
     Series,
@@ -54,9 +55,16 @@ class VideoFileInline(admin.StackedInline):
     extra = 0
 
 
+class ProgramImageInline(admin.StackedInline):
+    fields = ("role", "filename", "media_type", "width", "height")
+    readonly_fields = ("filename", "media_type", "width", "height")
+    model = ProgramImage
+    extra = 0
+
+
 class VideoAdmin(admin.ModelAdmin):
     list_display = ("name", "creator", "organization", "series", "episode_number")
-    inlines = [VideoFileInline]
+    inlines = [VideoFileInline, ProgramImageInline]
     search_fields = ["name", "description", "organization__name", "header", "creator__email"]
     list_filter = ("proper_import", "is_filler", "publish_on_web", "has_tono_records")
 

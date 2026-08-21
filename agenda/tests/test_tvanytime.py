@@ -28,7 +28,10 @@ from lxml import html as lxml_html
 
 from fk.models import (
     Category,
+    ImageMediaType,
+    ImageRole,
     Organization,
+    ProgramImage,
     Scheduleitem,
     Series,
     User,
@@ -206,6 +209,30 @@ def test_richest_possible_programme_still_validates(
         "ProductionLocation",
         "Duration",
     ]
+
+
+def test_editorial_image_role_and_dimensions_are_published(tva_schema, video: Video) -> None:
+    ProgramImage.objects.create(
+        video=video,
+        role=ImageRole.KEY_ART_TITLED,
+        filename=f"{video.pk}/images/key-art.png",
+        media_type=ImageMediaType.PNG,
+        width=1200,
+        height=675,
+    )
+    schedule(video, DAY.replace(hour=12))
+
+    document = assert_valid(tva_schema, feed_for(DAY))
+    material = one(document, ".//tva:ProgramInformation//tva:RelatedMaterial")
+
+    assert one(material, "tva:HowRelated").get("href") == ImageRole.KEY_ART_TITLED.how_related
+    picture = one(material, "tva:Format/tva:StillPictureFormat")
+    assert picture.get("href") == "image/png"
+    assert picture.get("horizontalSize") == "1200"
+    assert picture.get("verticalSize") == "675"
+    assert one(material, "tva:MediaLocator/tva:MediaUri").text.endswith(
+        f"/{video.pk}/images/key-art.png"
+    )
 
 
 def test_empty_window_validates(tva_schema) -> None:

@@ -228,8 +228,9 @@ see [tvanytime-model-proposals.md](tvanytime-model-proposals.md).
 
 ### Imagery
 
-This is now the largest remaining structural gap, and it is largely a content
-problem rather than a feed-code one.
+Archive-backed editorial imagery is implemented for videos. The remaining
+gaps are bringing series imagery through the same path and adding a maintained
+channel logo.
 
 NorDig defines a whole taxonomy of programme imagery in
 `HowRelatedNordigCS:2022`, subdividing "Promotional Still Image" into the
@@ -239,32 +240,33 @@ roles a guide actually lays out differently:
 | --- | --- |
 | 19.1 / 19.2 | network and channel logos |
 | 19.3 | show logo |
-| 19.4 | show still — *the only one we publish* |
+| 19.4 | show still — also used by legacy auto-extracted thumbnails |
 | 19.5 | episode still |
 | 19.6 / 19.7 | key art, with and without titling |
 | 19.8–19.10 | behind the scenes, location, news event |
 | 19.11 / 19.12 | portraits (headshot, half body, full body) and cast ensemble |
 
-We publish exactly one of these, and it is the weakest: a single frame
-that ingest extracts from the video, offered at three sizes and mapped to
-19.4. It is not chosen, not composed, and often not representative. Key
-art is what a modern EPG grid actually renders, and we have none — nor a
-channel logo, which is why `ServiceInformation` carries no
-`RelatedMaterial` at all.
+Members upload editorial images through the same tusd endpoint as video
+files. The upload metadata identifies it as a programme image and supplies
+its `HowRelatedNordigCS` role. Ingest validates JPEG, PNG and WebP uploads,
+measures their dimensions, and publishes them through its privileged archive
+writer below `<video id>/images/`. Only after that succeeds does ingest
+register the archive-relative filename through `POST /api/program-images`;
+Django never opens or writes the archive file. Listing supports `video_id`
+and `role` filters, while organization members may reclassify or unpublish
+their own image metadata.
 
-Closing this needs an image model rather than a feed change: somewhere for
-a member organization to upload images against a video (or a series), each
-tagged with its `HowRelatedNordigCS` role, with dimensions recorded at
-upload. The feed side is then a few lines — `_still_images` in
-`agenda/tvanytime/document.py` already emits a list, and
-`_add_related_material` already takes the role and the size attributes.
+The feed publishes those images with their role, media type and
+`horizontalSize`/`verticalSize`. Ingest's three automatically extracted
+frames remain available as show-still fallbacks, so existing programmes do
+not lose imagery while members add better key art and episode stills.
 
 Two smaller pieces belong to the same work:
 
-- **Dimensions.** NorDig asks for `StillPictureFormat` with
-  `horizontalSize`/`verticalSize`. We publish the media type but not the
-  size, because nothing records thumbnail dimensions. They could go into
-  `Video.media_metadata` at ingest time even before an image model exists.
+- **Generated-thumbnail dimensions.** Uploaded editorial images carry
+  `StillPictureFormat` dimensions. The older ingest thumbnails still do not,
+  because their dimensions were never recorded; ingest could add them to
+  `Video.media_metadata` without changing the image API.
 - **Channel logo.** A single published URL in settings would let
   `ServiceInformation` carry term 19.2. It needs a stable, sized asset
   someone is willing to maintain, not just any copy of the logo.
