@@ -24,6 +24,7 @@ import pytest
 from django.test import Client
 from django.urls import reverse
 from lxml import etree
+from lxml import html as lxml_html
 
 from fk.models import (
     Category,
@@ -461,6 +462,61 @@ def test_feed_is_readable_without_authenticating(video: Video) -> None:
     schedule(video, DAY.replace(hour=12))
     response = Client().get(reverse("api-tvanytime-upcoming"))
     assert response.status_code == 200
+
+
+# --------------------------------------------------------------------------
+# The landing page
+# --------------------------------------------------------------------------
+
+
+def test_landing_page_describes_the_feed() -> None:
+    response = Client().get(reverse("api-tvanytime-home"))
+
+    assert response.status_code == 200
+    assert response["Content-Type"].startswith("text/html")
+    body = response.content.decode()
+    assert "TV-Anytime" in body
+    assert reverse("api-tvanytime-upcoming") in body
+
+
+def test_landing_page_dates_its_example_in_oslo_time() -> None:
+    """`api_utc_middleware` forces the active timezone to UTC for anything
+    under /api/, so a date resolved by the template would be yesterday's
+    for the first hours of every Norwegian day. The view resolves it."""
+    today = datetime.now(tz=OSLO).date()
+    expected = reverse(
+        "api-tvanytime-date",
+        args=(f"{today.year:04}", f"{today.month:02}", f"{today.day:02}"),
+    )
+
+    body = Client().get(reverse("api-tvanytime-home")).content.decode()
+
+    assert expected in body
+
+
+def test_every_link_the_landing_page_offers_resolves() -> None:
+    """A published index that points at URLs which no longer exist is worse
+    than none, and it is exactly what a later rename would produce."""
+    page = lxml_html.fromstring(Client().get(reverse("api-tvanytime-home")).content)
+    # findall/get rather than an xpath for @href: xpath returns a union wide
+    # enough (element, string, bytes, float...) that nothing useful can be
+    # said about a member without narrowing it first.
+    local = {
+        href
+        for anchor in page.findall(".//a")
+        # Only our own paths: the outbound links to ETSI and NorDig are
+        # somebody else's uptime, and this suite does not use the network.
+        if (href := anchor.get("href")) is not None and href.startswith("/")
+    }
+    assert local, "the landing page offers no local links at all"
+
+    client = Client()
+    for href in sorted(local):
+        assert client.get(href).status_code != 404, f"landing page links to a dead {href}"
+
+
+def test_landing_page_is_readable_without_authenticating() -> None:
+    assert Client().get(reverse("api-tvanytime-home")).status_code == 200
 
 
 def test_query_count_does_not_grow_with_the_schedule(

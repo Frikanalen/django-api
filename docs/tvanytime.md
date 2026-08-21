@@ -12,19 +12,27 @@ as an on-demand offer at once.
 
 | URL | What it covers |
 | --- | --- |
-| `GET /api/tvanytime` | Today onwards. This is the URL to poll. |
+| `GET /api/tvanytime` | A human-readable index describing the feed. |
+| `GET /api/tvanytime/upcoming` | Today onwards. This is the URL to poll. |
 | `GET /api/tvanytime/YYYY/MM/DD` | A window starting on that date. |
 
-Both accept `?days=N` (1–31, default 7) and both are anonymous: NorDig
-recommends distributing this by pull from "a public area where the latest
-and most updated information is available" (Metadata Exchange format
+The two feeds accept `?days=N` (1–31, default 7). All three are anonymous:
+NorDig recommends distributing this by pull from "a public area where the
+latest and most updated information is available" (Metadata Exchange format
 specification 1.3, §2.11), so there is nothing to authenticate.
 
+The root of the path is an index page rather than a feed, which is the
+shape `/xmltv/` already has and the one a distributor arriving at the bare
+URL expects. It is rendered from
+`agenda/templates/agenda/tvanytime_home.html` and is linked from the site
+footer.
+
 ```bash
-curl -s 'https://frikanalen.no/api/tvanytime?days=14' -o frikanalen-epg.xml
+curl -s 'https://frikanalen.no/api/tvanytime/upcoming?days=14' -o frikanalen-epg.xml
 ```
 
-The endpoints appear in the OpenAPI schema at `/api/schema/`.
+The two feeds appear in the OpenAPI schema at `/api/schema/`; the index
+page does not, being a page for a person rather than an API operation.
 
 ## What the document contains
 
@@ -162,7 +170,7 @@ before we did.
 To check a live response by hand:
 
 ```bash
-curl -s https://frikanalen.no/api/tvanytime > feed.xml
+curl -s https://frikanalen.no/api/tvanytime/upcoming > feed.xml
 xmllint --noout --schema agenda/tvanytime/schemas/tva_metadata_3-1.xsd feed.xml
 ```
 

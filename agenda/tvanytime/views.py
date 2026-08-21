@@ -10,6 +10,10 @@ authenticate or negotiate to fetch on a timer.
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
+from django.conf import settings
+from django.shortcuts import render
+from django.urls import reverse
+from django.utils.translation import gettext as _
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import permissions, renderers
 from rest_framework.exceptions import NotFound, ValidationError
@@ -100,8 +104,8 @@ DESCRIPTION = (
     "identifier that is stable across requests. Videos we hold online "
     "rights for additionally appear as `OnDemandProgram` entries.\n\n"
     "Times are Europe/Oslo. `PublishedStartTime` is what is scheduled; "
-    "`ActualStartTime` appears once the item has gone to air and the "
-    "playout log has been written."
+    "`ActualStartTime` appears only once the airtime has passed, marking "
+    "the transmission as one we stand behind as having aired."
 )
 
 DAYS_PARAMETER = OpenApiParameter(
@@ -115,6 +119,41 @@ XML_RESPONSE = OpenApiResponse(
     description="A TVAMain document.",
     response={"type": "string", "format": "binary"},
 )
+
+
+def tvanytime_home(request):
+    """The index a distributor lands on, at the root of the tvanytime path.
+
+    Plain Django rather than DRF on purpose: it is a page for a person
+    reading about the feed, so it has no place in the OpenAPI schema and
+    nothing to content-negotiate. The feeds themselves are the API.
+
+    Dates are resolved here rather than in the template because
+    `fkweb.middleware.api_utc_middleware` overrides the active timezone to
+    UTC for everything under /api/, which would print today's date as
+    yesterday's for the first two hours of every Norwegian day.
+    """
+    today = datetime.now(tz=OSLO).date()
+    return render(
+        request,
+        "agenda/tvanytime_home.html",
+        {
+            "title": _("Schedule as TV-Anytime"),
+            "channel_name": settings.CHANNEL_DISPLAY_NAMES[0],
+            "site_url": settings.SITE_URL,
+            "authority": settings.TVA_AUTHORITY,
+            "linear_service_id": settings.TVA_LINEAR_SERVICE_ID,
+            "ondemand_service_id": settings.TVA_ONDEMAND_SERVICE_ID,
+            "upcoming_url": reverse("api-tvanytime-upcoming"),
+            "today_url": reverse(
+                "api-tvanytime-date",
+                args=(f"{today.year:04}", f"{today.month:02}", f"{today.day:02}"),
+            ),
+            "today": today,
+            "default_days": DEFAULT_DAYS,
+            "max_days": MAX_DAYS,
+        },
+    )
 
 
 class TVAnytimeUpcomingView(APIView):

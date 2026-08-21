@@ -93,8 +93,18 @@ api_patterns += [
     ),
     # Same reasoning, and more so: these only ever render XML, so a
     # `.json` suffix would advertise a representation that cannot exist.
+    #
+    # The root of the tvanytime path is the human-readable index rather
+    # than a feed, which is the shape /xmltv/ already has and the one a
+    # distributor arriving at the bare URL expects. The feeds hang below
+    # it, so neither has to be guessed at.
     url(
         r"^tvanytime$",
+        tvanytime_views.tvanytime_home,
+        name="api-tvanytime-home",
+    ),
+    url(
+        r"^tvanytime/upcoming$",
         tvanytime_views.TVAnytimeUpcomingView.as_view(),
         name="api-tvanytime-upcoming",
     ),

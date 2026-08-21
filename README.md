@@ -128,7 +128,8 @@ uv run pytest --cov
 
 The broadcast schedule is published in two machine-readable formats.
 
-- **NorDig TV-Anytime** at `/api/tvanytime` (and `/api/tvanytime/YYYY/MM/DD`),
+- **NorDig TV-Anytime** at `/api/tvanytime/upcoming` (and
+  `/api/tvanytime/YYYY/MM/DD`), indexed at `/api/tvanytime`,
   which is what Nordic distributors pull an EPG in. It describes each
   programme once, says separately when it airs and whether it is available
   on demand, and carries genre, subtitles, credits and actual broadcast

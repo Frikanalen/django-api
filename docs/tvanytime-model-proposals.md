@@ -33,7 +33,8 @@ programme, and sorts that way in every guide.
 
 ```python
 production_year = models.PositiveSmallIntegerField(
-    blank=True, null=True,
+    blank=True,
+    null=True,
     help_text="Year the programme was made, if different from when it was uploaded.",
 )
 ```
@@ -65,7 +66,9 @@ organizations carry material from their communities of origin.
 
 ```python
 production_country = models.CharField(
-    max_length=2, blank=True, default="NO",
+    max_length=2,
+    blank=True,
+    default="NO",
     help_text="ISO 3166-1 alpha-2 country the programme was produced in.",
 )
 ```
@@ -83,9 +86,10 @@ Frikanalen exists for.
 
 ```python
 sign_language = models.CharField(
-    max_length=32, blank=True,
+    max_length=32,
+    blank=True,
     help_text="Language tag of the sign language interpreted or used, e.g. 'no' "
-              "for Norwegian Sign Language. Leave blank if there is none.",
+    "for Norwegian Sign Language. Leave blank if there is none.",
 )
 ```
 
