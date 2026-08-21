@@ -251,10 +251,11 @@ files. The upload metadata identifies it as a programme image and supplies
 its `HowRelatedNordigCS` role. Ingest validates JPEG, PNG and WebP uploads,
 measures their dimensions, and publishes them through its privileged archive
 writer below `<video id>/images/`. Only after that succeeds does ingest
-register the archive-relative filename through `POST /api/program-images`;
-Django never opens or writes the archive file. Listing supports `video_id`
-and `role` filters, while organization members may reclassify or unpublish
-their own image metadata.
+register the archive-relative filename through
+`POST /api/videos/{video_id}/images`; Django never opens or writes the archive
+file. The nested collection is scoped to that video and supports a `role`
+filter, while organization members may reclassify or unpublish their own image
+metadata.
 
 The feed publishes those images with their role, media type and
 `horizontalSize`/`verticalSize`. Ingest's three automatically extracted

@@ -27,7 +27,6 @@ PK = r"(?P<pk>\d+)"
 router = SimpleRouter(trailing_slash=False)
 router.register(r"asrun", views.AsRunViewSet, "asrun")
 router.register(r"categories", views.CategoryViewSet)
-router.register(r"program-images", program_image_views.ProgramImageViewSet, "api-program-image")
 router.register(r"scheduleitems", schedule_views.ScheduleitemViewSet, "api-scheduleitem")
 router.register(r"videofiles", videofile_views.VideoFileViewSet, "api-videofile")
 
@@ -52,6 +51,23 @@ api_patterns: list[URLPattern | URLResolver] = [
     url(r"^obtain-token$", ObtainAuthTokenJsonOnly.as_view(), name="api-token-auth"),
     # Video
     url(r"^videos$", video_views.VideoList.as_view(), name="api-video-list"),
+    url(
+        r"^videos/(?P<video_id>\d+)/images$",
+        program_image_views.ProgramImageViewSet.as_view({"get": "list", "post": "create"}),
+        name="api-program-image-list",
+    ),
+    url(
+        r"^videos/(?P<video_id>\d+)/images/(?P<pk>\d+)$",
+        program_image_views.ProgramImageViewSet.as_view(
+            {
+                "get": "retrieve",
+                "put": "update",
+                "patch": "partial_update",
+                "delete": "destroy",
+            }
+        ),
+        name="api-program-image-detail",
+    ),
     url(
         rf"^videos/{PK}/upload_token$",
         video_views.VideoUploadTokenDetail.as_view(),

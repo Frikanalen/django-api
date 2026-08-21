@@ -3,7 +3,7 @@ from pathlib import PurePosixPath
 from django.conf import settings
 from rest_framework import serializers
 
-from fk.models import ImageMediaType, ImageRole, ProgramImage, Video
+from fk.models import ImageMediaType, ImageRole, ProgramImage
 
 MEDIA_TYPE_SUFFIXES = {
     ImageMediaType.JPEG: ".jpg",
@@ -48,7 +48,6 @@ class ProgramImageSerializer(serializers.ModelSerializer):
 class ProgramImageRegistrationSerializer(ProgramImageSerializer):
     """Trusted archive metadata reported by ingest after publication."""
 
-    video = serializers.PrimaryKeyRelatedField(queryset=Video.objects.all())
     media_type = serializers.ChoiceField(choices=ImageMediaType.choices)
     width = serializers.IntegerField(min_value=1, max_value=65_535)
     height = serializers.IntegerField(min_value=1, max_value=65_535)
@@ -56,13 +55,13 @@ class ProgramImageRegistrationSerializer(ProgramImageSerializer):
     class Meta:
         model = ProgramImage
         fields = ProgramImageSerializer.Meta.fields
-        read_only_fields = ("id", "url", "created_time")
+        read_only_fields = ("id", "video", "url", "created_time")
         extra_kwargs: dict[str, dict[str, list]] = {"filename": {"validators": []}}
 
     def validate(self, data):
-        video = data["video"]
+        video_id = self.context["video_id"]
         filename = PurePosixPath(data["filename"])
-        expected_parent = PurePosixPath(str(video.pk), "images")
+        expected_parent = PurePosixPath(str(video_id), "images")
         if filename.parent != expected_parent or filename.name != data["filename"].split("/")[-1]:
             raise serializers.ValidationError(
                 {"filename": f"Must be a file directly below {expected_parent}/."}

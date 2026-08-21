@@ -43,7 +43,6 @@ def staff_client() -> APIClient:
 
 def registration(video: Video, **changes) -> dict:
     return {
-        "video": video.pk,
         "role": ImageRole.KEY_ART_TITLED,
         "filename": f"{video.pk}/images/2f92e90dbb444e67bdb0893b5fe1d697.png",
         "mediaType": ImageMediaType.PNG,
@@ -55,7 +54,9 @@ def registration(video: Video, **changes) -> dict:
 
 def test_ingest_can_register_an_archived_image(staff_client: APIClient, video: Video) -> None:
     response = staff_client.post(
-        reverse("api-program-image-list"), registration(video), format="json"
+        reverse("api-program-image-list", kwargs={"video_id": video.pk}),
+        registration(video),
+        format="json",
     )
 
     assert response.status_code == status.HTTP_201_CREATED, response.content
@@ -70,9 +71,10 @@ def test_ingest_can_register_an_archived_image(staff_client: APIClient, video: V
 
 
 def test_ingest_registration_is_idempotent(staff_client: APIClient, video: Video) -> None:
-    first = staff_client.post(reverse("api-program-image-list"), registration(video), format="json")
+    url = reverse("api-program-image-list", kwargs={"video_id": video.pk})
+    first = staff_client.post(url, registration(video), format="json")
     second = staff_client.post(
-        reverse("api-program-image-list"),
+        url,
         registration(video, role=ImageRole.SHOW_STILL),
         format="json",
     )
@@ -87,7 +89,9 @@ def test_member_cannot_bypass_ingest_and_register_archive_metadata(
     editor_client: APIClient, video: Video
 ) -> None:
     response = editor_client.post(
-        reverse("api-program-image-list"), registration(video), format="json"
+        reverse("api-program-image-list", kwargs={"video_id": video.pk}),
+        registration(video),
+        format="json",
     )
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -98,7 +102,7 @@ def test_registration_rejects_a_path_outside_the_videos_image_directory(
     staff_client: APIClient, video: Video
 ) -> None:
     response = staff_client.post(
-        reverse("api-program-image-list"),
+        reverse("api-program-image-list", kwargs={"video_id": video.pk}),
         registration(video, filename="../another-video/images/stolen.png"),
         format="json",
     )
@@ -109,7 +113,7 @@ def test_registration_rejects_a_path_outside_the_videos_image_directory(
 
 def test_registration_rejects_invalid_dimensions(staff_client: APIClient, video: Video) -> None:
     response = staff_client.post(
-        reverse("api-program-image-list"),
+        reverse("api-program-image-list", kwargs={"video_id": video.pk}),
         registration(video, width=0, height=65_536),
         format="json",
     )
@@ -122,7 +126,7 @@ def test_registration_rejects_a_suffix_that_disagrees_with_the_media_type(
     staff_client: APIClient, video: Video
 ) -> None:
     response = staff_client.post(
-        reverse("api-program-image-list"),
+        reverse("api-program-image-list", kwargs={"video_id": video.pk}),
         registration(video, mediaType=ImageMediaType.JPEG),
         format="json",
     )
@@ -131,7 +135,7 @@ def test_registration_rejects_a_suffix_that_disagrees_with_the_media_type(
     assert not ProgramImage.objects.exists()
 
 
-def test_images_can_be_filtered_by_video(
+def test_image_collection_is_scoped_by_video(
     editor_client: APIClient, video: Video, organization: Organization
 ) -> None:
     other = Video.objects.create(
@@ -147,7 +151,7 @@ def test_images_can_be_filtered_by_video(
             height=360,
         )
 
-    response = editor_client.get(reverse("api-program-image-list"), {"video_id": video.pk})
+    response = editor_client.get(reverse("api-program-image-list", kwargs={"video_id": video.pk}))
 
     assert response.status_code == status.HTTP_200_OK
     assert [item["video"] for item in response.json()["results"]] == [video.pk]
@@ -164,7 +168,7 @@ def test_member_can_reclassify_and_unpublish_their_image(
         width=640,
         height=360,
     )
-    url = reverse("api-program-image-detail", args=[image.pk])
+    url = reverse("api-program-image-detail", kwargs={"video_id": video.pk, "pk": image.pk})
 
     changed = editor_client.patch(url, {"role": ImageRole.EPISODE_STILL}, format="json")
     deleted = editor_client.delete(url)
@@ -173,3 +177,28 @@ def test_member_can_reclassify_and_unpublish_their_image(
     assert changed.json()["role"] == ImageRole.EPISODE_STILL
     assert deleted.status_code == status.HTTP_204_NO_CONTENT
     assert not ProgramImage.objects.exists()
+
+
+def test_image_detail_is_scoped_by_video(
+    editor_client: APIClient, video: Video, organization: Organization
+) -> None:
+    other = Video.objects.create(
+        name="Other image programme", creator=video.creator, organization=organization
+    )
+    image = ProgramImage.objects.create(
+        video=other,
+        role=ImageRole.SHOW_STILL,
+        filename=f"{other.pk}/images/show.png",
+        media_type=ImageMediaType.PNG,
+        width=640,
+        height=360,
+    )
+
+    response = editor_client.get(
+        reverse(
+            "api-program-image-detail",
+            kwargs={"video_id": video.pk, "pk": image.pk},
+        )
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND

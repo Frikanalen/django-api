@@ -135,7 +135,8 @@ metadata actually entered.
 **Implemented for videos.** `ProgramImage` stores archive metadata, role and
 measured dimensions. Image bytes follow the existing tusd → ingest → archive
 path, and only ingest may register a successfully published file through
-`/api/program-images`. The feed emits each image as typed `RelatedMaterial`.
+`/api/videos/{video_id}/images`. The feed emits each image as typed
+`RelatedMaterial`.
 Series currently have one URL-based show image; moving that image through the
 same archive-backed model, and adding a separately maintained channel logo,
 remain follow-up work.
