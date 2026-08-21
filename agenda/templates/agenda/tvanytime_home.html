@@ -1,0 +1,112 @@
+{% extends "base_generic.html" %}
+
+{% comment %}
+The index at the root of the tvanytime path, for a distributor who has
+been given the URL and nothing else. It answers, in order: what format is
+this, where do I fetch it, and what will I find inside.
+
+Everything it states about the feed is also in docs/tvanytime.md, which is
+where the reasoning lives. This page deliberately keeps to what a consumer
+needs in order to start polling.
+{% endcomment %}
+
+{% block content %}
+  <p>{% blocktrans %}The {{ channel_name }} broadcast schedule is published as
+    NorDig EPG/Event metadata: <a href="https://tech.ebu.ch/tvanytime">TV-Anytime</a>
+    as profiled by the NorDig TVA Implementation Guidelines. It is intended for
+    business-to-business use by network operators, EPG aggregators and others
+    redistributing our schedule.{% endblocktrans %}</p>
+
+  <p>{% blocktrans %}Documents validate against
+    <code>tva_metadata_3-1.xsd</code> from ETSI TS 102 822-3-1 v1.11.2, which is
+    the version NorDig profiles.{% endblocktrans %}</p>
+
+  <h2>{% trans "Feed URLs" %}</h2>
+
+  <p>{% trans "No authentication is required. Fetch by polling; there is no push notification." %}</p>
+
+  {% comment %}
+  A definition list rather than a table: the site stylesheet has no table
+  rules, so an unstyled one runs its cells together.
+  {% endcomment %}
+  <dl>
+    <dt><a href="{{ upcoming_url }}"><code>{{ upcoming_url }}</code></a></dt>
+    <dd>{% blocktrans %}Today onwards. This is the URL to poll.{% endblocktrans %}</dd>
+
+    <dt><a href="{{ today_url }}"><code>/api/tvanytime/YYYY/MM/DD</code></a></dt>
+    <dd>{% blocktrans %}A window starting on the given date, for backfilling an
+      archive. The link goes to today, {{ today }}.{% endblocktrans %}</dd>
+  </dl>
+
+  <p>{% blocktrans %}Both accept <code>?days=N</code>, from 1 to {{ max_days }};
+    the default is {{ default_days }}. The schedule itself is only drafted about
+    three weeks ahead, so a window wider than that returns whatever exists.{% endblocktrans %}</p>
+
+  <blockquote><code>curl -s '{{ site_url }}{{ upcoming_url }}?days=14' -o epg.xml</code></blockquote>
+
+  <h2>{% trans "What the document contains" %}</h2>
+
+  <p>{% blocktrans %}TV-Anytime describes a programme separately from its
+    transmissions, so the two are in different tables and joined by a content
+    reference identifier:{% endblocktrans %}</p>
+
+  <ul>
+    <li>{% blocktrans %}<code>ProgramInformationTable</code> describes each
+      programme once — title, synopsis, genre, duration, language, subtitles,
+      the responsible member organization, and still images.{% endblocktrans %}</li>
+    <li>{% blocktrans %}<code>ProgramLocationTable</code> says where it goes
+      out: a <code>Schedule</code> of broadcast events, and an
+      <code>OnDemandService</code> for the programmes we hold online rights
+      to.{% endblocktrans %}</li>
+    <li>{% blocktrans %}<code>ServiceInformationTable</code> describes the two
+      services, <code>{{ linear_service_id }}</code> and
+      <code>{{ ondemand_service_id }}</code>.{% endblocktrans %}</li>
+  </ul>
+
+  <h2>{% trans "Notes for implementers" %}</h2>
+
+  <dl>
+    <dt>{% trans "Identifiers are stable" %}</dt>
+    <dd>{% blocktrans %}A programme is identified by
+      <code>crid://{{ authority }}/video/&lt;id&gt;</code> and keeps that
+      identifier across requests, so it is safe to store. The same CRID names
+      the programme whether it is on air or in the on-demand catalogue, which
+      is how the two are recognised as one thing.{% endblocktrans %}</dd>
+
+    <dt>{% trans "Times are Europe/Oslo" %}</dt>
+    <dd>{% blocktrans %}Every timestamp carries an explicit UTC offset, so it
+      is unambiguous across the summer-time transitions.{% endblocktrans %}</dd>
+
+    <dt>{% trans "Published and actual times" %}</dt>
+    <dd>{% blocktrans %}<code>PublishedStartTime</code> is what is scheduled.
+      <code>ActualStartTime</code> appears only once the airtime has passed,
+      and marks the transmission as one we stand behind as having aired; an
+      item still on air has a start and no end. Our playout follows the
+      schedule, so the two agree.{% endblocktrans %}</dd>
+
+    <dt>{% trans "Not everything on air is available on demand" %}</dt>
+    <dd>{% blocktrans %}A programme appears as an <code>OnDemandProgram</code>
+      only where we hold the online rights — which excludes, among other
+      things, programmes containing music registered with TONO. Such a
+      programme still appears in the <code>Schedule</code>, because it does
+      still go out.{% endblocktrans %}</dd>
+
+    <dt>{% trans "Absent means unknown" %}</dt>
+    <dd>{% blocktrans %}An element we cannot fill is left out rather than
+      guessed at, so treat a missing element as "not stated" rather than as an
+      error.{% endblocktrans %}</dd>
+  </dl>
+
+  <h2>{% trans "Elsewhere" %}</h2>
+
+  <ul>
+    <li><a href="{% url 'xmltv-home' %}">{% trans "The same schedule as XMLTV" %}</a>{% blocktrans %}, a
+      simpler flat format, kept for the consumers already using it.{% endblocktrans %}</li>
+    <li><a href="{% url 'swagger-ui' %}">{% trans "The rest of the Frikanalen API" %}</a></li>
+    <li><a href="https://nordig.org/specifications/">{% trans "NorDig specifications, including the TVA implementation package" %}</a></li>
+    <li><a href="https://www.etsi.org/deliver/etsi_ts/102800_102899/1028220301/01.11.02_60/ts_1028220301v011102p.pdf">{% trans "ETSI TS 102 822-3-1, the TV-Anytime metadata specification" %}</a></li>
+  </ul>
+
+  <p>{% blocktrans %}Questions about the feed, or a field you need that we do
+    not publish: <a href="mailto:post@frikanalen.no">post@frikanalen.no</a>.{% endblocktrans %}</p>
+{% endblock content %}

@@ -87,6 +87,13 @@ skip_covered = true
 
 [dependency-groups]
 dev = [
+    # Tests only, and only for one thing: validating the TV-Anytime feed
+    # against the vendored ETSI XSD. Nothing in the application imports
+    # it -- the feed itself is built with the stdlib ElementTree -- but
+    # xml.etree cannot validate, and element order in TV-Anytime is a
+    # schema constraint a distributor's parser would otherwise be first
+    # to discover.
+    "lxml>=6.1.2",
     "django-stubs[compatible-mypy]>=6.1.0",
     "djangorestframework-stubs~=3.18.0",
     "mypy>=1.17.1",
@@ -97,4 +104,5 @@ dev = [
     "ruff>=0.16.1",
     "types-django-filter>=26.1.0.20260713",
     "pre-commit>=3.4",
+    "lxml-stubs>=0.5.1",
 ]

@@ -68,8 +68,8 @@ class OrganizationAdmin(admin.ModelAdmin):
 
 
 class ScheduleitemAdmin(admin.ModelAdmin):
-    list_filter = ("starttime", "schedulereason", "video__organization")
-    list_display = ("__str__", "video", "schedulereason", "starttime", "duration")
+    list_filter = ("starttime", "schedulereason", "video__organization", "is_live")
+    list_display = ("__str__", "video", "schedulereason", "starttime", "duration", "is_live")
     # list_display_links = ('starttime', 'video',)
     # inlines = [VideoInline]
     # exclude = ('video',)
@@ -121,6 +121,19 @@ class SchedulePurposeAdmin(admin.ModelAdmin):
     filter_horizontal = ("direct_videos",)
 
 
+class CategoryAdmin(admin.ModelAdmin):
+    """Where the TV-Anytime genre mapping is maintained.
+
+    `tva_genre` is editable straight from the list because the job it
+    exists for is comparing all ten categories against each other and the
+    classification scheme, which is not a task for ten separate forms.
+    """
+
+    list_display = ("name", "tva_genre")
+    list_editable = ("tva_genre",)
+    ordering = ("name",)
+
+
 class WeeklySlotAdmin(admin.ModelAdmin):
     list_display = (
         "__str__",
@@ -131,7 +144,7 @@ class WeeklySlotAdmin(admin.ModelAdmin):
     )
 
 
-admin.site.register(Category)
+admin.site.register(Category, CategoryAdmin)
 admin.site.register(IngestJob, IngestJobAdmin)
 admin.site.register(Organization, OrganizationAdmin)
 admin.site.register(SchedulePurpose, SchedulePurposeAdmin)

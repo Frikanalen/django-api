@@ -3,70 +3,80 @@
       "model": "fk.category",
       "pk": 119,
       "fields": {
-         "name": "Velferd"
+         "name": "Velferd",
+         "tva_genre": "urn:tva:metadata:cs:ContentCS:2011:3.1.3.2"
       }
    },
    {
       "model": "fk.category",
       "pk": 118,
       "fields": {
-         "name": "Solidaritet og bistand"
+         "name": "Solidaritet og bistand",
+         "tva_genre": "urn:tva:metadata:cs:ContentCS:2011:3.1.3.7"
       }
    },
    {
       "model": "fk.category",
       "pk": 117,
       "fields": {
-         "name": "Samfunn"
+         "name": "Samfunn",
+         "tva_genre": "urn:tva:metadata:cs:ContentCS:2011:3.1.3.2"
       }
    },
    {
       "model": "fk.category",
       "pk": 116,
       "fields": {
-         "name": "Religion/livssyn"
+         "name": "Religion/livssyn",
+         "tva_genre": "urn:tva:metadata:cs:ContentCS:2011:3.1.2"
       }
    },
    {
       "model": "fk.category",
       "pk": 115,
       "fields": {
-         "name": "Minoriteter"
+         "name": "Minoriteter",
+         "tva_genre": "urn:tva:metadata:cs:ContentCS:2011:3.1.5.4"
       }
    },
    {
       "model": "fk.category",
       "pk": 114,
       "fields": {
-         "name": "Kultur"
+         "name": "Kultur",
+         "tva_genre": "urn:tva:metadata:cs:ContentCS:2011:3.1.4"
       }
    },
    {
       "model": "fk.category",
       "pk": 113,
       "fields": {
-         "name": "Idrett"
+         "name": "Idrett",
+         "tva_genre": "urn:tva:metadata:cs:ContentCS:2011:3.2"
       }
    },
    {
       "model": "fk.category",
       "pk": 112,
       "fields": {
-         "name": "Beredskap"
+         "name": "Beredskap",
+         "tva_genre": "urn:tva:metadata:cs:ContentCS:2011:3.1.3"
       }
    },
    {
       "model": "fk.category",
       "pk": 111,
       "fields": {
-         "name": "Barn og ungdom"
+         "name": "Barn og ungdom",
+         "tva_genre": "urn:tva:metadata:cs:ContentCS:2011:3.1.3"
       }
    },
    {
       "model": "fk.category",
       "pk": 110,
       "fields": {
-         "name": "Annet"
+         "name": "Annet",
+         "tva_genre": ""
       }
    }
 ]

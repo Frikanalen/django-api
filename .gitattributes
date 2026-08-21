@@ -1,0 +1,7 @@
+# Vendored TV-Anytime schemas, copied verbatim from ETSI's published
+# package (see agenda/tvanytime/schemas/README.md). They ship with CRLF
+# line endings, and `-text` stops git normalizing them: the README claims
+# these files are byte-identical to the published ones, and refreshing to a
+# new TV-Anytime version should diff as the spec actually changed rather
+# than as every line having moved.
+agenda/tvanytime/schemas/*.xsd -text

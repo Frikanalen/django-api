@@ -96,6 +96,8 @@ def expected_video_json(video: Video) -> dict:
         "publishOnWeb": True,
         "isFiller": False,
         "refUrl": "https://example.test/ref",
+        "spokenLanguage": "no",
+        "minimumAge": None,
         "createdTime": "2015-01-01T10:00:00Z",
         "updatedTime": "2015-01-02T10:00:00Z",
         "uploadedTime": "2015-01-03T10:00:00Z",
