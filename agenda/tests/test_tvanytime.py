@@ -30,6 +30,7 @@ from fk.models import (
     Category,
     Organization,
     Scheduleitem,
+    Series,
     User,
     Video,
     VideoFile,
@@ -246,6 +247,64 @@ def test_programme_is_described_once_however_often_it_airs(video: Video) -> None
     assert len(events) == 2
     crids = {one(event, "tva:Program").get("crid") for event in events}
     assert crids == {f"crid://frikanalen.no/video/{video.id}"}
+
+
+def test_series_is_grouped_and_episode_is_joined_by_stable_crid(
+    tva_schema,
+    video: Video,
+    organization: Organization,
+    editor: User,
+) -> None:
+    series = Series.objects.create(
+        name="Havna vår",
+        synopsis="Fortellinger fra Oslo havn.",
+        image_url="https://example.test/havna.jpg",
+        organization=organization,
+    )
+    video.series = series
+    video.episode_number = 1
+    video.save()
+    # numOfItems describes the whole series, not only the requested window.
+    Video.objects.create(
+        name="Havna vår 2",
+        creator=editor,
+        organization=organization,
+        series=series,
+        episode_number=2,
+    )
+    schedule(video, DAY.replace(hour=12))
+
+    document = assert_valid(tva_schema, feed_for(DAY))
+    group = one(document, ".//tva:GroupInformation")
+    group_crid = f"crid://frikanalen.no/series/{series.pk}"
+
+    assert group.get("groupId") == group_crid
+    assert group.get("numOfItems") == "2"
+    assert group.get("ordered") == "true"
+    assert one(group, "tva:GroupType").get("value") == "series"
+    assert one(group, ".//tva:Title").text == "Havna vår"
+    assert one(group, ".//tva:Synopsis").text == "Fortellinger fra Oslo havn."
+    assert one(group, ".//tva:MediaUri").text == "https://example.test/havna.jpg"
+
+    episode_of = one(document, ".//tva:ProgramInformation/tva:EpisodeOf")
+    assert episode_of.get("crid") == group_crid
+    assert episode_of.get("index") == "1"
+
+
+def test_unordered_series_does_not_invent_episode_numbers(
+    tva_schema,
+    video: Video,
+    organization: Organization,
+) -> None:
+    series = Series.objects.create(name="Samtaler", organization=organization)
+    video.series = series
+    video.save()
+    schedule(video, DAY.replace(hour=12))
+
+    document = assert_valid(tva_schema, feed_for(DAY))
+
+    assert one(document, ".//tva:GroupInformation").get("ordered") == "false"
+    assert one(document, ".//tva:EpisodeOf").get("index") is None
 
 
 def test_first_showing_is_not_a_repeat_and_the_second_is(video: Video) -> None:

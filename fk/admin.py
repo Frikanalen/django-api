@@ -11,6 +11,7 @@ from fk.models import (
     Organization,
     Scheduleitem,
     SchedulePurpose,
+    Series,
     User,
     Video,
     VideoFile,
@@ -54,7 +55,7 @@ class VideoFileInline(admin.StackedInline):
 
 
 class VideoAdmin(admin.ModelAdmin):
-    list_display = ("name", "creator", "organization")
+    list_display = ("name", "creator", "organization", "series", "episode_number")
     inlines = [VideoFileInline]
     search_fields = ["name", "description", "organization__name", "header", "creator__email"]
     list_filter = ("proper_import", "is_filler", "publish_on_web", "has_tono_records")
@@ -65,6 +66,14 @@ class OrganizationAdmin(admin.ModelAdmin):
     filter_horizontal = ("members",)
     list_filter = ("fkmember",)
     ordering = ("name",)
+
+
+class SeriesAdmin(admin.ModelAdmin):
+    list_display = ("name", "organization")
+    list_filter = ("organization",)
+    readonly_fields = ("image_url",)
+    search_fields = ("name", "synopsis", "organization__name")
+    ordering = ("organization__name", "name")
 
 
 class ScheduleitemAdmin(admin.ModelAdmin):
@@ -149,6 +158,7 @@ admin.site.register(IngestJob, IngestJobAdmin)
 admin.site.register(Organization, OrganizationAdmin)
 admin.site.register(SchedulePurpose, SchedulePurposeAdmin)
 admin.site.register(Scheduleitem, ScheduleitemAdmin)
+admin.site.register(Series, SeriesAdmin)
 admin.site.register(User, UserAdmin)
 admin.site.register(Video, VideoAdmin)
 admin.site.register(VideoFile)

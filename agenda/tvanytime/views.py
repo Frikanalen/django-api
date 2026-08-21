@@ -60,6 +60,7 @@ def schedule_queryset():
     """
     return Scheduleitem.objects.select_related(
         "video__organization__editor",
+        "video__series",
     ).prefetch_related(
         "video__categories",
         "video__videofile_set",

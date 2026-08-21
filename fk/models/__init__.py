@@ -20,6 +20,7 @@ from .schedule import (  # noqa: F401
     WeeklySlot,
     airtime_end,
 )
+from .series import Series  # noqa: F401
 from .user import User, UserManager  # noqa: F401
 from .video import Video  # noqa: F401
 from .video_file import VideoFile, VideoFileVariant  # noqa: F401

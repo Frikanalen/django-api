@@ -99,6 +99,20 @@ class Video(models.Model):
     organization = models.ForeignKey(
         "Organization", help_text="Organization for video", on_delete=models.PROTECT
     )
+    series = models.ForeignKey(
+        "Series",
+        blank=True,
+        null=True,
+        related_name="videos",
+        on_delete=models.PROTECT,
+        help_text="Series this video is an episode of, if any.",
+    )
+    episode_number = models.PositiveIntegerField(
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(1)],
+        help_text="Episode number within the series. Leave blank when the series is unordered.",
+    )
     ref_url = models.CharField(blank=True, max_length=1024, help_text="URL for reference")
 
     # Published as <Language> in the TV-Anytime feed. A free-text tag rather
@@ -190,6 +204,15 @@ class Video(models.Model):
             models.CheckConstraint(
                 condition=models.Q(duration__gte=timedelta(0)),
                 name="video_duration_not_negative",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(series__isnull=False) | models.Q(episode_number__isnull=True),
+                name="video_episode_number_requires_series",
+            ),
+            models.UniqueConstraint(
+                fields=("series", "episode_number"),
+                condition=models.Q(episode_number__isnull=False),
+                name="video_episode_number_unique_per_series",
             ),
         ]
 

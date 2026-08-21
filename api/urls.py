@@ -12,6 +12,7 @@ import agenda.tvanytime.views as tvanytime_views
 import api.auth.views as auth_views
 import api.organization.views as organization_views
 import api.schedule.views as schedule_views
+import api.series.views as series_views
 import api.video.views as video_views
 import api.videofile.views as videofile_views
 from fkweb.views import CsrfView
@@ -65,6 +66,9 @@ api_patterns: list[URLPattern | URLResolver] = [
         name="api-video-ingest-job-detail",
     ),
     url(rf"^videos/{PK}$", video_views.VideoDetail.as_view(), name="api-video-detail"),
+    # Series
+    url(r"^series$", series_views.SeriesList.as_view(), name="api-series-list"),
+    url(rf"^series/{PK}$", series_views.SeriesDetail.as_view(), name="api-series-detail"),
     # Organization
     url(
         r"^organization$",

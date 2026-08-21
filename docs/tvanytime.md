@@ -41,6 +41,7 @@ TVAMain
 ├── MetadataOriginationInformationTable   who published this and on what terms
 └── ProgramDescription
     ├── ProgramInformationTable           each programme, described once
+    ├── GroupInformationTable             series referenced by those programmes
     ├── ProgramLocationTable
     │   ├── Schedule                      linear transmissions
     │   └── OnDemandService               the same programmes, on demand
@@ -51,6 +52,7 @@ The join between the two tables is a **CRID**, a location-independent
 content identifier:
 
 - `crid://frikanalen.no/video/<id>` for a video
+- `crid://frikanalen.no/series/<id>` for a series
 - `crid://frikanalen.no/schedule/<id>` for a transmission with no video
   behind it, such as a live session
 
@@ -79,6 +81,8 @@ Named against the NorDig terms list (`NorDigTVATerms_v1_4.xlsx`).
 | production year | `ProductionDate` | `Video.uploaded_time`, falling back to `created_time` |
 | production country | `ProductionLocation` | always `NO` |
 | program duration | `Duration` | `Video.duration` |
+| series | `GroupInformation` / `EpisodeOf` | `Video.series` |
+| episode number | `EpisodeOf index` | `Video.episode_number` |
 | alternativ id | `OtherIdentifier type="URI"` | the video's page on frikanalen.no |
 | image format | `AVAttributes/VideoAttributes/FrameRate` | `Video.framerate` |
 | event id | `InstanceMetadataId` | `imi:<scheduleitem id>` |
@@ -178,6 +182,43 @@ xmllint --noout --schema agenda/tvanytime/schemas/tva_metadata_3-1.xsd feed.xml
 `maxOccurs=" unbounded"` — which the test suite repairs in memory. Apply the
 same edit to a scratch copy if you are validating from the shell.)
 
+## Series and episodes
+
+Series are organization-owned records with a name and synopsis. A video may
+belong to one series and may carry an episode number. Seasons remain
+deliberately deferred: most member organizations do not need the extra level,
+and adding it later does not change the series or episode identifiers already
+published.
+
+Members create and edit series on the organization dashboard, then choose the
+series and episode number while creating or editing a video. The same records
+are available through `GET/POST /api/series` and
+`GET/PATCH/DELETE /api/series/<id>`. Writes use the same organization
+membership rules as videos. A series containing videos cannot be deleted
+until those videos have been detached, which prevents an accidental bulk loss
+of episode metadata.
+
+When at least one scheduled programme belongs to a series, the feed emits one
+`GroupInformation` for it with a stable series CRID and the total number of
+videos in the series. Each programme carries `EpisodeOf`; its `index` is
+omitted when no episode number was entered. The group is marked ordered only
+when every video has a number, so missing editorial data is not presented as a
+complete ordering.
+
+`Series.image_url` is reserved for a later managed artwork-upload flow and is
+read-only in ordinary series API writes and in Django admin. Until that flow
+exists it remains blank, and the feed simply emits no series
+`RelatedMaterial`.
+
+TV-Anytime models a season as another group between a series and its episodes,
+not as a property of the series group. A future implementation can therefore
+add a `Season` record without replacing the current `Series`: the season's
+`GroupInformation` uses `GroupType="season"` and `MemberOf` to point to the
+series, while each programme's `EpisodeOf` points to its season. The season
+number belongs on `MemberOf index`, and the episode number remains on
+`EpisodeOf index`. Videos without a season continue to point directly to the
+series, as they do now.
+
 ## Known gaps and follow-up work
 
 What follows is what the *current* feed cannot say. For the wider menu of
@@ -185,34 +226,10 @@ model changes that would let it say more — production year, editorial
 imagery, cast and crew, keywords, sign language, multiple subtitle tracks —
 see [tvanytime-model-proposals.md](tvanytime-model-proposals.md).
 
-### Series and seasons
-
-The largest gap against the NorDig terms list. TV-Anytime carries series
-structure in a `GroupInformationTable`: a `GroupInformation` with
-`GroupType value="series"` or `"season"`, joined to programmes by
-`MemberOf`/`EpisodeOf` with an `index` for the episode number. It is what
-lets a receiver offer "record the whole series" and group a strand in the
-guide.
-
-Frikanalen has no series model at all — a weekly programme is currently
-*n* unrelated videos with similar names — so nothing can be emitted. A
-design that would fit:
-
-- A `Series` model owned by an `Organization`: name, synopsis, image.
-- `Video.series` (nullable FK) and `Video.episode_number`.
-- Optionally a `Season` between them; most members would not use it, so it
-  is probably worth deferring until someone asks.
-- The feed then emits one `GroupInformation` per series with
-  `numOfItems`, and each episode gains `EpisodeOf crid="..." index="n"`.
-
-The work is mostly editorial rather than technical: members would need to
-backfill series membership before any of it appears in the feed, so the
-admin and members' pages matter more here than the XML does.
-
 ### Imagery
 
-This is the largest gap after series structure, and it is entirely a
-content problem rather than a code one.
+This is now the largest remaining structural gap, and it is largely a content
+problem rather than a feed-code one.
 
 NorDig defines a whole taxonomy of programme imagery in
 `HowRelatedNordigCS:2022`, subdividing "Promotional Still Image" into the

@@ -3,7 +3,8 @@
 What Frikanalen could publish in its [TV-Anytime feed](tvanytime.md) but
 cannot today, and what each one would take.
 
-Nothing here is implemented. It is a menu, not a plan.
+Except for the series structure called out below, this remains a menu rather
+than a plan.
 
 **How to read an entry.** Each names the TV-Anytime element it would fill,
 the model change it needs, and what it buys. Where a form has been checked
@@ -204,14 +205,17 @@ video has no explicit credits.
 
 **Fills:** `GroupInformationTable`, `MemberOf`, `EpisodeOf`.
 
-The largest gap against the NorDig terms list, and covered in
-[tvanytime.md](tvanytime.md#series-and-seasons). Repeated here only as a
-pointer: a `Series` model owned by an `Organization`, `Video.series` and
-`Video.episode_number`, optionally a `Season` between them.
+**Implemented without seasons.** The `Series` model is owned by an
+`Organization`; `Video.series` and `Video.episode_number` provide membership
+and ordering. The feed emits `GroupInformation` and `EpisodeOf`, and both the
+API and member pages support the editorial backfill. See
+[tvanytime.md](tvanytime.md#series-and-episodes).
 
-The work is mostly editorial. Nothing appears in the feed until members
-backfill series membership, so the admin and members' pages matter more
-than the XML does.
+`Series.image_url` is reserved as read-only output for a future managed upload
+flow. Managed upload and typed editorial imagery still belong to the image
+proposal above. Seasons remain deferred until the extra hierarchy has a real
+user; TV-Anytime can add each season as a `GroupInformation` member of the
+existing series without changing today's series identifiers.
 
 ---
 

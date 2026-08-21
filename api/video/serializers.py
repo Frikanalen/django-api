@@ -2,7 +2,8 @@ from django.conf import settings
 from rest_framework import serializers
 
 from api.organization.serializers import OrganizationSerializer
-from fk.models import Category, IngestJob, IngestState, Organization, User, Video
+from api.series.serializers import SeriesSummarySerializer
+from fk.models import Category, IngestJob, IngestState, Organization, Series, User, Video
 
 
 class BaseVideoSerializer(serializers.ModelSerializer):
@@ -25,6 +26,14 @@ class BaseVideoSerializer(serializers.ModelSerializer):
     )
     files = serializers.SerializerMethodField()
     duration_sec = serializers.SerializerMethodField()
+    series = SeriesSummarySerializer(read_only=True, allow_null=True)
+    series_id = serializers.PrimaryKeyRelatedField(
+        source="series",
+        queryset=Series.objects.all(),
+        required=False,
+        allow_null=True,
+        write_only=True,
+    )
 
     @staticmethod
     def get_duration_sec(obj) -> float | None:
@@ -39,6 +48,11 @@ class BaseVideoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Video
+        # The conditional database constraint on (series, episode_number)
+        # becomes a DRF UniqueTogetherValidator that incorrectly makes both
+        # optional fields required. validate() below enforces the same rule
+        # only when both values are present.
+        validators = ()
         fields = (
             "id",
             "name",
@@ -48,6 +62,9 @@ class BaseVideoSerializer(serializers.ModelSerializer):
             "creator",
             "files",
             "organization",
+            "series",
+            "series_id",
+            "episode_number",
             "duration",
             "duration_sec",
             "categories",
@@ -87,6 +104,49 @@ class BaseVideoSerializer(serializers.ModelSerializer):
                         }
                     )
                 data["organization"] = potential_orgs[0]
+
+        organization = data.get("organization")
+        if organization is None and self.instance is not None:
+            organization = self.instance.organization
+
+        series_was_supplied = "series" in data
+        if series_was_supplied and data["series"] is None:
+            # Clearing membership also clears the number that only has
+            # meaning inside that series.
+            data["episode_number"] = None
+
+        series = data.get("series")
+        if not series_was_supplied and self.instance is not None:
+            series = self.instance.series
+
+        if (
+            series is not None
+            and organization is not None
+            and series.organization_id != organization.pk
+        ):
+            raise serializers.ValidationError(
+                {"series_id": "The series must belong to the video's organization."}
+            )
+
+        episode_number = data.get("episode_number")
+        if "episode_number" not in data and self.instance is not None:
+            episode_number = self.instance.episode_number
+        if episode_number is not None and series is None:
+            raise serializers.ValidationError(
+                {"episode_number": "Choose a series before setting an episode number."}
+            )
+
+        if series is not None and episode_number is not None:
+            duplicate = Video.objects.filter(
+                series=series,
+                episode_number=episode_number,
+            )
+            if self.instance is not None:
+                duplicate = duplicate.exclude(pk=self.instance.pk)
+            if duplicate.exists():
+                raise serializers.ValidationError(
+                    {"episode_number": "That episode number is already used in this series."}
+                )
         return data
 
 
