@@ -1,5 +1,5 @@
 from rest_framework import permissions
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 
 def can_administer_organization(user, organization) -> bool:
@@ -98,6 +98,10 @@ class RequireSchedulingEligibility:
 
         if video is None or not can_schedule_for_organization(user, video.organization):
             raise PermissionDenied(self.message)
+        if not video.proper_import:
+            raise ValidationError(
+                {"video": "The video must finish processing before it can be scheduled."}
+            )
 
 
 class CanScheduleForOrganizationOrReadOnly(permissions.IsAuthenticatedOrReadOnly):

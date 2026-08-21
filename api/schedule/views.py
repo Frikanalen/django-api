@@ -60,10 +60,12 @@ class ScheduleitemViewSet(RequireSchedulingEligibility, viewsets.ModelViewSet):
         return ScheduleitemReadSerializer
 
     def perform_destroy(self, instance):
-        # Create and update enforce the freeze in the serializer; delete
+        # Create and update enforce the window in the serializer; delete
         # never reaches one, so the check lives here.
-        if not self.request.user.is_staff and policy.is_frozen(instance.starttime):
-            raise PermissionDenied(policy.freeze_message())
+        if not self.request.user.is_staff and not policy.is_open_airtime(
+            instance.starttime, instance.endtime
+        ):
+            raise PermissionDenied(policy.scheduling_window_message())
         instance.delete()
 
 

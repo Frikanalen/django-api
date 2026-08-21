@@ -49,15 +49,6 @@ class ProgramguideCalendarView(ProgramguideView):
     title = _("Calendar - this week")
 
 
-class ProgramplannerView(TemplateView):
-    def get(self, request: HttpRequest, *_args, **_kwargs) -> HttpResponse:
-        context = {
-            #'events': events,
-            "title": _("Schedule planner")
-        }
-        return render(request, "agenda/planner.html", context)
-
-
 class ManageVideoList(TemplateView):
     template_name = "agenda/manage_video_list.html"
     VIDEOS_PER_PAGE = 20

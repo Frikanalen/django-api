@@ -50,6 +50,7 @@ def test_profile_returns_own_data(client: APIClient, account: User) -> None:
         "id": account.pk,
         "email": EMAIL,
         "isStaff": False,
+        "identityConfirmed": False,
         "dateJoined": "2015-01-01T10:00:00Z",
         "editorOf": [],
         "memberOf": [],
@@ -91,6 +92,20 @@ def test_email_cannot_be_changed(client: APIClient, account: User) -> None:
     assert response.status_code == status.HTTP_200_OK
     account.refresh_from_db()
     assert account.email == EMAIL
+
+
+def test_identity_confirmation_is_visible_but_cannot_be_changed(
+    client: APIClient, account: User
+) -> None:
+    account.identity_confirmed = True
+    account.save(update_fields=["identity_confirmed"])
+
+    response = client.patch(reverse("api-user-detail"), {"identityConfirmed": False}, format="json")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["identityConfirmed"] is True
+    account.refresh_from_db()
+    assert account.identity_confirmed is True
 
 
 def test_password_updates_are_hashed_and_usable(client: APIClient, account: User) -> None:

@@ -168,7 +168,7 @@ h1 {
               </div>{# .login-box #}
             </li>
           {% else %}
-            <li><a href="{% url 'manage-schedule' %}">{% trans "Plan" %}</a>
+            <li><a href="/schedule/plan">{% trans "Plan" %}</a>
             <li>
               <div class="login_box">
                 Logged in as {{ user.email }}

@@ -11,6 +11,8 @@ api/organization/tests/test_permissions.py, and upload-token visibility
 is covered in api/video/tests/test_upload_token.py.
 """
 
+from datetime import timedelta
+
 import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -31,7 +33,7 @@ DETAIL_URLS = {
 PATCHES = {
     "video": ({"name": "Renamed video"}, "name", "Renamed video"),
     "videofile": ({"filename": "renamed.mov"}, "filename", "renamed.mov"),
-    "scheduleitem": ({"schedulereason": 2}, "schedulereason", 2),
+    "scheduleitem": ({"duration": "00:30:00"}, "duration", timedelta(minutes=30)),
     "asrun": ({"playout": "secondary"}, "playout", "secondary"),
     "category": ({"name": "Renamed category"}, "name", "Renamed category"),
 }
@@ -169,7 +171,7 @@ def test_creation_on_organization_owned_endpoints_requires_membership(
             "api-scheduleitem-list",
             {
                 "video": video.pk,
-                "starttime": "2015-06-01T12:00:00Z",
+                "starttime": "2015-01-02T12:00:00Z",
                 "duration": "00:01:00",
                 "schedulereason": 2,
             },

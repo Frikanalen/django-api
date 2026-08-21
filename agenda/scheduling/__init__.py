@@ -7,8 +7,8 @@ When and how far ahead any of this happens is
 Mondays before they air, open to member picks for one week, and frozen
 from the Monday before airing.
 
-Neither half of this runs on the web request path; both are invoked from
-management commands, and thus from the nightly CronJobs, in this order:
+Neither half of this runs on the web request path. One nightly management
+command and CronJob invoke them sequentially, in this order:
 
 1. :mod:`~agenda.scheduling.weekly_slots` places one video per WeeklySlot.
 2. :mod:`~agenda.scheduling.jukebox` fills the airtime those slots leave over,
@@ -16,9 +16,9 @@ management commands, and thus from the nightly CronJobs, in this order:
    :mod:`~agenda.scheduling.selection` -- which see the slots' placements,
    so an organization the slots favor gets its fillers downplayed.
 
-The two entry points still disagree about what counts as airtime already
+The two stages still disagree about what counts as airtime already
 taken (the slot filler asks ``overlapping()``, the jukebox walks the
-window minute-aligned). Import the entry point you want from its own
-module rather than from this package, so it stays obvious which half you
-are calling.
+window minute-aligned). The production entry point is
+:func:`agenda.scheduling.draft.draft_broadcast_schedule`; the individual
+stage entry points remain available for maintenance and focused tests.
 """

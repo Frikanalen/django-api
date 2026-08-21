@@ -65,13 +65,18 @@ class ScheduleitemVideoSerializer(serializers.ModelSerializer):
 class ScheduleitemModifySerializer(serializers.ModelSerializer):
     starttime = serializers.DateTimeField(default_timezone=OSLO)
     endtime = serializers.DateTimeField(default_timezone=OSLO, read_only=True)
+    schedulereason = serializers.ChoiceField(
+        choices=Scheduleitem.SCHEDULE_REASONS,
+        required=False,
+        help_text="Staff may choose provenance. Member writes are always recorded as User.",
+    )
 
     class Meta:
         model = Scheduleitem
         fields = ("id", "video", "schedulereason", "starttime", "endtime", "duration")
 
     def validate(self, data):
-        self._enforce_freeze(data)
+        self._enforce_scheduling_window(data)
         if "starttime" in data or "duration" in data:
 
             def g(v):
@@ -87,29 +92,47 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"duration": f"Conflict with '{blocking[0]}'."})
         return data
 
-    def _enforce_freeze(self, data):
-        """Members may only touch items in the open broadcast week.
+    def _enforce_scheduling_window(self, data):
+        """Members may only touch airtime wholly inside the open week.
 
         Both positions matter on a move: an item may neither leave nor
-        land inside the frozen weeks. Staff is exempt (the same
+        land outside the open week. Staff is exempt (the same
         exemption IsInOrganizationOrReadOnly grants on objects).
         """
         request = self.context.get("request")
         if request is None or request.user.is_staff:
             return
         boundary = policy.freeze_boundary()
+        horizon = policy.scheduling_horizon()
         current_start = self.instance.starttime if self.instance else None
         new_start = data.get("starttime", current_start)
-        for starttime in (current_start, new_start):
-            if starttime is not None and starttime < boundary:
-                raise serializers.ValidationError({"starttime": policy.freeze_message(boundary)})
+        current_duration = self.instance.duration if self.instance else None
+        new_duration = data.get("duration", current_duration)
+        for starttime, duration in (
+            (current_start, current_duration),
+            (new_start, new_duration),
+        ):
+            if starttime is None or duration is None:
+                continue
+            if not policy.is_open_airtime(starttime, airtime_end(starttime, duration)):
+                raise serializers.ValidationError(
+                    {"starttime": policy.scheduling_window_message(boundary, horizon)}
+                )
 
     def create(self, validated_data):
+        request = self.context["request"]
+        if request.user.is_staff:
+            validated_data.setdefault("schedulereason", Scheduleitem.REASON_ADMIN)
+        else:
+            validated_data["schedulereason"] = Scheduleitem.REASON_USER
         with transaction.atomic():
             self._claim_airtime(validated_data, instance=None)
             return super().create(validated_data)
 
     def update(self, instance, validated_data):
+        request = self.context["request"]
+        if not request.user.is_staff:
+            validated_data["schedulereason"] = Scheduleitem.REASON_USER
         with transaction.atomic():
             self._claim_airtime(validated_data, instance)
             # A human edit makes the item deliberate programming: strip
@@ -150,14 +173,24 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
 
 
 class ScheduleitemReadSerializer(serializers.ModelSerializer):
-    video = ScheduleitemVideoSerializer()
+    video = ScheduleitemVideoSerializer(allow_null=True)
     starttime = serializers.DateTimeField(default_timezone=OSLO)
     endtime = serializers.DateTimeField(default_timezone=OSLO, read_only=True)
     displaceable = serializers.SerializerMethodField()
 
     class Meta:
         model = Scheduleitem
-        fields = ("id", "video", "starttime", "endtime", "displaceable")
+        fields = (
+            "id",
+            "default_name",
+            "video",
+            "schedulereason",
+            "starttime",
+            "endtime",
+            "duration",
+            "displaceable",
+        )
+        read_only_fields = fields
 
     @extend_schema_field(
         serializers.BooleanField(
