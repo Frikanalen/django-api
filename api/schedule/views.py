@@ -17,7 +17,7 @@ from api.schedule.serializers import (
     ScheduleitemReadSerializer,
     SchedulingPolicySerializer,
 )
-from fk.models import Scheduleitem
+from fk.models import Scheduleitem, WeeklySlot
 
 
 class ScheduleitemViewSet(RequireSchedulingEligibility, viewsets.ModelViewSet):
@@ -70,8 +70,7 @@ class ScheduleitemViewSet(RequireSchedulingEligibility, viewsets.ModelViewSet):
 
 
 class SchedulingPolicyView(APIView):
-    """The broadcast-week policy boundaries, for clients to compare
-    schedule items against instead of re-deriving the week arithmetic."""
+    """Broadcast-week boundaries and recurring weekly reservations."""
 
     permission_classes = (permissions.AllowAny,)
 
@@ -90,7 +89,9 @@ class SchedulingPolicyView(APIView):
             "where an item marked `displaceable` can be replaced by a member "
             "organization's own pick; beyond `schedulingHorizon` nothing is "
             "drafted yet. The values only change on Mondays at midnight "
-            "Europe/Oslo. Staff accounts are exempt from the freeze."
+            "Europe/Oslo. Staff accounts are exempt from the freeze. "
+            "`weeklySlots` describes recurring reserved airtime whether or "
+            "not its concrete programme has been drafted yet."
         ),
         responses=SchedulingPolicySerializer,
     )
@@ -101,6 +102,7 @@ class SchedulingPolicyView(APIView):
                 "freeze_boundary": policy.freeze_boundary(now),
                 "scheduling_horizon": policy.scheduling_horizon(now),
                 "server_time": now,
+                "weekly_slots": WeeklySlot.objects.select_related("purpose").all(),
             }
         )
         return Response(serializer.data)
