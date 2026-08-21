@@ -1,9 +1,9 @@
-{% extends "base_generic.html" %}
+{% extends "service_base.html" %}
 
 {% block content %}
   <h1>{% trans "Schedule as XMLTV" %}</h1>
 
-  <p>{% blocktrans %}The {{ channel_display_name }} schedule is provided
+  <p>{% blocktrans with channel_name=channel_display_names|join:", " %}The {{ channel_name }} schedule is provided
     in <a href="http://www.xmltv.org/">XMLTV format</a>, with one URL
     per day.  The URL is <code>/xmltv/YYYY/MM/DD</code> for a specific
     day, and <code>/xmltv/upcoming/</code> for the scheduled entries
