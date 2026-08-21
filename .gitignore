@@ -7,5 +7,6 @@ env
 venv
 
 .vscode
+.DS_Store
 # Generated OpenAPI schema
 schema.yaml
