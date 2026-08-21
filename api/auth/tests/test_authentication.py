@@ -80,6 +80,7 @@ def test_session_login_sets_a_session_and_returns_the_profile(account: User) -> 
         "id",
         "email",
         "isStaff",
+        "identityConfirmed",
         "dateJoined",
         "editorOf",
         "memberOf",

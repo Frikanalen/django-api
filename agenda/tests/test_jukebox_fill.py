@@ -456,18 +456,21 @@ def test_an_organization_dominating_the_slots_gets_diluted_filler(
     assert played == {v.id for v in dominant + minority}
 
 
-# --- the entry point the cron actually calls -------------------------------
+# --- the individual stage's maintenance command ----------------------------
 
 
 def test_the_management_command_fills_through_the_open_week(
     monkeypatch: pytest.MonkeyPatch, filler_video: Video
 ) -> None:
     """
-    `fill_agenda_with_jukebox` is invoked by a nightly CronJob with no
-    arguments and drafts through the scheduling horizon: START_DATE is
-    Sunday noon of the week starting Mon 06-24, so the horizon is
-    Mon 07-15 00:00 -- a 20880-minute window holding 342 hour-long
-    fillers at 61-minute spacing.
+    The standalone `fill_agenda_with_jukebox` maintenance command takes
+    no arguments and drafts through the scheduling horizon. Production
+    supplies the same clock instant as the weekly-slot stage through
+    `draft_broadcast_schedule`; this test pins the standalone default.
+
+    START_DATE is Sunday noon of the week starting Mon 06-24, so the
+    horizon is Mon 07-15 00:00 -- a 20880-minute window holding 342
+    hour-long fillers at 61-minute spacing.
     """
     monkeypatch.setattr(jukebox.timezone, "now", lambda: START_DATE)
 

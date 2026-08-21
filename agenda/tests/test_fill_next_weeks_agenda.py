@@ -1,7 +1,8 @@
 """
 fill_next_weeks_agenda places one video per WeeklySlot occurrence, for
 every occurrence between now and the scheduling horizon (the end of the
-open broadcast week); it runs nightly from cron before the jukebox.
+open broadcast week); the nightly orchestration command invokes it before
+the jukebox.
 
 The fixed clock is a Thursday, so a Monday slot has exactly two
 occurrences before the horizon: one in the frozen next week (Mon 7-1)
@@ -382,7 +383,7 @@ def test_deleting_a_slot_strands_its_placements_as_deliberate_programming(
     assert {item.weekly_slot for item in survivors} == {None}
 
 
-# --- the entry points the cron actually calls -------------------------------
+# --- the individual stage management commands ------------------------------
 
 
 def test_management_command_runs_the_filler(

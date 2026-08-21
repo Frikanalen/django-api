@@ -93,6 +93,61 @@ def test_confirmed_users_from_member_organizations_can_schedule(
     assert Scheduleitem.objects.get().video == video
 
 
+def test_member_schedule_provenance_is_server_owned(
+    member_client: APIClient,
+    organization_member: User,
+    organization: Organization,
+    video: Video,
+) -> None:
+    organization.members.add(organization_member)
+    payload = schedule_payload(video)
+    payload["schedulereason"] = Scheduleitem.REASON_JUKEBOX
+
+    response = member_client.post(reverse("api-scheduleitem-list"), payload, format="json")
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert Scheduleitem.objects.get().schedulereason == Scheduleitem.REASON_USER
+
+
+def test_members_cannot_turn_their_programming_into_jukebox_filler(
+    member_client: APIClient,
+    organization_member: User,
+    organization: Organization,
+    schedule_item_factory: Callable[..., Scheduleitem],
+) -> None:
+    organization.members.add(organization_member)
+    item = schedule_item_factory(starttime=SCHEDULE_START)
+
+    response = member_client.patch(
+        reverse("api-scheduleitem-detail", args=[item.pk]),
+        {"schedulereason": Scheduleitem.REASON_JUKEBOX},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    item.refresh_from_db()
+    assert item.schedulereason == Scheduleitem.REASON_USER
+
+
+def test_members_cannot_schedule_a_video_that_is_still_processing(
+    member_client: APIClient,
+    organization_member: User,
+    organization: Organization,
+    video: Video,
+) -> None:
+    organization.members.add(organization_member)
+    video.proper_import = False
+    video.save(update_fields=["proper_import"])
+
+    response = member_client.post(
+        reverse("api-scheduleitem-list"), schedule_payload(video), format="json"
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.data["errors"][0]["attr"] == "video"
+    assert not Scheduleitem.objects.exists()
+
+
 @pytest.mark.parametrize(
     ("identity_confirmed", "fkmember"),
     [(False, True), (True, False), (False, False)],

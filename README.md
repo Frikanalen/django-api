@@ -126,19 +126,24 @@ uv run pytest --cov
 
 ## Management commands
 
-In addition to the HTTP API, the following commands are executed periodically as Kubernetes cron jobs in our cluster. Together they implement the broadcast-week lifecycle defined in `agenda/scheduling/policy.py`: every week is drafted two Mondays before it airs, stays open for member organizations to replace jukebox fillers with picks of their own for one week, and is frozen from the Monday before airing.
+In addition to the HTTP API, the following command is executed nightly by one Kubernetes CronJob. It implements the broadcast-week lifecycle defined in `agenda/scheduling/policy.py`: every week is drafted two Mondays before it airs, stays open for member organizations to replace jukebox fillers with picks of their own for one week, and is frozen from the Monday before airing.
+
+```sh
+./manage.py draft_broadcast_schedule
+```
+
+The command captures one timestamp, places videos defined by the WeeklySlot model through the end of the open broadcast week, and only then fills the remaining airtime with jukebox videos. If weekly-slot placement fails, the jukebox stage does not run against the incomplete draft.
+
+The CronJob runs at 00:05 in `Europe/Oslo`, immediately after the Monday scheduling boundary when a new week enters the horizon. Overlapping runs are forbidden.
+
+The individual stages remain available for maintenance:
 
 ```sh
 ./manage.py fill_next_weeks_agenda
-```
-
-This job places videos as defined by the WeeklySlot model, for every slot occurrence up to the end of the open broadcast week. This will generally be entries like "Fill Mondays 12-13 with the latest videos from NUUG".
-
-```sh
 ./manage.py fill_agenda_with_jukebox
 ```
 
-This job fills the remaining unpopulated airtime up to the end of the open broadcast week, drawing from the videos marked with is_filler=True by a weighted-random draw that prefers fresh uploads and organizations with little airtime that week (see `agenda/scheduling/selection.py`).
+The first places entries such as "Fill Mondays 12-13 with the latest videos from NUUG". The second draws from videos marked with `is_filler=True`, using weighted randomness that prefers fresh uploads and organizations with little airtime that week (see `agenda/scheduling/selection.py`). Production always invokes them through the orchestration command so their order is guaranteed.
 
 ## Test data
 

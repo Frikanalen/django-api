@@ -265,6 +265,7 @@ def test_list_serializes_nested_video_details(
     assert response.data["results"] == [
         {
             "id": item.pk,
+            "default_name": "",
             "video": {
                 "id": video.pk,
                 "name": video.name,
@@ -284,8 +285,10 @@ def test_list_serializes_nested_video_details(
                     }
                 ],
             },
+            "schedulereason": Scheduleitem.REASON_LEGACY,
             "starttime": "2015-01-02T10:00:00+01:00",
             "endtime": "2015-01-02T11:00:00+01:00",
+            "duration": "01:00:00",
             "displaceable": False,
         }
     ]
@@ -311,3 +314,34 @@ def test_list_query_count_is_constant(
         )
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 5
+
+
+def test_list_serializes_named_programming_without_a_video(
+    authenticated_client: APIClient,
+) -> None:
+    target_day = date(2015, 1, 2)
+    item = Scheduleitem.objects.create(
+        default_name="Direct broadcast",
+        video=None,
+        schedulereason=Scheduleitem.REASON_ADMIN,
+        starttime=at(target_day, 12),
+        duration=timedelta(minutes=30),
+    )
+
+    response = authenticated_client.get(
+        reverse("api-scheduleitem-list"), {"date": target_day.isoformat()}
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["results"] == [
+        {
+            "id": item.pk,
+            "default_name": "Direct broadcast",
+            "video": None,
+            "schedulereason": Scheduleitem.REASON_ADMIN,
+            "starttime": "2015-01-02T12:00:00+01:00",
+            "endtime": "2015-01-02T12:30:00+01:00",
+            "duration": "00:30:00",
+            "displaceable": False,
+        }
+    ]

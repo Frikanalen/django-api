@@ -24,6 +24,7 @@ OSLO = ZoneInfo("Europe/Oslo")
 IN_THE_OPEN_WEEK = datetime(2015, 1, 1, 10, tzinfo=OSLO)
 IN_THE_FROZEN_WEEK = datetime(2014, 12, 25, 10, tzinfo=OSLO)
 OPEN_MONDAY = "2014-12-29"
+OPEN_WEEK_END = datetime(2015, 1, 5, tzinfo=OSLO)
 
 
 @pytest.fixture
@@ -149,6 +150,45 @@ def test_members_can_edit_the_open_week(member_client: APIClient, video: Video) 
 
     assert response.status_code == status.HTTP_201_CREATED
     assert Scheduleitem.objects.get().starttime == IN_THE_OPEN_WEEK
+
+
+def test_members_cannot_schedule_beyond_the_open_week(
+    member_client: APIClient, video: Video
+) -> None:
+    response = post_item(member_client, video, OPEN_WEEK_END)
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "2015-01-05" in str(response.data)
+    assert not Scheduleitem.objects.exists()
+
+
+def test_members_cannot_extend_programming_past_the_open_week(
+    member_client: APIClient, schedule_item_factory
+) -> None:
+    item = schedule_item_factory(
+        starttime=OPEN_WEEK_END - timedelta(minutes=30), duration=timedelta(minutes=30)
+    )
+
+    response = member_client.patch(
+        reverse("api-scheduleitem-detail", args=[item.pk]),
+        {"duration": "01:00:00"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    item.refresh_from_db()
+    assert item.duration == timedelta(minutes=30)
+
+
+def test_members_cannot_delete_programming_beyond_the_open_week(
+    member_client: APIClient, schedule_item_factory
+) -> None:
+    item = schedule_item_factory(starttime=OPEN_WEEK_END + timedelta(hours=1))
+
+    response = member_client.delete(reverse("api-scheduleitem-detail", args=[item.pk]))
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert Scheduleitem.objects.filter(pk=item.pk).exists()
 
 
 def test_staff_may_change_the_frozen_weeks(staff_client: APIClient, video: Video) -> None:

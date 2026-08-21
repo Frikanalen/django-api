@@ -1,9 +1,11 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: fill-next-weeks-agenda
+  name: draft-broadcast-schedule
 spec:
-  schedule: "00 22 * * *"
+  schedule: "5 0 * * *"
+  timeZone: Europe/Oslo
+  concurrencyPolicy: Forbid
   jobTemplate:
     spec:
       template:
@@ -13,12 +15,12 @@ spec:
         spec:
           restartPolicy: OnFailure
           containers:
-            - name: django
+            - name: django-api
               image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag }}"
               imagePullPolicy: {{ .Values.django.image.pullPolicy }}
               args:
                 - ./manage.py
-                - fill_next_weeks_agenda
+                - draft_broadcast_schedule
                 - -v
                 - '2'
               env:

@@ -7,7 +7,6 @@ from agenda import views
 urlpatterns = [
     url(r"^guide/", views.ProgramguideView.as_view(), name="guide"),
     url(r"^calendar/$", views.ProgramguideCalendarView.as_view(), name="calendar"),
-    url(r"^members/plan/$", views.ProgramplannerView.as_view(), name="manage-schedule"),
     url(r"^members/video/$", views.ManageVideoList.as_view(), name="manage-video-list"),
     url(r"^members/video/new/$", views.ManageVideoNew.as_view(), name="manage-video-new"),
     url(

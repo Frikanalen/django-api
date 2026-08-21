@@ -67,6 +67,24 @@ def freeze_message(boundary: datetime | None = None) -> str:
     return f"The schedule is frozen before {open_from}; only the week starting then is open."
 
 
+def scheduling_window_message(
+    boundary: datetime | None = None, horizon: datetime | None = None
+) -> str:
+    """The complete member-editable window, expressed as Oslo dates."""
+    boundary = boundary or freeze_boundary()
+    horizon = horizon or scheduling_horizon()
+    open_from = boundary.astimezone(TZ).date().isoformat()
+    open_until = horizon.astimezone(TZ).date().isoformat()
+    return f"Only the broadcast week from {open_from} up to {open_until} is open for scheduling."
+
+
+def is_open_airtime(starttime: datetime, endtime: datetime, now: datetime | None = None) -> bool:
+    """Whether the entire half-open interval is inside the member-editable week."""
+    boundary = freeze_boundary(now)
+    horizon = scheduling_horizon(now)
+    return boundary <= starttime < horizon and endtime <= horizon
+
+
 def _weeks_after_week_start(now: datetime | None, weeks: int) -> datetime:
     local = (now or timezone.now()).astimezone(TZ)
     monday = local.date() - timedelta(days=local.weekday())

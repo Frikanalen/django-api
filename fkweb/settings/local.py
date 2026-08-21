@@ -16,4 +16,3 @@ CORS_ALLOW_HEADERS = (*default_headers, "Cache-Control", "Cookie")
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = env.str("CORS_ALLOWED_ORIGINS", default="http://localhost:3000").split(",")
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
-CSRF_COOKIE_DOMAIN = "http://localhost:3000/"
