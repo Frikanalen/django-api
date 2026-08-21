@@ -10,9 +10,11 @@ from fk.models import (
     Category,
     Organization,
     Scheduleitem,
+    SchedulePurpose,
     Video,
     VideoFile,
     VideoFileVariant,
+    WeeklySlot,
     airtime_end,
 )
 
@@ -189,6 +191,7 @@ class ScheduleitemReadSerializer(serializers.ModelSerializer):
             "endtime",
             "duration",
             "displaceable",
+            "weekly_slot",
         )
         read_only_fields = fields
 
@@ -205,13 +208,33 @@ class ScheduleitemReadSerializer(serializers.ModelSerializer):
         return policy.is_displaceable(item)
 
 
+class WeeklySlotPurposeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedulePurpose
+        fields = ("id", "name")
+        read_only_fields = fields
+
+
+class WeeklySlotReadSerializer(serializers.ModelSerializer):
+    """A recurring reservation shown alongside the drafted schedule."""
+
+    purpose = WeeklySlotPurposeSerializer(allow_null=True, read_only=True)
+
+    class Meta:
+        model = WeeklySlot
+        fields = ("id", "purpose", "day", "start_time", "duration")
+        read_only_fields = fields
+
+
 class SchedulingPolicySerializer(serializers.Serializer):
-    """The broadcast-week policy, as instants to compare schedule items
-    against. Clients should derive per-item state from these rather than
-    re-implement the week arithmetic (see agenda.scheduling.policy):
+    """The broadcast-week policy and its recurring reservations.
+
+    Clients should derive per-item state from the boundary instants rather
+    than re-implement the week arithmetic (see agenda.scheduling.policy):
     items before freezeBoundary are frozen, items between freezeBoundary
     and schedulingHorizon are in the open week, and airtime beyond
-    schedulingHorizon has not been drafted yet.
+    schedulingHorizon has not been drafted yet. Weekly slots describe
+    reserved airtime even when no concrete schedule item has been drafted.
     """
 
     freeze_boundary = serializers.DateTimeField(
@@ -235,6 +258,11 @@ class SchedulingPolicySerializer(serializers.Serializer):
         help_text="The server's clock when this response was produced. Compare "
         "against it, not the local clock, when deciding which side of a boundary "
         "the present moment falls on.",
+    )
+    weekly_slots = WeeklySlotReadSerializer(
+        many=True,
+        read_only=True,
+        help_text="Recurring reservations that the automatic scheduler fills before jukebox airtime.",
     )
 
 

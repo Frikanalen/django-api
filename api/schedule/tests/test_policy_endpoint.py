@@ -8,7 +8,7 @@ replaceable filler, not yet drafted -- rather than re-implementing the
 week arithmetic of agenda.scheduling.policy.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -18,7 +18,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from agenda.scheduling import policy
-from fk.models import Scheduleitem
+from fk.models import Scheduleitem, SchedulePurpose, WeeklySlot
 
 pytestmark = pytest.mark.django_db
 
@@ -50,16 +50,52 @@ def test_the_boundaries_are_rendered_in_oslo_time(now_in_the_drafting_week: date
     assert payload["schedulingHorizon"] == "2015-01-05T00:00:00+01:00"
 
 
+def test_the_policy_includes_recurring_weekly_slots() -> None:
+    purpose = SchedulePurpose.objects.create(
+        name="Member premiere",
+        type=SchedulePurpose.TYPE.videos,
+        strategy=SchedulePurpose.STRATEGY.latest,
+    )
+    slot = WeeklySlot.objects.create(
+        purpose=purpose,
+        day=4,
+        start_time="18:15",
+        duration=timedelta(hours=1, minutes=30),
+    )
+
+    payload = APIClient().get(reverse("api-scheduling-policy")).json()
+
+    assert payload["weeklySlots"] == [
+        {
+            "id": slot.pk,
+            "purpose": {"id": purpose.pk, "name": "Member premiere"},
+            "day": 4,
+            "startTime": "18:15:00",
+            "duration": "01:30:00",
+        }
+    ]
+
+
 def test_schedule_items_say_whether_they_are_displaceable(schedule_item_factory) -> None:
+    slot = WeeklySlot.objects.create(
+        day=3,
+        start_time="12:00",
+        duration=timedelta(hours=1),
+    )
     filler = schedule_item_factory(starttime=datetime(2015, 1, 1, 10, tzinfo=OSLO))
     filler.schedulereason = Scheduleitem.REASON_JUKEBOX
     filler.save()
     pick = schedule_item_factory(starttime=datetime(2015, 1, 1, 12, tzinfo=OSLO))
+    pick.weekly_slot = slot
+    pick.save()
 
     response = APIClient().get(reverse("api-scheduleitem-list"), {"date": "2015-01-01"})
 
-    by_id = {entry["id"]: entry["displaceable"] for entry in response.json()["results"]}
-    assert by_id == {filler.pk: True, pick.pk: False}
+    by_id = {
+        entry["id"]: (entry["displaceable"], entry["weeklySlot"])
+        for entry in response.json()["results"]
+    }
+    assert by_id == {filler.pk: (True, None), pick.pk: (False, slot.pk)}
 
 
 def test_the_openapi_schema_documents_the_policy(db) -> None:
@@ -70,6 +106,13 @@ def test_the_openapi_schema_documents_the_policy(db) -> None:
 
     assert "scheduling_policy_retrieve" in schema
     assert "/api/scheduling/policy" in schema
-    for field in ("freezeBoundary", "schedulingHorizon", "serverTime", "displaceable"):
+    for field in (
+        "freezeBoundary",
+        "schedulingHorizon",
+        "serverTime",
+        "weeklySlots",
+        "weeklySlot",
+        "displaceable",
+    ):
         assert field in schema
     assert "jukebox filler" in schema
