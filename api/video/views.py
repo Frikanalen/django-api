@@ -159,6 +159,7 @@ class VideoFilter(djfilters.FilterSet):
             "played_count_web": ["exact", "gt", "gte", "lt", "lte"],
             "publish_on_web": ["exact"],
             "ref_url": ["exact", "startswith", "icontains"],
+            "series": ["exact"],
         }
 
     def filter_search(self, queryset, name, value):

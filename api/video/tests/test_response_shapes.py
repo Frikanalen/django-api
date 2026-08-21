@@ -87,6 +87,8 @@ def expected_video_json(video: Video) -> dict:
             "editorMsisdn": None,
             "fkmember": False,
         },
+        "series": None,
+        "episodeNumber": None,
         "duration": "00:01:02.300000",
         "durationSec": 62.3,
         "categories": ["News"],

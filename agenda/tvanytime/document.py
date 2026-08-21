@@ -28,9 +28,9 @@ from xml.etree import ElementTree as ET
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
-from django.db.models import Min
+from django.db.models import Count, Min, Q
 
-from fk.models import Scheduleitem, Video, VideoFileVariant
+from fk.models import Scheduleitem, Series, Video, VideoFileVariant
 
 from . import cs
 
@@ -39,12 +39,14 @@ OSLO = ZoneInfo("Europe/Oslo")
 TVA = "urn:tva:metadata:2019"
 MPEG7 = "urn:tva:mpeg7:2008"
 XML = "http://www.w3.org/XML/1998/namespace"
+XSI = "http://www.w3.org/2001/XMLSchema-instance"
 
 # Prefixes for the serialized document. ElementTree keeps this mapping in
 # module-global state, so registering at import is the only way to stop it
 # inventing `ns0:`; the names match the NorDig example files.
 ET.register_namespace("tva", TVA)
 ET.register_namespace("mpeg7", MPEG7)
+ET.register_namespace("xsi", XSI)
 
 # The still images our ingest produces, largest first. All three are the
 # same frame at different sizes, so they are the same kind of related
@@ -129,6 +131,11 @@ def video_crid(video: Video) -> str:
     that has recorded a CRID expects it to keep meaning the same programme.
     """
     return f"crid://{settings.TVA_AUTHORITY}/video/{video.id}"
+
+
+def series_crid(series: Series) -> str:
+    """The stable group identifier shared by a series and all its episodes."""
+    return f"crid://{settings.TVA_AUTHORITY}/series/{series.id}"
 
 
 def item_crid(item: Scheduleitem) -> str:
@@ -318,6 +325,48 @@ def _add_program_information(table: ET.Element, crid: str, video: Video) -> None
         attributes = _sub(information, "AVAttributes")
         video_attributes = _sub(attributes, "VideoAttributes")
         _sub(video_attributes, "FrameRate", _frame_rate(video.framerate))
+
+    if video.series is not None:
+        episode = _sub(information, "EpisodeOf", crid=series_crid(video.series))
+        if video.episode_number is not None:
+            episode.set("index", str(video.episode_number))
+
+
+def _add_group_information(
+    table: ET.Element,
+    series: Series,
+    episode_count: int,
+    numbered_episode_count: int,
+) -> None:
+    """Describe one series referenced by a programme in this document."""
+    information = _sub(
+        table,
+        "GroupInformation",
+        groupId=series_crid(series),
+        numOfItems=str(episode_count),
+        ordered="true"
+        if episode_count > 0 and numbered_episode_count == episode_count
+        else "false",
+    )
+    group_type = _sub(information, "GroupType", value="series")
+    group_type.set(_q(XSI, "type"), "tva:ProgramGroupTypeType")
+
+    description = _sub(information, "BasicDescription")
+    _sub(description, "Title", series.name, type_="main")
+    if series.synopsis:
+        _sub(description, "Synopsis", series.synopsis.strip(), length="long")
+    if series.image_url:
+        media_type = mimetypes.guess_type(series.image_url)[0]
+        image = {"href": media_type} if media_type else {}
+        _add_related_material(description, cs.HOW_RELATED_SHOW_STILL, series.image_url, **image)
+
+    _sub(
+        information,
+        "OtherIdentifier",
+        f"{settings.SITE_URL}{series.get_absolute_url()}",
+        type_="URI",
+        authority=settings.TVA_AUTHORITY,
+    )
 
 
 def _add_placeholder_information(table: ET.Element, crid: str, item: Scheduleitem) -> None:
@@ -509,6 +558,30 @@ def build(
             _add_placeholder_information(information_table, crid, programme)
         else:
             _add_program_information(information_table, crid, programme)
+
+    series_by_id: dict[int, Series] = {}
+    for programme in programmes.values():
+        if isinstance(programme, Video) and programme.series is not None:
+            series_by_id[programme.series.pk] = programme.series
+    if series_by_id:
+        counts = {
+            row["series_id"]: (row["episode_count"], row["numbered_episode_count"])
+            for row in Video.objects.filter(series_id__in=series_by_id)
+            .values("series_id")
+            .annotate(
+                episode_count=Count("id"),
+                numbered_episode_count=Count("id", filter=Q(episode_number__isnull=False)),
+            )
+        }
+        group_table = _sub(description, "GroupInformationTable")
+        for series_id, series in series_by_id.items():
+            episode_count, numbered_episode_count = counts[series_id]
+            _add_group_information(
+                group_table,
+                series,
+                episode_count,
+                numbered_episode_count,
+            )
 
     location_table = _sub(description, "ProgramLocationTable")
     video_ids = [item.video_id for item in items if item.video_id is not None]
