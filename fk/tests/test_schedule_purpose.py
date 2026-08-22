@@ -8,7 +8,14 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from fk.models import Organization, Scheduleitem, SchedulePurpose, User, Video
+from fk.models import (
+    Organization,
+    Scheduleitem,
+    SchedulePurpose,
+    SlotSourceType,
+    User,
+    Video,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -34,7 +41,7 @@ def make_video(organization: Organization, name: str, **overrides) -> Video:
 def org_purpose(organization: Organization, strategy: str = "latest") -> SchedulePurpose:
     return SchedulePurpose.objects.create(
         name="Org purpose",
-        type=SchedulePurpose.TYPE.organization,
+        type=SlotSourceType.ORGANIZATION,
         strategy=strategy,
         organization=organization,
     )
@@ -52,7 +59,7 @@ def test_videos_purpose_uses_directly_connected_videos(organization) -> None:
     make_video(organization, "Unconnected video")
     purpose = SchedulePurpose.objects.create(
         name="Direct purpose",
-        type=SchedulePurpose.TYPE.videos,
+        type=SlotSourceType.VIDEOS,
         strategy="latest",
     )
     purpose.direct_videos.add(direct)

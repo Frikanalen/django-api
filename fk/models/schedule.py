@@ -1,7 +1,6 @@
 from datetime import UTC, date, datetime, time, timedelta
 from typing import TYPE_CHECKING
 
-from django.contrib import admin
 from django.contrib.postgres.fields import DateTimeRangeField
 from django.contrib.postgres.indexes import GistIndex
 from django.core.exceptions import ValidationError
@@ -9,7 +8,6 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext as _
-from model_utils import Choices
 
 from api.schedule.query_set import ScheduleitemQuerySet
 
@@ -202,48 +200,94 @@ class Scheduleitem(models.Model):
             raise ValidationError({"duration": _("Conflict with '%s'.") % conflict})
 
 
+class SlotSourceType(models.TextChoices):
+    """Where a source's candidate videos come from.
+
+    Declared beside the model rather than inside it so that the admin, the
+    serializers and the tests can name a type without importing the model.
+    """
+
+    VIDEOS = "videos", "Hand-picked videos"
+    ORGANIZATION = "organization", "Everything one organization has uploaded"
+
+
+class SlotSourceStrategy(models.TextChoices):
+    """Which of the candidates goes on the air when a slot comes round."""
+
+    LATEST = "latest", "The newest upload"
+    RANDOM = "random", "A random one"
+    LEAST_SCHEDULED = "least_scheduled", "The one that has aired the least"
+
+
 class SchedulePurpose(models.Model):
+    """A named answer to "what should air in this slot?".
+
+    A WeeklySlot says *when* airtime recurs; it points here for *what*
+    fills it. This model is that rule in two halves: `type` (plus the
+    organization or the hand-picked list it implies) is the pool of
+    candidates, and `strategy` picks one of them per occurrence.
+
+    Nothing here is a fixed programme. The pool is re-read and the
+    strategy re-applied every time the nightly filler considers a slot,
+    which is how a weekly slot keeps carrying an organization's newest
+    upload without anyone touching the schedule.
     """
-    A block of video files having a similar purpose.
 
-    Either an organization and its videos (takes preference) or manually
-    connected videos.
-    """
+    name = models.CharField(
+        max_length=100,
+        help_text="Shown wherever a slot names its source, including the public planner.",
+    )
+    type = models.CharField(
+        max_length=32,
+        choices=SlotSourceType,
+        help_text="Where the candidate videos come from.",
+    )
+    strategy = models.CharField(
+        max_length=32,
+        choices=SlotSourceStrategy,
+        help_text="Which candidate airs when a slot using this source comes round.",
+    )
 
-    STRATEGY = Choices("latest", "random", "least_scheduled")
-    TYPE = Choices("videos", "organization")
-
-    name = models.CharField(max_length=100)
-    type = models.CharField(max_length=32, choices=TYPE)
-    strategy = models.CharField(max_length=32, choices=STRATEGY)
-
-    # You probably need one of these depending on type and strategy
     organization = models.ForeignKey(
-        "Organization", blank=True, null=True, on_delete=models.SET_NULL
+        "Organization",
+        blank=True,
+        null=True,
+        on_delete=models.SET_NULL,
+        help_text="For organization sources: whose uploads to draw from. Ignored otherwise.",
     )
     # Quoted so the subscript is never evaluated: ManyToManyField is not
     # subscriptable at runtime, only to django-stubs.
     direct_videos: "models.ManyToManyField[Video, models.Model]" = models.ManyToManyField(
-        "Video", blank=True
+        "Video",
+        blank=True,
+        help_text="For hand-picked sources: the videos to draw from. Ignored otherwise.",
     )
 
     class Meta:
         ordering = ("-id",)
+        # The class is still named for the era when this was "the purpose
+        # a block of videos serves"; what an editor sees is what it does.
+        verbose_name = "weekly slot source"
+        verbose_name_plural = "weekly slot sources"
 
-    @admin.display(description="videos", ordering="videos")
-    def videos_str(self):
-        return ", ".join([str(x) for x in self.videos_queryset()])
+    def candidate_videos(self):
+        """The pool this source draws from, before eligibility filtering.
+
+        Separate from `videos_queryset` so the admin can say how many
+        videos a source *would* have and why they were dropped; nothing
+        that schedules anything should use this one.
+        """
+        if self.type == SlotSourceType.ORGANIZATION:
+            return self.organization.video_set.all()
+        if self.type == SlotSourceType.VIDEOS:
+            return self.direct_videos.all()
+        raise ValueError(f"Unhandled type {self.type}")
 
     def videos_queryset(self, max_duration=None):
         """
         Get the queryset for the available videos
         """
-        if self.type == self.TYPE.organization:
-            qs = self.organization.video_set.all()
-        elif self.type == self.TYPE.videos:
-            qs = self.direct_videos.all()
-        else:
-            raise ValueError(f"Unhandled type {self.type}")
+        qs = self.candidate_videos()
         if max_duration:
             qs = qs.filter(duration__lte=max_duration)
         # Workaround playout not handling broken files correctly
@@ -264,7 +308,7 @@ class SchedulePurpose(models.Model):
         """
         if video is None:
             return False
-        if self.strategy == self.STRATEGY.latest:
+        if self.strategy == SlotSourceStrategy.LATEST:
             return self.single_video(max_duration) == video
         return self.videos_queryset(max_duration).filter(pk=video.pk).exists()
 
@@ -273,12 +317,12 @@ class SchedulePurpose(models.Model):
         Get a single video based on the settings of this purpose
         """
         qs = self.videos_queryset(max_duration)
-        if self.strategy == self.STRATEGY.latest:
+        if self.strategy == SlotSourceStrategy.LATEST:
             return qs.order_by("-created_time", "-id").first()
-        elif self.strategy == self.STRATEGY.random:
+        elif self.strategy == SlotSourceStrategy.RANDOM:
             # This might be slow, but hopefully few records
             return qs.order_by("?").first()
-        elif self.strategy == self.STRATEGY.least_scheduled:
+        elif self.strategy == SlotSourceStrategy.LEAST_SCHEDULED:
             # Get the video which has been scheduled the least
             return qs.annotate(num_sched=models.Count("scheduleitem")).order_by("num_sched").first()
         else:
@@ -299,7 +343,17 @@ class WeeklySlot(models.Model):
         (6, _("Sunday")),
     )
 
-    purpose = models.ForeignKey(SchedulePurpose, null=True, blank=True, on_delete=models.SET_NULL)
+    purpose = models.ForeignKey(
+        SchedulePurpose,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        verbose_name="source",
+        help_text=(
+            "Which source picks the video for this slot. Blank means the slot "
+            "reserves airtime that nothing is scheduled into automatically."
+        ),
+    )
     day = models.IntegerField(
         choices=DAY_OF_THE_WEEK,
     )
