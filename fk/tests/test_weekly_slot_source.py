@@ -1,5 +1,5 @@
 """
-SchedulePurpose picks the videos that fill WeeklySlots; the automatic
+WeeklySlotSource picks the videos that fill WeeklySlots; the automatic
 scheduler is built on videos_queryset() and single_video(), which had
 no coverage at all.
 """
@@ -11,10 +11,10 @@ import pytest
 from fk.models import (
     Organization,
     Scheduleitem,
-    SchedulePurpose,
     SlotSourceType,
     User,
     Video,
+    WeeklySlotSource,
 )
 
 pytestmark = pytest.mark.django_db
@@ -22,8 +22,8 @@ pytestmark = pytest.mark.django_db
 
 @pytest.fixture
 def organization() -> Organization:
-    editor = User.objects.create(email="purpose-editor@example.test")
-    return Organization.objects.create(name="Purpose org", editor=editor)
+    editor = User.objects.create(email="source-editor@example.test")
+    return Organization.objects.create(name="Source org", editor=editor)
 
 
 def make_video(organization: Organization, name: str, **overrides) -> Video:
@@ -38,49 +38,49 @@ def make_video(organization: Organization, name: str, **overrides) -> Video:
     return Video.objects.create(**fields)
 
 
-def org_purpose(organization: Organization, strategy: str = "latest") -> SchedulePurpose:
-    return SchedulePurpose.objects.create(
-        name="Org purpose",
+def org_source(organization: Organization, strategy: str = "latest") -> WeeklySlotSource:
+    return WeeklySlotSource.objects.create(
+        name="Org source",
         type=SlotSourceType.ORGANIZATION,
         strategy=strategy,
         organization=organization,
     )
 
 
-def test_organization_purpose_uses_the_organizations_proper_videos(organization) -> None:
+def test_an_organization_source_uses_the_organizations_proper_videos(organization) -> None:
     listed = make_video(organization, "Proper video")
     make_video(organization, "Broken video", proper_import=False)
 
-    assert list(org_purpose(organization).videos_queryset()) == [listed]
+    assert list(org_source(organization).videos_queryset()) == [listed]
 
 
-def test_videos_purpose_uses_directly_connected_videos(organization) -> None:
+def test_a_hand_picked_source_uses_its_directly_connected_videos(organization) -> None:
     direct = make_video(organization, "Direct video")
     make_video(organization, "Unconnected video")
-    purpose = SchedulePurpose.objects.create(
-        name="Direct purpose",
+    source = WeeklySlotSource.objects.create(
+        name="Direct source",
         type=SlotSourceType.VIDEOS,
         strategy="latest",
     )
-    purpose.direct_videos.add(direct)
+    source.direct_videos.add(direct)
 
-    assert list(purpose.videos_queryset()) == [direct]
+    assert list(source.videos_queryset()) == [direct]
 
 
 def test_videos_queryset_can_cap_duration(organization) -> None:
     fits = make_video(organization, "Short video", duration=timedelta(minutes=10))
     make_video(organization, "Long video", duration=timedelta(minutes=45))
 
-    result = org_purpose(organization).videos_queryset(max_duration=timedelta(minutes=15))
+    result = org_source(organization).videos_queryset(max_duration=timedelta(minutes=15))
 
     assert list(result) == [fits]
 
 
 def test_unhandled_type_raises(organization) -> None:
-    purpose = SchedulePurpose(name="Broken", type="nonsense", strategy="latest")
+    source = WeeklySlotSource(name="Broken", type="nonsense", strategy="latest")
 
     with pytest.raises(ValueError, match="Unhandled type"):
-        purpose.videos_queryset()
+        source.videos_queryset()
 
 
 def created_at(video: Video, when: datetime) -> Video:
@@ -95,7 +95,7 @@ def test_latest_strategy_returns_the_most_recently_created(organization) -> None
     created_at(make_video(organization, "Old record"), datetime(2015, 1, 1, tzinfo=UTC))
     newest = created_at(make_video(organization, "New record"), datetime(2016, 1, 1, tzinfo=UTC))
 
-    assert org_purpose(organization, "latest").single_video() == newest
+    assert org_source(organization, "latest").single_video() == newest
 
 
 def test_latest_strategy_ignores_uploaded_time(organization) -> None:
@@ -113,7 +113,7 @@ def test_latest_strategy_ignores_uploaded_time(organization) -> None:
         datetime(2016, 1, 1, tzinfo=UTC),
     )
 
-    assert org_purpose(organization, "latest").single_video() == newest
+    assert org_source(organization, "latest").single_video() == newest
 
 
 def test_latest_strategy_breaks_timestamp_ties_deterministically(organization) -> None:
@@ -123,17 +123,17 @@ def test_latest_strategy_breaks_timestamp_ties_deterministically(organization) -
     created_at(make_video(organization, "First of the batch"), same_moment)
     last = created_at(make_video(organization, "Last of the batch"), same_moment)
 
-    assert org_purpose(organization, "latest").single_video() == last
+    assert org_source(organization, "latest").single_video() == last
 
 
 def test_latest_strategy_returns_none_when_empty(organization) -> None:
-    assert org_purpose(organization, "latest").single_video() is None
+    assert org_source(organization, "latest").single_video() is None
 
 
 def test_random_strategy_picks_from_the_queryset(organization) -> None:
     only = make_video(organization, "Only video")
 
-    assert org_purpose(organization, "random").single_video() == only
+    assert org_source(organization, "random").single_video() == only
 
 
 def test_least_scheduled_strategy_prefers_the_least_played(organization) -> None:
@@ -146,14 +146,14 @@ def test_least_scheduled_strategy_prefers_the_least_played(organization) -> None
     )
     never_scheduled = make_video(organization, "Never scheduled")
 
-    result = org_purpose(organization, "least_scheduled").single_video()
+    result = org_source(organization, "least_scheduled").single_video()
 
     assert result == never_scheduled
 
 
 def test_unhandled_strategy_raises(organization) -> None:
-    purpose = org_purpose(organization, "latest")
-    purpose.strategy = "nonsense"
+    source = org_source(organization, "latest")
+    source.strategy = "nonsense"
 
     with pytest.raises(ValueError, match="Unhandled strategy"):
-        purpose.single_video()
+        source.single_video()

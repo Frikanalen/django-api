@@ -17,10 +17,10 @@ from .organization import Organization  # noqa: F401
 from .program_image import ImageMediaType, ImageRole, ProgramImage  # noqa: F401
 from .schedule import (  # noqa: F401
     Scheduleitem,
-    SchedulePurpose,
     SlotSourceStrategy,
     SlotSourceType,
     WeeklySlot,
+    WeeklySlotSource,
     airtime_end,
 )
 from .series import Series  # noqa: F401

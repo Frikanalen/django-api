@@ -12,13 +12,13 @@ from fk.models import (
     Organization,
     ProgramImage,
     Scheduleitem,
-    SchedulePurpose,
     Series,
     SlotSourceType,
     User,
     Video,
     VideoFile,
     WeeklySlot,
+    WeeklySlotSource,
 )
 
 
@@ -153,7 +153,7 @@ class WeeklySlotInline(admin.TabularInline):
         return False
 
 
-class SchedulePurposeAdmin(admin.ModelAdmin):
+class WeeklySlotSourceAdmin(admin.ModelAdmin):
     """A source answers "what airs here?" for a recurring slot.
 
     The form is split along the two questions the model actually asks:
@@ -286,17 +286,17 @@ class WeeklySlotAdmin(admin.ModelAdmin):
         "start_time",
         "duration",
         "end_time",
-        "purpose",
+        "source",
     )
-    list_filter = ("day", "purpose")
-    list_select_related = ("purpose",)
-    autocomplete_fields = ("purpose",)
+    list_filter = ("day", "source")
+    list_select_related = ("source",)
+    autocomplete_fields = ("source",)
 
 
 admin.site.register(Category, CategoryAdmin)
 admin.site.register(IngestJob, IngestJobAdmin)
 admin.site.register(Organization, OrganizationAdmin)
-admin.site.register(SchedulePurpose, SchedulePurposeAdmin)
+admin.site.register(WeeklySlotSource, WeeklySlotSourceAdmin)
 admin.site.register(Scheduleitem, ScheduleitemAdmin)
 admin.site.register(Series, SeriesAdmin)
 admin.site.register(User, UserAdmin)

@@ -56,7 +56,7 @@ class Scheduleitem(models.Model):
     duration = models.DurationField(validators=[MinValueValidator(timedelta(0))])
     # Which WeeklySlot placed this item, for REASON_AUTO placements made
     # after this field existed. The nightly filler may re-pick its *own*
-    # unfrozen placements when the purpose's answer changes; an item
+    # unfrozen placements when the source's answer changes; an item
     # with no slot recorded (member picks, admin entries, pre-provenance
     # rows) is deliberate programming and is never touched. SET_NULL so
     # deleting a slot definition strands its drafted items as deliberate
@@ -219,7 +219,7 @@ class SlotSourceStrategy(models.TextChoices):
     LEAST_SCHEDULED = "least_scheduled", "The one that has aired the least"
 
 
-class SchedulePurpose(models.Model):
+class WeeklySlotSource(models.Model):
     """A named answer to "what should air in this slot?".
 
     A WeeklySlot says *when* airtime recurs; it points here for *what*
@@ -265,10 +265,6 @@ class SchedulePurpose(models.Model):
 
     class Meta:
         ordering = ("-id",)
-        # The class is still named for the era when this was "the purpose
-        # a block of videos serves"; what an editor sees is what it does.
-        verbose_name = "weekly slot source"
-        verbose_name_plural = "weekly slot sources"
 
     def candidate_videos(self):
         """The pool this source draws from, before eligibility filtering.
@@ -314,7 +310,7 @@ class SchedulePurpose(models.Model):
 
     def single_video(self, max_duration=None):
         """
-        Get a single video based on the settings of this purpose
+        Get a single video based on the settings of this source
         """
         qs = self.videos_queryset(max_duration)
         if self.strategy == SlotSourceStrategy.LATEST:
@@ -343,12 +339,11 @@ class WeeklySlot(models.Model):
         (6, _("Sunday")),
     )
 
-    purpose = models.ForeignKey(
-        SchedulePurpose,
+    source = models.ForeignKey(
+        WeeklySlotSource,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        verbose_name="source",
         help_text=(
             "Which source picks the video for this slot. Blank means the slot "
             "reserves airtime that nothing is scheduled into automatically."
@@ -404,4 +399,4 @@ class WeeklySlot(models.Model):
         return result
 
     def __str__(self):
-        return f"{self.get_day_display()} {self.start_time} ({self.purpose})"
+        return f"{self.get_day_display()} {self.start_time} ({self.source})"
