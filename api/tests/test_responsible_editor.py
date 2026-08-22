@@ -26,6 +26,8 @@ from fk.models import (
     Organization,
     Scheduleitem,
     SchedulePurpose,
+    SlotSourceStrategy,
+    SlotSourceType,
     User,
     Video,
     WeeklySlot,
@@ -198,8 +200,8 @@ def test_videos_stop_being_scheduled_by_the_agenda_filler(lose_editor, organizat
 def test_videos_stop_being_picked_for_weekly_slots(lose_editor, organization, video) -> None:
     purpose = SchedulePurpose.objects.create(
         name="Accountability purpose",
-        type=SchedulePurpose.TYPE.organization,
-        strategy=SchedulePurpose.STRATEGY.random,
+        type=SlotSourceType.ORGANIZATION,
+        strategy=SlotSourceStrategy.RANDOM,
         organization=organization,
     )
     WeeklySlot.objects.create(

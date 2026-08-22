@@ -18,6 +18,8 @@ from .program_image import ImageMediaType, ImageRole, ProgramImage  # noqa: F401
 from .schedule import (  # noqa: F401
     Scheduleitem,
     SchedulePurpose,
+    SlotSourceStrategy,
+    SlotSourceType,
     WeeklySlot,
     airtime_end,
 )

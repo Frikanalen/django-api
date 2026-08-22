@@ -18,7 +18,13 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from agenda.scheduling import policy
-from fk.models import Scheduleitem, SchedulePurpose, WeeklySlot
+from fk.models import (
+    Scheduleitem,
+    SchedulePurpose,
+    SlotSourceStrategy,
+    SlotSourceType,
+    WeeklySlot,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -53,8 +59,8 @@ def test_the_boundaries_are_rendered_in_oslo_time(now_in_the_drafting_week: date
 def test_the_policy_includes_recurring_weekly_slots() -> None:
     purpose = SchedulePurpose.objects.create(
         name="Member premiere",
-        type=SchedulePurpose.TYPE.videos,
-        strategy=SchedulePurpose.STRATEGY.latest,
+        type=SlotSourceType.VIDEOS,
+        strategy=SlotSourceStrategy.LATEST,
     )
     slot = WeeklySlot.objects.create(
         purpose=purpose,

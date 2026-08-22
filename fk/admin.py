@@ -3,6 +3,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group
+from django.db.models import Count
 
 from fk.forms import UserChangeForm, UserCreationForm
 from fk.models import (
@@ -13,6 +14,7 @@ from fk.models import (
     Scheduleitem,
     SchedulePurpose,
     Series,
+    SlotSourceType,
     User,
     Video,
     VideoFile,
@@ -130,12 +132,134 @@ class IngestJobAdmin(admin.ModelAdmin):
         return False
 
 
+class WeeklySlotInline(admin.TabularInline):
+    """The slots a source fills, shown from the source's side.
+
+    Read-only: a slot is airtime, and airtime is edited where airtime
+    lives. This is here so that "what does this source actually do?" has
+    an answer on the page, rather than requiring a trawl of the slot
+    list.
+    """
+
+    model = WeeklySlot
+    extra = 0
+    fields = ("day", "start_time", "duration")
+    readonly_fields = fields
+    can_delete = False
+    show_change_link = True
+    verbose_name_plural = "Slots filled from this source"
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 class SchedulePurposeAdmin(admin.ModelAdmin):
+    """A source answers "what airs here?" for a recurring slot.
+
+    The form is split along the two questions the model actually asks:
+    which videos are candidates, and which one of them goes on the air.
+    `eligible_videos` reports the answer the scheduler would get right
+    now -- including the videos it silently drops -- because a source
+    that quietly picks nothing looks identical to one that works.
+    """
+
     list_display = (
         "__str__",
-        "videos_str",
+        "type",
+        "strategy",
+        "organization",
+        "slot_count",
+        "video_count",
     )
+    list_filter = ("type", "strategy")
+    search_fields = ("name", "organization__name")
     filter_horizontal = ("direct_videos",)
+    inlines = [WeeklySlotInline]
+    readonly_fields = ("eligible_videos",)
+    fieldsets = (
+        (None, {"fields": ("name",)}),
+        (
+            "Which videos are candidates",
+            {
+                "fields": ("type", "organization", "direct_videos"),
+                "description": (
+                    "Only the field matching the chosen type is read; the other is ignored."
+                ),
+            },
+        ),
+        (
+            "Which candidate airs",
+            {
+                "fields": ("strategy",),
+                "description": (
+                    "Applied afresh every time a slot comes round, so the answer may "
+                    "change between one week and the next."
+                ),
+            },
+        ),
+        ("Right now", {"fields": ("eligible_videos",)}),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(_slot_count=Count("weeklyslot"))
+
+    @admin.display(description="slots", ordering="_slot_count")
+    def slot_count(self, obj):
+        return obj._slot_count
+
+    @admin.display(description="videos")
+    def video_count(self, obj):
+        """How many videos a source has, as eligible-of-total.
+
+        This column used to dump every title, which made the changelist
+        unreadable at the width a list is read for. The number that
+        matters here is whether the scheduler has anything to pick from;
+        which videos those are is a question for the change page.
+        """
+        if obj.type == SlotSourceType.ORGANIZATION and obj.organization_id is None:
+            return "--"
+        try:
+            total = obj.candidate_videos().count()
+        except ValueError:
+            # An unhandled type. The change page says so at length;
+            # a changelist cell has no room to explain.
+            return "--"
+        eligible = obj.videos_queryset().count()
+        return str(total) if eligible == total else f"{eligible} of {total}"
+
+    @admin.display(description="Eligible videos")
+    def eligible_videos(self, obj=None):
+        """What the scheduler would find, and what it threw away.
+
+        The two filters in `videos_queryset` are invisible to an editor:
+        a failed import and an organization with no responsible editor
+        both just produce a source that never airs anything."""
+        if obj is None or obj.pk is None:
+            return "Save the source to see what it would pick from."
+        if obj.type == SlotSourceType.ORGANIZATION and obj.organization_id is None:
+            return "Type is organization, but no organization is set, so nothing is eligible."
+        try:
+            candidates = obj.candidate_videos()
+        except ValueError as exc:
+            return str(exc)
+
+        total = candidates.count()
+        if not total:
+            return "The pool is empty."
+        eligible = obj.videos_queryset().count()
+        reasons = []
+        broken = candidates.filter(proper_import=False).count()
+        if broken:
+            reasons.append(f"{broken} did not import cleanly")
+        unattended = (
+            candidates.filter(proper_import=True)
+            .exclude(organization__in=Organization.objects.with_responsible_editor())
+            .count()
+        )
+        if unattended:
+            reasons.append(f"{unattended} from an organization with no responsible editor")
+        summary = f"{eligible} of {total} videos eligible"
+        return f"{summary} -- {', '.join(reasons)}." if reasons else f"{summary}."
 
 
 class CategoryAdmin(admin.ModelAdmin):
@@ -152,13 +276,21 @@ class CategoryAdmin(admin.ModelAdmin):
 
 
 class WeeklySlotAdmin(admin.ModelAdmin):
+    """A recurring hole in the schedule: when airtime repeats, and which
+    source fills it. A slot with no source still reserves the airtime --
+    it just means nothing is placed there automatically."""
+
     list_display = (
         "__str__",
         "day",
         "start_time",
         "duration",
+        "end_time",
         "purpose",
     )
+    list_filter = ("day", "purpose")
+    list_select_related = ("purpose",)
+    autocomplete_fields = ("purpose",)
 
 
 admin.site.register(Category, CategoryAdmin)

@@ -23,6 +23,7 @@ from fk.models import (
     Organization,
     Scheduleitem,
     SchedulePurpose,
+    SlotSourceType,
     User,
     Video,
     WeeklySlot,
@@ -63,7 +64,7 @@ def video(editor: User, organization: Organization) -> Video:
 def purpose(organization: Organization) -> SchedulePurpose:
     return SchedulePurpose.objects.create(
         name="Slot purpose",
-        type=SchedulePurpose.TYPE.organization,
+        type=SlotSourceType.ORGANIZATION,
         strategy="latest",
         organization=organization,
     )
@@ -302,7 +303,7 @@ def test_a_random_slot_is_not_re_rolled_night_after_night(
     make_upload(editor, organization, "Another candidate")
     random_purpose = SchedulePurpose.objects.create(
         name="Random purpose",
-        type=SchedulePurpose.TYPE.organization,
+        type=SlotSourceType.ORGANIZATION,
         strategy="random",
         organization=organization,
     )
