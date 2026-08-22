@@ -218,14 +218,11 @@ class WeeklySlotSourceSerializer(serializers.ModelSerializer):
 class WeeklySlotReadSerializer(serializers.ModelSerializer):
     """A recurring reservation shown alongside the drafted schedule."""
 
-    # The payload keeps saying `purpose` while the model has moved on:
-    # renaming the model is this repo's business, renaming a published
-    # field is the clients'.
-    purpose = WeeklySlotSourceSerializer(source="source", allow_null=True, read_only=True)
+    source = WeeklySlotSourceSerializer(allow_null=True, read_only=True)
 
     class Meta:
         model = WeeklySlot
-        fields = ("id", "purpose", "day", "start_time", "duration")
+        fields = ("id", "source", "day", "start_time", "duration")
         read_only_fields = fields
 
 
