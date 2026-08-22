@@ -74,7 +74,7 @@ def test_the_policy_includes_recurring_weekly_slots() -> None:
     assert payload["weeklySlots"] == [
         {
             "id": slot.pk,
-            "purpose": {"id": source.pk, "name": "Member premiere"},
+            "source": {"id": source.pk, "name": "Member premiere"},
             "day": 4,
             "startTime": "18:15:00",
             "duration": "01:30:00",
