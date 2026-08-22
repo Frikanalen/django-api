@@ -26,15 +26,28 @@ def api_root(request):
     """
     return Response(
         {
-            "asrun": reverse("asrun-list", request=request),
-            "category": reverse("category-list", request=request),
+            # Documentation: the schema itself, and the two UIs over it.
+            "schema": reverse("schema", request=request),
+            "schema/swagger-ui": reverse("swagger-ui", request=request),
+            "schema/redoc": reverse("redoc", request=request),
+            # Authentication and session bookkeeping.
+            "csrf": reverse("api-csrf-detail", request=request),
             "obtain-token": reverse("api-token-auth", request=request),
+            "user": reverse("api-user-detail", request=request),
+            "user/login": reverse("api-user-login", request=request),
+            "user/logout": reverse("api-user-logout", request=request),
+            "user/register": reverse("api-user-create", request=request),
+            # The API proper.
+            "asrun": reverse("asrun-list", request=request),
+            "categories": reverse("category-list", request=request),
+            "organization": reverse("api-organization-list", request=request),
             "scheduleitems": reverse("api-scheduleitem-list", request=request),
+            "scheduling/policy": reverse("api-scheduling-policy", request=request),
+            "series": reverse("api-series-list", request=request),
             "videofiles": reverse("api-videofile-list", request=request),
             "videos": reverse("api-video-list", request=request),
-            "organization": reverse("api-organization-list", request=request),
-            "user": reverse("api-user-detail", request=request),
-            "user/register": reverse("api-user-create", request=request),
+            # XML feeds for distributors.
+            "tvanytime": reverse("api-tvanytime-home", request=request),
         }
     )
 

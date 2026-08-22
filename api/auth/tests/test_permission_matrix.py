@@ -239,15 +239,24 @@ def test_api_root_links_every_endpoint_with_expected_anonymous_access(
     video, videofile, scheduleitem, asrun, category, organization
 ):
     expected = {
-        "asrun": 200,
-        "category": 200,
+        "schema": 200,
+        "schema/swagger-ui": 200,
+        "schema/redoc": 200,
+        "csrf": 200,
         "obtain-token": 405,
+        "user": 401,
+        "user/login": 405,
+        "user/logout": 405,
+        "user/register": 405,
+        "asrun": 200,
+        "categories": 200,
+        "organization": 200,
         "scheduleitems": 200,
+        "scheduling/policy": 200,
+        "series": 200,
         "videofiles": 200,
         "videos": 200,
-        "organization": 200,
-        "user": 401,
-        "user/register": 405,
+        "tvanytime": 200,
     }
     client = APIClient()
 
