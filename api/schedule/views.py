@@ -102,7 +102,7 @@ class SchedulingPolicyView(APIView):
                 "freeze_boundary": policy.freeze_boundary(now),
                 "scheduling_horizon": policy.scheduling_horizon(now),
                 "server_time": now,
-                "weekly_slots": WeeklySlot.objects.select_related("purpose").all(),
+                "weekly_slots": WeeklySlot.objects.select_related("source").all(),
             }
         )
         return Response(serializer.data)

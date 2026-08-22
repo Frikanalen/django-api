@@ -25,12 +25,12 @@ from fk.models import (
     Category,
     Organization,
     Scheduleitem,
-    SchedulePurpose,
     SlotSourceStrategy,
     SlotSourceType,
     User,
     Video,
     WeeklySlot,
+    WeeklySlotSource,
 )
 
 pytestmark = pytest.mark.django_db
@@ -198,21 +198,19 @@ def test_videos_stop_being_scheduled_by_the_agenda_filler(lose_editor, organizat
 
 @pytest.mark.parametrize("lose_editor", LOSS)
 def test_videos_stop_being_picked_for_weekly_slots(lose_editor, organization, video) -> None:
-    purpose = SchedulePurpose.objects.create(
-        name="Accountability purpose",
+    source = WeeklySlotSource.objects.create(
+        name="Accountability source",
         type=SlotSourceType.ORGANIZATION,
         strategy=SlotSourceStrategy.RANDOM,
         organization=organization,
     )
-    WeeklySlot.objects.create(
-        day=0, start_time="12:00", duration=timedelta(hours=1), purpose=purpose
-    )
-    assert purpose.single_video() == video
+    WeeklySlot.objects.create(day=0, start_time="12:00", duration=timedelta(hours=1), source=source)
+    assert source.single_video() == video
 
     lose_editor(organization)
 
-    assert list(purpose.videos_queryset()) == []
-    assert purpose.single_video() is None
+    assert list(source.videos_queryset()) == []
+    assert source.single_video() is None
 
 
 @pytest.mark.parametrize("lose_editor", LOSS)

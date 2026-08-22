@@ -8,21 +8,21 @@ produce a source that simply never airs anything.
 import pytest
 from django.contrib import admin
 
-from fk.admin import SchedulePurposeAdmin
-from fk.models import Organization, SchedulePurpose, SlotSourceType, User
+from fk.admin import WeeklySlotSourceAdmin
+from fk.models import Organization, SlotSourceType, User, WeeklySlotSource
 
-from .test_schedule_purpose import make_video, organization  # noqa: F401
+from .test_weekly_slot_source import make_video, organization  # noqa: F401
 
 pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def source_admin() -> SchedulePurposeAdmin:
-    return SchedulePurposeAdmin(SchedulePurpose, admin.site)
+def source_admin() -> WeeklySlotSourceAdmin:
+    return WeeklySlotSourceAdmin(WeeklySlotSource, admin.site)
 
 
-def org_source(organization: Organization) -> SchedulePurpose:  # noqa: F811
-    return SchedulePurpose.objects.create(
+def org_source(organization: Organization) -> WeeklySlotSource:  # noqa: F811
+    return WeeklySlotSource.objects.create(
         name="Org source",
         type=SlotSourceType.ORGANIZATION,
         strategy="latest",
@@ -31,11 +31,11 @@ def org_source(organization: Organization) -> SchedulePurpose:  # noqa: F811
 
 
 def test_an_unsaved_source_says_so_instead_of_querying(source_admin) -> None:
-    assert "Save the source" in source_admin.eligible_videos(SchedulePurpose())
+    assert "Save the source" in source_admin.eligible_videos(WeeklySlotSource())
 
 
 def test_an_organization_source_with_no_organization_names_the_gap(source_admin) -> None:
-    source = SchedulePurpose.objects.create(
+    source = WeeklySlotSource.objects.create(
         name="Rudderless", type=SlotSourceType.ORGANIZATION, strategy="latest"
     )
 
@@ -82,7 +82,7 @@ def test_a_missing_responsible_editor_is_reported_as_the_reason(
 def test_the_slot_count_column_reads_the_annotation(source_admin, organization, rf) -> None:  # noqa: F811
     org_source(organization)
 
-    listed = source_admin.get_queryset(rf.get("/admin/fk/schedulepurpose/")).get()
+    listed = source_admin.get_queryset(rf.get("/admin/fk/weeklyslotsource/")).get()
 
     assert source_admin.slot_count(listed) == 0
 
@@ -109,7 +109,7 @@ def test_the_video_count_column_shows_the_shortfall_when_videos_are_dropped(
 
 
 def test_the_video_count_column_survives_a_source_with_no_organization(source_admin) -> None:
-    source = SchedulePurpose.objects.create(
+    source = WeeklySlotSource.objects.create(
         name="Rudderless", type=SlotSourceType.ORGANIZATION, strategy="latest"
     )
 

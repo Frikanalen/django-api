@@ -11,7 +11,7 @@ the jukebox got to first.
 
 Placements carry provenance (Scheduleitem.weekly_slot), and the open
 week is a draft: each nightly run re-picks its own unfrozen placements
-when the purpose's answer has changed, so a `latest` slot drafted
+when the source's answer has changed, so a `latest` slot drafted
 nearly three weeks out does not go stale. Frozen weeks are never
 touched.
 """
@@ -29,7 +29,7 @@ from agenda.scheduling.policy import (
     freeze_boundary,
     scheduling_horizon,
 )
-from fk.models import Scheduleitem, SchedulePurpose, Video, WeeklySlot
+from fk.models import Scheduleitem, Video, WeeklySlot, WeeklySlotSource
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +45,12 @@ def fill_next_weeks_agenda(now: datetime | None = None) -> None:
         return
 
     for slot in slots:
-        purpose = slot.purpose
-        if purpose is None:
-            logger.info("No purpose connected, so nothing to fill")
+        source = slot.source
+        if source is None:
+            logger.info("No source connected, so nothing to fill")
             continue
         for starttime in _occurrences(slot, now, horizon):
-            _fill_occurrence(slot, purpose, starttime, frozen_until)
+            _fill_occurrence(slot, source, starttime, frozen_until)
 
 
 def _occurrences(slot: WeeklySlot, now: datetime, horizon: datetime) -> Iterator[datetime]:
@@ -69,13 +69,13 @@ def _occurrences(slot: WeeklySlot, now: datetime, horizon: datetime) -> Iterator
 
 def _fill_occurrence(
     slot: WeeklySlot,
-    purpose: SchedulePurpose,
+    source: WeeklySlotSource,
     starttime: datetime,
     frozen_until: datetime,
 ) -> None:
     # Chosen per occurrence, so the least_scheduled strategy sees each
     # placement it just made.
-    video = purpose.single_video(slot.duration)
+    video = source.single_video(slot.duration)
     if not video:
         logger.info("Couldn't get a video to use in slot!")
         return
@@ -102,7 +102,7 @@ def _fill_occurrence(
                 logger.info("Not touching the frozen weeks at %s", starttime)
                 return
         elif own:
-            _refresh_own_placement(slot, purpose, own[0], video, displaceable)
+            _refresh_own_placement(slot, source, own[0], video, displaceable)
             return
 
         displace(displaceable)
@@ -117,16 +117,16 @@ def _fill_occurrence(
 
 def _refresh_own_placement(
     slot: WeeklySlot,
-    purpose: SchedulePurpose,
+    source: WeeklySlotSource,
     placement: Scheduleitem,
     video: Video,
     displaceable: list[Scheduleitem],
 ) -> None:
-    """Re-pick an unfrozen draft placement its purpose no longer stands
+    """Re-pick an unfrozen draft placement its source no longer stands
     by: a newer upload under `latest`, or a drafted video that has
     become ineligible. The open week is a draft, but a standing pick is
     left alone -- no churn night to night."""
-    if purpose.still_current(placement.video, slot.duration):
+    if source.still_current(placement.video, slot.duration):
         return
     logger.info(
         "Re-picking slot placement at %s: %s replaces %s",

@@ -10,11 +10,11 @@ from fk.models import (
     Category,
     Organization,
     Scheduleitem,
-    SchedulePurpose,
     Video,
     VideoFile,
     VideoFileVariant,
     WeeklySlot,
+    WeeklySlotSource,
     airtime_end,
 )
 
@@ -139,7 +139,7 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
             self._claim_airtime(validated_data, instance)
             # A human edit makes the item deliberate programming: strip
             # slot provenance so the nightly re-pick cannot overwrite
-            # what someone changed on purpose.
+            # what someone changed on source.
             instance.weekly_slot = None
             return super().update(instance, validated_data)
 
@@ -208,9 +208,9 @@ class ScheduleitemReadSerializer(serializers.ModelSerializer):
         return policy.is_displaceable(item)
 
 
-class WeeklySlotPurposeSerializer(serializers.ModelSerializer):
+class WeeklySlotSourceSerializer(serializers.ModelSerializer):
     class Meta:
-        model = SchedulePurpose
+        model = WeeklySlotSource
         fields = ("id", "name")
         read_only_fields = fields
 
@@ -218,7 +218,10 @@ class WeeklySlotPurposeSerializer(serializers.ModelSerializer):
 class WeeklySlotReadSerializer(serializers.ModelSerializer):
     """A recurring reservation shown alongside the drafted schedule."""
 
-    purpose = WeeklySlotPurposeSerializer(allow_null=True, read_only=True)
+    # The payload keeps saying `purpose` while the model has moved on:
+    # renaming the model is this repo's business, renaming a published
+    # field is the clients'.
+    purpose = WeeklySlotSourceSerializer(source="source", allow_null=True, read_only=True)
 
     class Meta:
         model = WeeklySlot
