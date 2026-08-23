@@ -12,7 +12,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from fk.models import IngestJob, IngestState, Organization, User, Video
+from fk.models import IngestJob, IngestKind, IngestState, Organization, User, Video
 
 pytestmark = pytest.mark.django_db
 
@@ -51,6 +51,9 @@ def test_a_video_nothing_has_uploaded_to_is_pending(editor_client: APIClient, vi
     assert response.json() == {
         "video": video.pk,
         "state": "pending",
+        "priority": 0,
+        "kind": "upload",
+        "claimedBy": None,
         "percentageDone": None,
         "errorCode": "",
         "updatedTime": None,
@@ -196,3 +199,69 @@ def test_patch_is_not_offered(ingest_client: APIClient, video: Video) -> None:
     response = ingest_client.patch(url(video), {"percentageDone": 50}, format="json")
 
     assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
+
+# --------------------------------------------------------------------------
+# Putting work on the queue
+# --------------------------------------------------------------------------
+
+
+def test_a_report_can_put_a_video_back_on_the_queue(ingest_client: APIClient, video: Video) -> None:
+    """How both the tusd hook and the backfill CLI enqueue work: there is
+    no separate enqueue verb, just a report that the video is pending."""
+    response = report(ingest_client, video, state="pending", priority=10, kind="upload")
+
+    assert response.status_code == status.HTTP_200_OK
+    job = IngestJob.objects.get(pk=video.pk)
+    assert job.state == IngestState.PENDING
+    assert job.priority == 10
+    assert job.kind == IngestKind.UPLOAD
+
+
+def test_backfill_work_can_be_enqueued_below_uploads(
+    ingest_client: APIClient, video: Video
+) -> None:
+    report(ingest_client, video, state="pending", priority=0, kind="backfill")
+
+    job = IngestJob.objects.get(pk=video.pk)
+    assert job.kind == IngestKind.BACKFILL
+    assert job.priority == 0
+
+
+def test_nothing_forbids_returning_to_pending_from_a_finished_state(
+    ingest_client: APIClient, video: Video
+) -> None:
+    """Requeueing a done video is exactly what a backfill is."""
+    report(ingest_client, video, state="done", percentage_done=100)
+
+    response = report(ingest_client, video, state="pending", kind="backfill")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert IngestJob.objects.get(pk=video.pk).state == IngestState.PENDING
+
+
+def test_a_progress_report_does_not_demote_a_backfill_to_an_upload(
+    ingest_client: APIClient, video: Video
+) -> None:
+    """`priority` and `kind` carry model defaults, so a mid-pipeline
+    report that omits them must leave them standing rather than reset the
+    job to a default-priority upload."""
+    report(ingest_client, video, state="pending", priority=7, kind="backfill")
+
+    report(ingest_client, video, state="transcoding", percentage_done=40)
+
+    job = IngestJob.objects.get(pk=video.pk)
+    assert job.kind == IngestKind.BACKFILL
+    assert job.priority == 7
+
+
+def test_a_report_cannot_reassign_the_holding_worker(
+    ingest_client: APIClient, video: Video
+) -> None:
+    """`claimed_by` is the claim endpoint's to write. A progress report has
+    no standing to say who is doing the work."""
+    IngestJob.objects.create(video=video, state=IngestState.PROBING, claimed_by="worker-a")
+
+    report(ingest_client, video, state="transcoding", claimed_by="worker-b")
+
+    assert IngestJob.objects.get(pk=video.pk).claimed_by == "worker-a"

@@ -19,6 +19,9 @@ class Env:
     def str(
         self, var: builtins.str, default: Any = ..., multiline: builtins.bool = False
     ) -> builtins.str: ...
+    def int(
+        self, var: builtins.str, default: Any = ...
+    ) -> builtins.int: ...
     def db(
         self,
         var: builtins.str = "DATABASE_URL",

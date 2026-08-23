@@ -40,6 +40,7 @@ def api_root(request):
             # The API proper.
             "asrun": reverse("asrun-list", request=request),
             "categories": reverse("category-list", request=request),
+            "ingest/claim": reverse("api-ingest-claim", request=request),
             "organization": reverse("api-organization-list", request=request),
             "scheduleitems": reverse("api-scheduleitem-list", request=request),
             "scheduling/policy": reverse("api-scheduling-policy", request=request),
