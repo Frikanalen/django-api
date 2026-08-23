@@ -105,13 +105,10 @@ VIDEO_LOOKUPS = [
     ("?creator__email=nuug", []),
     ("?creator__email=nuug_user@fake.com", ["tech video"]),
     ("?creator__email=dummy_user@fake.com&name=", ["dummy video"]),
-    # VideoList.get_queryset reads this one straight off the query
-    # string in camelCase, unlike the django-filter fields above.
-    (
-        "?properImport=false",
-        ["broken video", "unpublished video", "dummy video", "tech video"],
-    ),
-    ("?properImport=true", ["unpublished video", "dummy video", "tech video"]),
+    # An ordinary django-filter field like the ones above, so `false`
+    # selects the unfinished videos rather than lifting the filter.
+    ("?proper_import=false", ["broken video"]),
+    ("?proper_import=true", ["unpublished video", "dummy video", "tech video"]),
 ]
 
 

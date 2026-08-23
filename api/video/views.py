@@ -142,6 +142,13 @@ class VideoFilter(djfilters.FilterSet):
         queryset=Category.objects.all(),
     )
     created_time = djfilters.DateTimeFromToRangeFilter()
+    # Declared rather than left to Meta so the default can be stated: a
+    # caller who says nothing gets the public catalogue, which is what the
+    # list has always meant. Saying `false` now means what it reads as --
+    # only the videos ingest never finished -- rather than "everything".
+    proper_import = djfilters.BooleanFilter(
+        label="Whether ingest finished. Omitted means true.",
+    )
     updated_time = djfilters.DateTimeFromToRangeFilter()
     uploaded_time = djfilters.DateTimeFromToRangeFilter()
     q = djfilters.CharFilter(method="filter_search", label="Free-text search")
@@ -218,6 +225,14 @@ class VideoFilter(djfilters.FilterSet):
             .order_by("-search_rank", "-id")
         )
 
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+        # An absent `proper_import` is not "no opinion": the catalogue is
+        # the finished videos, and only an explicit value opens it up.
+        if self.form.cleaned_data.get("proper_import") is None:
+            queryset = queryset.filter(proper_import=True)
+        return queryset
+
 
 class VideoList(RequireTargetOrganizationMembership, generics.ListCreateAPIView):
     """
@@ -261,7 +276,9 @@ class VideoList(RequireTargetOrganizationMembership, generics.ListCreateAPIView)
 
     `publish_on_web` - if this video is published ont the web (true/false)
 
-    `proper_import` - if the uploaded video was properly imported (true/false)
+    `proper_import` - whether ingest finished (true/false).  Omitted, the
+                      list shows only finished videos, which is the public
+                      catalogue.
 
     `ref_url` - the exact reference url
 
@@ -271,7 +288,7 @@ class VideoList(RequireTargetOrganizationMembership, generics.ListCreateAPIView)
 
     """
 
-    queryset = Video.objects.filter(proper_import=True)
+    queryset = Video.objects.all()
     pagination_class = FkDefaultPagination
     filterset_class = VideoFilter
     permission_classes = (IsInOrganizationOrReadOnly,)
@@ -285,10 +302,7 @@ class VideoList(RequireTargetOrganizationMembership, generics.ListCreateAPIView)
         return VideoSerializer
 
     def get_queryset(self):
-        # Can filtering on proper_import be done using a different
-        # queryset and VideoFilter?
-        queryset = Video.objects.visible_to(self.request.user)
-        proper_import = self.request.query_params.get("properImport")
-        if proper_import and "false" == proper_import:
-            return queryset
-        return queryset.filter(proper_import=True)
+        # `proper_import` is VideoFilter's business now, so that it reaches
+        # the OpenAPI schema like every other filter instead of being read
+        # off the query string here where no generated client can find it.
+        return Video.objects.visible_to(self.request.user)
