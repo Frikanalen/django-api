@@ -38,30 +38,36 @@ def staff_client() -> APIClient:
     return client
 
 
-def test_bulletins_are_listed_newest_first_without_pagination() -> None:
+def test_bulletins_are_listed_newest_first() -> None:
     older = make_bulletin("Older", CREATED)
     newer = make_bulletin("Newer", CREATED + timedelta(days=1))
 
     response = APIClient().get(reverse("news:bulletin-list"))
 
     assert response.status_code == status.HTTP_200_OK
-    # A plain list: this endpoint has pagination disabled.
-    assert response.json() == [
+    # Paginated like every other collection, and the timestamp is called
+    # `createdTime` here as it is everywhere else.
+    assert response.json()["results"] == [
         {
             "id": newer.pk,
             "heading": "Newer",
             "text": "Text of Newer",
-            "created": "2015-01-02T10:00:00Z",
+            "createdTime": "2015-01-02T10:00:00Z",
             "isPublished": True,
         },
         {
             "id": older.pk,
             "heading": "Older",
             "text": "Text of Older",
-            "created": "2015-01-01T10:00:00Z",
+            "createdTime": "2015-01-01T10:00:00Z",
             "isPublished": True,
         },
     ]
+
+
+def test_the_bulletin_list_has_no_trailing_slash() -> None:
+    """The whole API is trailing-slash-free; news used to be the exception."""
+    assert reverse("news:bulletin-list") == "/api/news/bulletins"
 
 
 def test_drafts_are_hidden_from_the_public_but_visible_to_staff() -> None:
@@ -73,14 +79,14 @@ def test_drafts_are_hidden_from_the_public_but_visible_to_staff() -> None:
     draft = make_bulletin("Draft", CREATED + timedelta(days=1), is_published=False)
 
     public_list = APIClient().get(reverse("news:bulletin-list"))
-    assert [item["heading"] for item in public_list.json()] == ["Published"]
+    assert [item["heading"] for item in public_list.json()["results"]] == ["Published"]
 
     draft_url = reverse("news:bulletin-detail", args=[draft.pk])
     assert APIClient().get(draft_url).status_code == status.HTTP_404_NOT_FOUND
 
     staff = staff_client()
     staff_list = staff.get(reverse("news:bulletin-list"))
-    assert [(item["heading"], item["isPublished"]) for item in staff_list.json()] == [
+    assert [(item["heading"], item["isPublished"]) for item in staff_list.json()["results"]] == [
         ("Draft", False),
         ("Published", True),
     ]
