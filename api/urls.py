@@ -5,7 +5,6 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, Spec
 from rest_framework import parsers
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.routers import SimpleRouter
-from rest_framework.urlpatterns import format_suffix_patterns
 
 import agenda.tvanytime.views as tvanytime_views
 import api.auth.views as auth_views
@@ -36,8 +35,8 @@ class ObtainAuthTokenJsonOnly(ObtainAuthToken):
 
 
 # Annotated because the opening literal is all patterns, which would fix
-# the inferred type as list[URLPattern]; the router, the format-suffix
-# expansion and include() all contribute resolvers further down.
+# the inferred type as list[URLPattern]; the router and include() both
+# contribute resolvers further down.
 api_patterns: list[URLPattern | URLResolver] = [
     path("csrf", CsrfView.as_view(), name="api-csrf-detail"),
     # Auth
@@ -98,21 +97,12 @@ api_patterns: list[URLPattern | URLResolver] = [
 ]
 api_patterns += router.urls
 
-# Format suffixes
-api_patterns = format_suffix_patterns(api_patterns, allowed=["json", "api", "xml"])
-
 api_patterns += [
-    # Registered after the format-suffix expansion on purpose: a
-    # `.json`-style twin would only clutter the OpenAPI schema with a
-    # colliding {format} operation.
     path(
         "scheduling/policy",
         schedule_views.SchedulingPolicyView.as_view(),
         name="api-scheduling-policy",
     ),
-    # Same reasoning, and more so: these only ever render XML, so a
-    # `.json` suffix would advertise a representation that cannot exist.
-    #
     # The root of the tvanytime path is the human-readable index rather
     # than a feed, which is the shape /xmltv/ already has and the one a
     # distributor arriving at the bare URL expects. The feeds hang below
