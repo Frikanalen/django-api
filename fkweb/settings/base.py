@@ -211,6 +211,8 @@ TEMPLATES = [
 ########## MIDDLEWARE CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#middleware-classes
 MIDDLEWARE = (
+    # Must be first: it starts the request timer before anything else runs.
+    "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "django.middleware.cache.UpdateCacheMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     # Default Django middleware.
@@ -227,6 +229,9 @@ MIDDLEWARE = (
     # under TIME_ZONE and read them back under UTC, and no /api/ response was
     # ever served from the cache.
     "fkweb.middleware.api_utc_middleware",
+    # Must be last: it records the response metrics once everything else,
+    # including the cache middlewares above, has had a chance to act.
+    "django_prometheus.middleware.PrometheusAfterMiddleware",
 )
 ########## END MIDDLEWARE CONFIGURATION
 
@@ -239,6 +244,10 @@ ROOT_URLCONF = f"{SITE_NAME}.urls"
 
 ########## APP CONFIGURATION
 DJANGO_APPS = (
+    # Must stay first in INSTALLED_APPS: django-prometheus patches model
+    # methods to time them, and needs to run before other apps' AppConfigs
+    # get a chance to use those methods.
+    "django_prometheus",
     # Default Django apps:
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -413,6 +422,11 @@ DEFAULT_FROM_EMAIL = "Frikanalen <noreply@frikanalen.no>"
 SECRET_KEY = env.str("SECRET_KEY")
 ALLOWED_HOSTS = env.str("ALLOWED_HOSTS").split(",")
 DATABASES = {"default": env.db()}
+# Swap in django-prometheus's wrapper backend so query counts/latencies get
+# exported; it's a drop-in that delegates everything to the real backend.
+DATABASES["default"]["ENGINE"] = (
+    "django_prometheus.db.backends." + DATABASES["default"]["ENGINE"].rsplit(".", 1)[-1]
+)
 CSRF_TRUSTED_ORIGINS = env.str("CSRF_TRUSTED_ORIGINS").split(",")
 try:
     cache_from_env_or_memory = env.cache()
