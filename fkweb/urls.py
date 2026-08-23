@@ -14,6 +14,7 @@ admin.autodiscover()
 
 urlpatterns: list[URLPattern | URLResolver] = [
     url(r"^admin/", admin.site.urls),
+    url(r"^", include("django_prometheus.urls")),
 ]
 
 urlpatterns += agenda.urls.urlpatterns
