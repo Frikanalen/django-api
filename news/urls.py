@@ -1,9 +1,11 @@
 from django.urls import include, path
-from rest_framework import routers
+from rest_framework.routers import SimpleRouter
 
 from .views import BulletinViewSet
 
-router = routers.DefaultRouter()
+# Trailing-slash-free, matching the router in api/urls.py: one URI per
+# resource across the whole API rather than two conventions side by side.
+router = SimpleRouter(trailing_slash=False)
 router.register(r"bulletins", BulletinViewSet)
 
 urlpatterns = [

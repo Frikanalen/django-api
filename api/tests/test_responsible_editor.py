@@ -127,8 +127,9 @@ def test_videos_disappear_from_the_public_list_and_detail(lose_editor, organizat
 
     assert anonymous.get(reverse("api-video-list")).json()["results"] == []
     assert anonymous.get(detail_url).status_code == 404
-    # properImport=false is a separate queryset branch; it hides them too.
-    assert anonymous.get(reverse("api-video-list") + "?properImport=false").json()["results"] == []
+    # Asking for the unfinished videos does not reveal them either: the
+    # visibility queryset applies before any filter.
+    assert anonymous.get(reverse("api-video-list") + "?proper_import=false").json()["results"] == []
 
 
 def test_staff_still_see_the_organization_and_its_videos(staff_client, organization, video) -> None:
