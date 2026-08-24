@@ -80,6 +80,10 @@ api_patterns: list[URLPattern | URLResolver] = [
         name="api-video-ingest-job-detail",
     ),
     path("videos/<int:pk>", video_views.VideoDetail.as_view(), name="api-video-detail"),
+    # Ingest. Not under videos/ like the reporting endpoint above: a claim
+    # asks for whichever video needs work next, so there is no id to hang
+    # it off.
+    path("ingest/claim", video_views.IngestClaim.as_view(), name="api-ingest-claim"),
     # Series
     path("series", series_views.SeriesList.as_view(), name="api-series-list"),
     path("series/<int:pk>", series_views.SeriesDetail.as_view(), name="api-series-detail"),

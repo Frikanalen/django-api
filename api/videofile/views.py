@@ -16,6 +16,13 @@ class VideoFileFilter(djfilters.FilterSet):
             "video_id": ["exact"],
             "variant": ["exact"],
             "integrated_lufs": ["isnull"],
+            # `lt` is ingest's planning query: everything produced by a
+            # profile older than the current revision, which is stale and
+            # wants rebuilding. It needs no special handling because the
+            # column is NOT NULL with 0 for "predates tracking" -- so the
+            # pre-tracking rows sort below every real revision and fall
+            # inside the comparison rather than out of it.
+            "profile_revision": ["exact", "lt"],
         }
 
 

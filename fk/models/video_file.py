@@ -73,6 +73,25 @@ class VideoFile(models.Model):
     created_time = models.DateTimeField(
         auto_now_add=True, help_text="Time the video file was created"
     )
+    # What the field is for is telling apart "this video has DASH" from
+    # "this video has *current* DASH", so that a profile change can be
+    # backfilled without crawling the archive.
+    #
+    # Zero is the sentinel rather than NULL, and not nullable at all.
+    # Ingest numbers its profile templates from 1, so 0 is a revision no
+    # template can ever claim, and it is what every row already in the
+    # table honestly means: made before any of this was recorded. Keeping
+    # the column NOT NULL is also what lets the planning query be a plain
+    # `profile_revision__lt` -- under three-valued logic a NULL row would
+    # fall out of `< 2`, and those rows are precisely the ones ingest most
+    # needs to find.
+    profile_revision = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Revision of the encoding profile that produced this file. "
+            "0 means it predates profile tracking."
+        ),
+    )
     # metadata frames, width, height, framerate? mlt profile name?
     # edl for in/out?
 

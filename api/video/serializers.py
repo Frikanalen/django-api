@@ -3,7 +3,16 @@ from rest_framework import serializers
 
 from api.organization.serializers import OrganizationSerializer
 from api.series.serializers import SeriesSummarySerializer
-from fk.models import Category, IngestJob, IngestState, Organization, Series, User, Video
+from fk.models import (
+    Category,
+    IngestJob,
+    IngestKind,
+    IngestState,
+    Organization,
+    Series,
+    User,
+    Video,
+)
 
 
 class BaseVideoSerializer(serializers.ModelSerializer):
@@ -85,7 +94,12 @@ class BaseVideoSerializer(serializers.ModelSerializer):
             "ogv_url",
             "large_thumbnail_url",
         )
-        read_only_fields = ("framerate", "created_time", "updated_time", "files")
+        # `framerate` is writable: ingest works the exact rate out anyway --
+        # it has to, to align DASH segments to whole frames -- and until now
+        # threw it away, which is why nothing has ever populated the column.
+        # Units are the field's own: thousandths of a frame per second, so
+        # 25 fps is 25000 and 59.94 is 59940.
+        read_only_fields = ("created_time", "updated_time", "files")
 
     def validate(self, data):
         is_creation = not self.instance
@@ -202,18 +216,31 @@ class IngestJobSerializer(serializers.ModelSerializer):
         fields = (
             "video",
             "state",
+            "priority",
+            "kind",
+            "claimed_by",
             "percentage_done",
             "status_text",
             "error_code",
             "updated_time",
         )
-        read_only_fields = ("video", "updated_time")
+        # `claimed_by` is set by the claim endpoint and nowhere else. It is
+        # readable so an operator can see which worker holds a job, but a
+        # progress report has no standing to reassign one.
+        read_only_fields = ("video", "claimed_by", "updated_time")
         extra_kwargs = {
             "status_text": {"write_only": True},
             # The model defaults this to `pending`, which would make an
             # otherwise empty report mean something. A report that does not
             # say what state it describes is not a report.
             "state": {"required": True},
+            # Both carry model defaults, so DRF leaves them out of
+            # validated_data when a report omits them and the stored values
+            # survive. That is what keeps this a whole-state PUT without
+            # making a mid-pipeline report demote a backfill job to a
+            # default-priority upload.
+            "priority": {"required": False},
+            "kind": {"required": False},
         }
 
     def validate(self, data):
@@ -225,3 +252,18 @@ class IngestJobSerializer(serializers.ModelSerializer):
                 {"error_code": "Only a failed ingest may carry an error code."}
             )
         return data
+
+
+class IngestClaimSerializer(serializers.Serializer):
+    """What a worker says about itself when it asks for work.
+
+    Both fields are optional, and mean different things by their absence.
+    No `kind` is "give me anything", which is right for a single
+    undifferentiated worker pool and stays right once the pool splits --
+    it is the workers that can only reach one source that have to name
+    one. No `worker` is simply an anonymous claim: the identity is
+    recorded for operators to read and nothing is decided by it.
+    """
+
+    kind = serializers.ChoiceField(choices=IngestKind.choices, required=False, allow_null=True)
+    worker = serializers.CharField(max_length=128, required=False, allow_blank=True)

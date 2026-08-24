@@ -7,6 +7,7 @@
 
 import logging
 import sys
+from datetime import timedelta
 from os.path import abspath, basename, dirname, join, normpath
 
 from environ import ImproperlyConfigured
@@ -30,6 +31,15 @@ FK_MEDIA_ROOT = "/tank/new_media/media"
 # Handed to the frontend as a video's uploadUrl. tusd is served under /upload
 # on the main site, so this differs per environment.
 FK_UPLOAD_URL = env.str("FK_UPLOAD_URL")
+
+# How long a claimed ingest job may stay silent before another worker is
+# allowed to take it over. Generous on purpose: two phases of an ingest
+# genuinely report nothing for a long time -- archiving a multi-gigabyte
+# original over SFTP, and the loudness analysis, which decodes an entire
+# audio track before it has anything to say. A lease shorter than the
+# longest silent phase does not recover abandoned work; it duplicates
+# running work, which is the more expensive mistake of the two.
+FK_INGEST_LEASE = timedelta(minutes=env.int("FK_INGEST_LEASE_MINUTES", default=60))
 
 AUTH_USER_MODEL = "fk.User"
 
@@ -395,6 +405,10 @@ SPECTACULAR_SETTINGS = {
         # happens to sit on: the generated name would be `StateEnum`,
         # which the next model with a `state` field would collide with.
         "IngestStateEnum": "fk.models.ingest.IngestState.choices",
+        # Named for what it describes, as above: the generated name would
+        # be `KindEnum`, which says nothing and collides with the next
+        # model to have a `kind`.
+        "IngestKindEnum": "fk.models.ingest.IngestKind.choices",
         # Same reasoning, and the two serializers that expose a variant
         # must share one component rather than generate one apiece.
         "VideoFileVariantEnum": "fk.models.video_file.VideoFileVariant.choices",

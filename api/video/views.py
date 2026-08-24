@@ -17,6 +17,7 @@ from api.auth.permissions import (
 )
 from api.pagination import FkDefaultPagination
 from api.video.serializers import (
+    IngestClaimSerializer,
     IngestJobSerializer,
     UploadTokenVerificationSerializer,
     VideoCreateSerializer,
@@ -132,6 +133,54 @@ class VideoIngestJobDetail(generics.RetrieveUpdateAPIView):
     )
     def put(self, request, *args, **kwargs):
         return super().put(request, *args, **kwargs)
+
+
+class IngestClaim(generics.GenericAPIView):
+    """Hand one waiting job to one worker.
+
+    The counterpart to the reporting endpoint above: that one is how a
+    worker says what it is doing, this one is how it finds out what to
+    do. Workers poll it, so an empty queue is the ordinary case rather
+    than an error -- it answers 204, and the worker sleeps and asks
+    again. A 404 would say the endpoint was wrong, and an empty list
+    would make every caller unwrap a collection that can only ever hold
+    one thing.
+
+    Claiming also covers recovery. A job whose worker was killed
+    mid-transcode stops reporting but keeps its state, and nothing else
+    in the system would ever look at it again; here it becomes claimable
+    once its lease expires. See IngestJob.claim().
+    """
+
+    serializer_class = IngestClaimSerializer
+    permission_classes = (IngestJobPermission,)
+
+    @extend_schema(
+        operation_id="ingest_claim",
+        summary="Claim an ingest job",
+        description=(
+            "Atomically hands the caller the highest-priority claimable job and moves it "
+            "to `probing`. Claimable means waiting, or claimed by a worker that has not "
+            "reported for longer than the ingest lease. Concurrent callers are never given "
+            "the same job. An idle queue answers 204."
+        ),
+        request=IngestClaimSerializer,
+        responses={
+            200: IngestJobSerializer,
+            204: OpenApiResponse(description="Nothing is claimable right now."),
+        },
+    )
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        job = IngestJob.claim(
+            kind=serializer.validated_data.get("kind"),
+            worker=serializer.validated_data.get("worker", ""),
+        )
+        if job is None:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(IngestJobSerializer(job).data)
 
 
 class VideoFilter(djfilters.FilterSet):

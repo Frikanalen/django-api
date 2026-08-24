@@ -25,4 +25,9 @@ class VideoFileSerializer(ModelSerializer):
             "filename",
             "integrated_lufs",
             "truepeak_lufs",
+            # Writable: ingest stamps the revision of the profile it just
+            # encoded with when it registers the file. Nothing else has any
+            # business claiming to know what produced a file, and anything
+            # that does not say reads as 0 -- older than every real profile.
+            "profile_revision",
         )

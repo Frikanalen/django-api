@@ -250,6 +250,10 @@ def test_api_root_links_every_endpoint_with_expected_anonymous_access(
         "user/register": 405,
         "asrun": 200,
         "categories": 200,
+        # Claiming ingest work is the service account's alone, and the
+        # endpoint refuses an anonymous caller before it ever gets as far
+        # as noticing that GET is not a method it has.
+        "ingest/claim": 401,
         "organization": 200,
         "scheduleitems": 200,
         "scheduling/policy": 200,

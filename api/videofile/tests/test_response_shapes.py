@@ -55,6 +55,10 @@ def test_videofile_detail_shape(video: Video) -> None:
         "filename": "master.mp4",
         "integratedLufs": -23.0,
         "truepeakLufs": None,
+        # Zero for anything made before ingest began recording which
+        # encoding profile produced it -- which is the whole archive.
+        # Templates are numbered from 1, so no real profile claims it.
+        "profileRevision": 0,
     }
 
 
