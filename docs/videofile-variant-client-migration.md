@@ -28,12 +28,13 @@ format — `srt` is a subtitle track, `cloudflare_id` is not a file.
 
 ## The valid values
 
-`original`, `broadcast`, `vc1`, `theora`, `dash`, `srt`, `large_thumb`,
-`med_thumb`, `small_thumb`, `cloudflare_id`.
+`original`, `broadcast`, `vc1`, `theora`, `dash`, `webm_med`, `srt`,
+`large_thumb`, `med_thumb`, `small_thumb`, `cloudflare_id`.
 
-Two carry a MIME type: `theora` is `video/ogg`, `dash` is
-`application/dash+xml`. `dash` is an MPEG-DASH manifest (`.mpd`), which
-needs a player — it is not a source a bare `<video>` element can load.
+Every variant except the non-file `cloudflare_id` carries a MIME type.
+`original` uses the generic `application/octet-stream` because its uploaded
+type is unknown. `dash` is an MPEG-DASH manifest (`.mpd`), which needs a
+player — it is not a source a bare `<video>` element can load.
 
 ## 1. Videofile payloads
 
@@ -120,7 +121,8 @@ Do not "fix" these:
 
 - **Media URLs and paths** — still `<prefix>/<video-id>/<variant>/<filename>`.
 - **The `files` map on a video payload** — always keyed by name, camel-cased
-  by the renderer: `files.original`, `files.largeThumb`, `files.dash`.
+  by the renderer: `files.original`, `files.largeThumb`, `files.dash`. Each
+  entry contains its `url` and a nullable `mimeType`.
 - **`ogvUrl`, `largeThumbnailUrl`** and the thumbnail fallbacks.
 - **Every other videofile field** — `id`, `video`, `filename`,
   `integratedLufs`, `truepeakLufs`, `createdTime`.

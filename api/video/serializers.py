@@ -12,6 +12,7 @@ from fk.models import (
     Series,
     User,
     Video,
+    VideoFileVariant,
 )
 
 
@@ -49,9 +50,12 @@ class BaseVideoSerializer(serializers.ModelSerializer):
         return obj.duration.total_seconds() if obj.duration is not None else None
 
     @staticmethod
-    def get_files(video) -> dict[str, str]:
+    def get_files(video) -> dict[str, dict[str, str | None]]:
         return {
-            vf.variant: settings.FK_MEDIA_URLPREFIX + vf.location(relative=True)
+            vf.variant: {
+                "url": settings.FK_MEDIA_URLPREFIX + vf.location(relative=True),
+                "mime_type": VideoFileVariant(vf.variant).mime_type,
+            }
             for vf in video.videofile_set.all()
         }
 
