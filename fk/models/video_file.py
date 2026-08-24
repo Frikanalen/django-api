@@ -31,8 +31,7 @@ class VideoFileVariant(models.TextChoices):
 
     @property
     def mime_type(self) -> str | None:
-        """How the file is served, where we have said so. None for the
-        variants nothing asks the question about."""
+        """How the file is served when the variant determines it."""
         return MIME_TYPES.get(self)
 
     @classmethod
@@ -47,8 +46,16 @@ class VideoFileVariant(models.TextChoices):
 # itself, so metadata has to hang off a lookup either way, and a dict
 # says "this is a table" more plainly than ten three-tuples would.
 MIME_TYPES = {
+    VideoFileVariant.LARGE_THUMB: "image/jpeg",
+    VideoFileVariant.BROADCAST: "video/DV",
+    VideoFileVariant.VC1: "video/vc1",
+    VideoFileVariant.MED_THUMB: "image/jpeg",
+    VideoFileVariant.SMALL_THUMB: "image/jpeg",
+    VideoFileVariant.ORIGINAL: "application/octet-stream",
     VideoFileVariant.THEORA: "video/ogg",
+    VideoFileVariant.SRT: "application/x-subrip",
     VideoFileVariant.DASH: "application/dash+xml",
+    VideoFileVariant.WEBM_MED: "video/webm",
 }
 
 

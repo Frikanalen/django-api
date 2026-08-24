@@ -47,11 +47,22 @@ def test_an_unlisted_variant_is_rejected(video: Video) -> None:
 
 
 def test_mime_types_are_declared_where_we_have_an_answer() -> None:
-    assert VideoFileVariant.DASH.mime_type == "application/dash+xml"
-    assert VideoFileVariant.THEORA.mime_type == "video/ogg"
-    # Nothing asks what a broadcast master is served as, and inventing an
-    # answer would put it in payloads that never carried one.
-    assert VideoFileVariant.BROADCAST.mime_type is None
+    assert {variant: variant.mime_type for variant in VideoFileVariant} == {
+        VideoFileVariant.LARGE_THUMB: "image/jpeg",
+        VideoFileVariant.BROADCAST: "video/DV",
+        VideoFileVariant.VC1: "video/vc1",
+        VideoFileVariant.MED_THUMB: "image/jpeg",
+        VideoFileVariant.SMALL_THUMB: "image/jpeg",
+        # An original upload can be any accepted media type, so only the
+        # generic binary type is safe to infer from its variant.
+        VideoFileVariant.ORIGINAL: "application/octet-stream",
+        VideoFileVariant.THEORA: "video/ogg",
+        VideoFileVariant.SRT: "application/x-subrip",
+        # An identifier stored in the filename column is not media.
+        VideoFileVariant.CLOUDFLARE_ID: None,
+        VideoFileVariant.DASH: "application/dash+xml",
+        VideoFileVariant.WEBM_MED: "video/webm",
+    }
 
 
 def test_only_directly_playable_variants_are_published_to_vod(video: Video) -> None:

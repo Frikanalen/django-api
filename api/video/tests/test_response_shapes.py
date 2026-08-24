@@ -45,8 +45,10 @@ def video(editor: User, organization: Organization) -> Video:
     video.categories.add(category)
     for variant, filename in (
         (VideoFileVariant.ORIGINAL, "master.mp4"),
+        (VideoFileVariant.BROADCAST, "master.dv"),
         (VideoFileVariant.LARGE_THUMB, "thumb.jpg"),
         (VideoFileVariant.THEORA, "video.ogv"),
+        (VideoFileVariant.WEBM_MED, "video.webm"),
     ):
         VideoFile.objects.create(video=video, variant=variant, filename=filename)
     # created_time/updated_time are auto-set; pin them so the rendered
@@ -69,9 +71,26 @@ def expected_video_json(video: Video) -> dict:
         "header": "A header",
         "description": "A description",
         "files": {
-            "original": f"{MEDIA}/{video.pk}/original/master.mp4",
-            "largeThumb": f"{MEDIA}/{video.pk}/large_thumb/thumb.jpg",
-            "theora": f"{MEDIA}/{video.pk}/theora/video.ogv",
+            "original": {
+                "url": f"{MEDIA}/{video.pk}/original/master.mp4",
+                "mimeType": "application/octet-stream",
+            },
+            "broadcast": {
+                "url": f"{MEDIA}/{video.pk}/broadcast/master.dv",
+                "mimeType": "video/DV",
+            },
+            "largeThumb": {
+                "url": f"{MEDIA}/{video.pk}/large_thumb/thumb.jpg",
+                "mimeType": "image/jpeg",
+            },
+            "theora": {
+                "url": f"{MEDIA}/{video.pk}/theora/video.ogv",
+                "mimeType": "video/ogg",
+            },
+            "webmMed": {
+                "url": f"{MEDIA}/{video.pk}/webm_med/video.webm",
+                "mimeType": "video/webm",
+            },
         },
         "creator": editor.email,
         "organization": {
@@ -207,4 +226,7 @@ def test_a_dash_manifest_is_offered_under_its_own_files_key(video: Video) -> Non
 
     payload = APIClient().get(reverse("api-video-detail", args=[video.pk])).json()
 
-    assert payload["files"]["dash"] == f"{MEDIA}/{video.pk}/dash/manifest.mpd"
+    assert payload["files"]["dash"] == {
+        "url": f"{MEDIA}/{video.pk}/dash/manifest.mpd",
+        "mimeType": "application/dash+xml",
+    }
