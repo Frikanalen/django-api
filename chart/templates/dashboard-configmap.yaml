@@ -1,0 +1,16 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: django-api-dashboard
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: django-api
+    # Picked up by the kiwigrid k8s-sidecar that kube-prometheus-stack runs
+    # next to Grafana, which watches every namespace for ConfigMaps with this
+    # label.
+    grafana_dashboard: "1"
+data:
+  django-api.json: |
+{{ .Files.Get "dashboard.json" | indent 4 }}
+{{- end }}

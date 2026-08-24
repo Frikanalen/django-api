@@ -52,3 +52,11 @@ ingress:
   enabled: true
   className: traefik
   hostname: beta.frikanalen.no
+
+monitoring:
+  # Off by default: the ServiceMonitor CRD only exists where
+  # kube-prometheus-stack is installed, so enabling this unconditionally
+  # would break `helm install` on a cluster without it.
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
