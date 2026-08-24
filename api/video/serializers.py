@@ -1,4 +1,5 @@
 from django.conf import settings
+from drf_spectacular.utils import extend_schema_field, inline_serializer
 from rest_framework import serializers
 
 from api.organization.serializers import OrganizationSerializer
@@ -13,6 +14,21 @@ from fk.models import (
     User,
     Video,
     VideoFileVariant,
+)
+
+
+# `files` is a map rather than a serializer-backed model field, so the schema
+# generator cannot discover its keys.  Keep the spelling here in snake_case:
+# the same schema hook that mirrors CamelCaseJSONRenderer for ordinary fields
+# also turns these properties into `largeThumb`, `webmMed`, and so on.
+class VideoFileLinkSerializer(serializers.Serializer):
+    url = serializers.CharField()
+    mime_type = serializers.CharField(allow_null=True)
+
+
+VideoFilesSerializer = inline_serializer(
+    name="VideoFiles",
+    fields={variant.value: VideoFileLinkSerializer(required=False) for variant in VideoFileVariant},
 )
 
 
@@ -50,6 +66,7 @@ class BaseVideoSerializer(serializers.ModelSerializer):
         return obj.duration.total_seconds() if obj.duration is not None else None
 
     @staticmethod
+    @extend_schema_field(VideoFilesSerializer)
     def get_files(video) -> dict[str, dict[str, str | None]]:
         return {
             vf.variant: {
