@@ -272,11 +272,6 @@ def _add_basic_description(parent: ET.Element, video: Video) -> None:
     description = _sub(parent, "BasicDescription")
     _sub(description, "Title", video.name, type_="main")
 
-    # `header` is the listings teaser and `description` the full text, so
-    # they are the short and long synopsis respectively. Either may be
-    # absent, and a video that has only one gets only that one.
-    if video.header:
-        _sub(description, "Synopsis", video.header.strip(), length="short")
     if video.description:
         _sub(description, "Synopsis", video.description.strip(), length="long")
 

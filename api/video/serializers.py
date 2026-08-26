@@ -86,7 +86,6 @@ class BaseVideoSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "name",
-            "header",
             "description",
             "files",
             "creator",

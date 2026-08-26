@@ -269,7 +269,6 @@ def test_list_serializes_nested_video_details(
             "video": {
                 "id": video.pk,
                 "name": video.name,
-                "header": None,
                 "description": None,
                 "organization": {
                     "id": organization.pk,

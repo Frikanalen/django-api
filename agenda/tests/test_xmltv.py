@@ -29,7 +29,7 @@ def video() -> Video:
     organization = Organization.objects.create(name="XMLTV org", editor=editor)
     return Video.objects.create(
         name="Documentary",
-        header="About the harbour",
+        description="About the harbour",
         creator=editor,
         organization=organization,
         duration=timedelta(hours=1),
@@ -121,14 +121,14 @@ def test_daily_feed_covers_one_oslo_calendar_day(video: Video) -> None:
     assert starts == [included.starttime.strftime("%Y%m%d%H%M%S +0100")]
 
 
-def test_missing_video_header_renders_as_the_string_none(video: Video) -> None:
+def test_missing_video_description_renders_as_the_string_none(video: Video) -> None:
     """
-    Known wart, pinned on purpose: the template renders `video.header`
-    directly, so a NULL header becomes the literal text 'None' in the
+    Known wart, pinned on purpose: the template renders `video.description`
+    directly, so a NULL description becomes the literal text 'None' in the
     feed. A refactor that wants to change this should have to meet this
     test and decide consciously.
     """
-    video.header = None
+    video.description = None
     video.save()
     schedule(video, datetime(2015, 1, 1, 12, tzinfo=OSLO))
 

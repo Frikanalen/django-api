@@ -115,8 +115,7 @@ def category() -> Category:
 def video(organization: Organization, editor: User, category: Category) -> Video:
     video = Video.objects.create(
         name="Havna vår",
-        header="Om havna i Oslo",
-        description="En lengre beskrivelse av dokumentaren om havna.",
+        description=("Om havna i Oslo\n\nEn lengre beskrivelse av dokumentaren om havna."),
         creator=editor,
         organization=organization,
         duration=timedelta(minutes=30),
@@ -194,7 +193,6 @@ def test_richest_possible_programme_still_validates(
     emitted = [etree.QName(child).localname for child in description]
     assert emitted == [
         "Title",
-        "Synopsis",
         "Synopsis",
         "Genre",
         "ParentalGuidance",
