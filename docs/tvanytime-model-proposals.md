@@ -119,7 +119,7 @@ be the alternative if keywords ever need to be curated or shared across
 videos.
 
 **A second reason to want this:** `Video.search_document` is a generated
-column over name, header and description. Adding keywords to that vector
+column over name and description. Adding keywords to that vector
 improves the site's own search at the same time, which makes the field
 worth filling in for reasons members can see — the surest way to get
 metadata actually entered.
@@ -324,14 +324,11 @@ Worth doing whenever somebody is next in this code.
 
 ### One thing to watch
 
-`Video.header` is marked *"Retire, use description instead"* in the model.
-It is currently the **short** synopsis, with `description` as the long one.
-Retiring it without a replacement would silently drop the short synopsis
-from the feed — and a short synopsis is what most EPG grids display, so the
-visible result would be worse listings everywhere.
-
-Whatever replaces `header` should keep two lengths, or the retirement
-should include deriving a short synopsis from the long one.
+`Video.header` was retired in migration 0038. Its contents were preserved at
+the start of `description`, separated from an existing description by a blank
+line. The feed now emits that combined text as its long synopsis; adding a
+derived short synopsis remains a possible follow-up for EPG grids that truncate
+aggressively.
 
 ---
 

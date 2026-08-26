@@ -67,7 +67,7 @@ class ProgramImageInline(admin.StackedInline):
 class VideoAdmin(admin.ModelAdmin):
     list_display = ("name", "creator", "organization", "series", "episode_number")
     inlines = [VideoFileInline, ProgramImageInline]
-    search_fields = ["name", "description", "organization__name", "header", "creator__email"]
+    search_fields = ["name", "description", "organization__name", "creator__email"]
     list_filter = ("proper_import", "is_filler", "publish_on_web", "has_tono_records")
 
 

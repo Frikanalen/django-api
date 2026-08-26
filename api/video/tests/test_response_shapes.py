@@ -32,8 +32,7 @@ def video(editor: User, organization: Organization) -> Video:
     category = Category.objects.create(id=1, name="News")
     video = Video.objects.create(
         name="Shape test video",
-        header="A header",
-        description="A description",
+        description="A header\n\nA description",
         creator=editor,
         organization=organization,
         duration=timedelta(minutes=1, seconds=2, milliseconds=300),
@@ -68,8 +67,7 @@ def expected_video_json(video: Video) -> dict:
     return {
         "id": video.pk,
         "name": "Shape test video",
-        "header": "A header",
-        "description": "A description",
+        "description": "A header\n\nA description",
         "files": {
             "original": {
                 "url": f"{MEDIA}/{video.pk}/original/master.mp4",

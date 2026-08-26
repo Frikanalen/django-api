@@ -46,10 +46,8 @@ class VideoManager(models.Manager):
 
 class Video(models.Model):
     id = models.AutoField(primary_key=True)
-    # Retire, use description instead
-    header = models.TextField(blank=True, null=True, max_length=2048)
     name = models.CharField(max_length=255)
-    description = models.CharField(blank=True, null=True, max_length=2048)
+    description = models.TextField(blank=True, null=True)
     # A stored vector means PostgreSQL can answer searches with the GIN
     # index below rather than re-tokenizing every video on every request.
     # Organization names have their own vector because an index cannot span
@@ -57,7 +55,6 @@ class Video(models.Model):
     search_document = models.GeneratedField(
         expression=(
             SearchVector("name", config="norwegian", weight="A")
-            + SearchVector("header", config="norwegian", weight="B")
             + SearchVector("description", config="norwegian", weight="B")
         ),
         output_field=SearchVectorField(),

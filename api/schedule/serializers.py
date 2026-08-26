@@ -55,7 +55,6 @@ class ScheduleitemVideoSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "name",
-            "header",
             "description",
             "organization",
             "categories",

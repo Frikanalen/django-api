@@ -140,8 +140,7 @@ def test_video_list_free_text_searches_video_and_organization_fields(
 
     Video.objects.create(
         name="title-only nametoken",
-        header="headertoken",
-        description="descriptiontoken",
+        description="headertoken descriptiontoken",
         organization=organization,
         creator=user,
         proper_import=True,

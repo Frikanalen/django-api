@@ -69,7 +69,6 @@ Named against the NorDig terms list (`NorDigTVATerms_v1_4.xlsx`).
 | NorDig term | TV-Anytime | Source |
 | --- | --- | --- |
 | title | `Title type="main"` | `Video.name`, or `Scheduleitem.default_name` |
-| short synopsis | `Synopsis length="short"` | `Video.header` |
 | long synopsis | `Synopsis length="long"` | `Video.description` |
 | genres | `Genre` | `Category.tva_genre` — see below |
 | parental guidance | `ParentalGuidance/MinimumAge` | `Video.minimum_age` |
