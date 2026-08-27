@@ -207,7 +207,7 @@ class ScheduleitemReadSerializer(serializers.ModelSerializer):
         return policy.is_displaceable(item)
 
 
-class WeeklySlotSourceSerializer(serializers.ModelSerializer):
+class WeeklySlotSourceSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = WeeklySlotSource
         fields = ("id", "name")
@@ -217,11 +217,11 @@ class WeeklySlotSourceSerializer(serializers.ModelSerializer):
 class WeeklySlotReadSerializer(serializers.ModelSerializer):
     """A recurring reservation shown alongside the drafted schedule."""
 
-    source = WeeklySlotSourceSerializer(allow_null=True, read_only=True)
+    source = WeeklySlotSourceSummarySerializer(allow_null=True, read_only=True)
 
     class Meta:
         model = WeeklySlot
-        fields = ("id", "source", "day", "start_time", "duration")
+        fields = ("id", "organization", "source", "day", "start_time", "duration")
         read_only_fields = fields
 
 
