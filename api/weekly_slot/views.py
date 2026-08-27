@@ -24,6 +24,9 @@ def administered_organizations(user):
 
 
 class WeeklySlotSourceList(generics.ListCreateAPIView):
+    # Schema generation has an anonymous request, so it must not evaluate the
+    # membership filter in get_queryset merely to discover this view's model.
+    queryset = WeeklySlotSource.objects.none()
     serializer_class = WeeklySlotSourceSerializer
     pagination_class = FkDefaultPagination
     permission_classes = (permissions.IsAuthenticated,)
@@ -38,6 +41,7 @@ class WeeklySlotSourceList(generics.ListCreateAPIView):
 
 
 class WeeklySlotSourceDetail(generics.RetrieveUpdateAPIView):
+    queryset = WeeklySlotSource.objects.none()
     serializer_class = WeeklySlotSourceSerializer
     permission_classes = (permissions.IsAuthenticated,)
 
@@ -61,6 +65,10 @@ class WeeklySlotDetail(generics.RetrieveUpdateAPIView):
 class WeeklySlotRequestList(generics.ListAPIView):
     """One chronological read view over both request models."""
 
+    # list() deliberately combines two model types instead of using DRF's
+    # queryset machinery. This inert queryset only gives schema introspection
+    # a model without changing the endpoint's runtime behavior.
+    queryset = WeeklySlotCreationRequest.objects.none()
     serializer_class = WeeklySlotRequestSerializer
     pagination_class = FkDefaultPagination
     permission_classes = (permissions.IsAuthenticated,)

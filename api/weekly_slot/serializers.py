@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
@@ -189,6 +190,7 @@ class WeeklySlotOwnershipRequestSerializer(serializers.ModelSerializer):
         return attrs
 
 
+@extend_schema_serializer(component_name="WeeklySlotRequestEnvelope")
 class WeeklySlotRequestSerializer(serializers.Serializer):
     """Read envelope around the two deliberately separate request models."""
 
