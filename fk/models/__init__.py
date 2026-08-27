@@ -17,15 +17,20 @@ from .organization import Organization  # noqa: F401
 from .program_image import ImageMediaType, ImageRole, ProgramImage  # noqa: F401
 from .schedule import (  # noqa: F401
     Scheduleitem,
-    SlotSourceStrategy,
-    SlotSourceType,
-    WeeklySlot,
-    WeeklySlotSource,
     airtime_end,
 )
 from .series import Series  # noqa: F401
 from .user import User, UserManager  # noqa: F401
 from .video import Video  # noqa: F401
 from .video_file import VideoFile, VideoFileVariant  # noqa: F401
+from .weeklyslot import (  # noqa: F401
+    SlotSourceStrategy,
+    SlotSourceType,
+    WeeklySlot,
+    WeeklySlotCreationRequest,
+    WeeklySlotOwnershipRequest,
+    WeeklySlotRequestStatus,
+    WeeklySlotSource,
+)
 
 logger = logging.getLogger(__name__)

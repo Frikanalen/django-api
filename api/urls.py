@@ -14,6 +14,7 @@ import api.schedule.views as schedule_views
 import api.series.views as series_views
 import api.video.views as video_views
 import api.videofile.views as videofile_views
+import api.weekly_slot.views as weekly_slot_views
 from fkweb.views import CsrfView
 
 from . import views
@@ -97,6 +98,38 @@ api_patterns: list[URLPattern | URLResolver] = [
         "organization/<int:pk>",
         organization_views.OrganizationDetail.as_view(),
         name="api-organization-detail",
+    ),
+    # Recurring airtime. Members control only what fills an allocated slot;
+    # changes to its day, start, and duration go through an audited request.
+    path(
+        "weekly-slot-sources",
+        weekly_slot_views.WeeklySlotSourceList.as_view(),
+        name="api-weekly-slot-source-list",
+    ),
+    path(
+        "weekly-slot-sources/<int:pk>",
+        weekly_slot_views.WeeklySlotSourceDetail.as_view(),
+        name="api-weekly-slot-source-detail",
+    ),
+    path(
+        "weekly-slots/<int:pk>",
+        weekly_slot_views.WeeklySlotDetail.as_view(),
+        name="api-weekly-slot-detail",
+    ),
+    path(
+        "weekly-slot-requests",
+        weekly_slot_views.WeeklySlotRequestList.as_view(),
+        name="api-weekly-slot-request-list",
+    ),
+    path(
+        "weekly-slot-requests/creation",
+        weekly_slot_views.WeeklySlotCreationRequestCreate.as_view(),
+        name="api-weekly-slot-creation-request-create",
+    ),
+    path(
+        "weekly-slot-requests/ownership",
+        weekly_slot_views.WeeklySlotOwnershipRequestCreate.as_view(),
+        name="api-weekly-slot-ownership-request-create",
     ),
 ]
 api_patterns += router.urls

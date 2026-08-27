@@ -4,7 +4,8 @@ from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.db.models import F
 from django.db.models.functions import Greatest
 from django_filters import rest_framework as djfilters
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_field
 from rest_framework import generics, status
 from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
@@ -184,11 +185,13 @@ class IngestClaim(generics.GenericAPIView):
 
 
 class VideoFilter(djfilters.FilterSet):
-    categories__name__icontains = djfilters.ModelMultipleChoiceFilter(
-        field_name="categories__name",
-        to_field_name="name",
-        lookup_expr="icontains",
-        queryset=Category.objects.all(),
+    categories__name__icontains = extend_schema_field(OpenApiTypes.STR)(
+        djfilters.ModelMultipleChoiceFilter(
+            field_name="categories__name",
+            to_field_name="name",
+            lookup_expr="icontains",
+            queryset=Category.objects.all(),
+        )
     )
     created_time = djfilters.DateTimeFromToRangeFilter()
     # Declared rather than left to Meta so the default can be stated: a

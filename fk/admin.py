@@ -1,8 +1,11 @@
 # Copyright (c) 2012-2013 Benjamin Bruheim <grolgh@gmail.com>
 # This file is covered by the LGPLv3 or later, read COPYING for details.
-from django.contrib import admin
+from typing import ClassVar
+
+from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group
+from django.core.exceptions import ValidationError
 from django.db.models import Count
 
 from fk.forms import UserChangeForm, UserCreationForm
@@ -18,6 +21,9 @@ from fk.models import (
     Video,
     VideoFile,
     WeeklySlot,
+    WeeklySlotCreationRequest,
+    WeeklySlotOwnershipRequest,
+    WeeklySlotRequestStatus,
     WeeklySlotSource,
 )
 
@@ -286,17 +292,119 @@ class WeeklySlotAdmin(admin.ModelAdmin):
         "start_time",
         "duration",
         "end_time",
+        "organization",
         "source",
     )
-    list_filter = ("day", "source")
-    list_select_related = ("source",)
+    list_filter = ("day", "organization", "source")
+    list_select_related = ("organization", "source")
     autocomplete_fields = ("source",)
+
+
+class WeeklySlotRequestAdmin(admin.ModelAdmin):
+    """Shared audited decision controls for the two request types."""
+
+    list_filter: ClassVar[tuple[str, ...]] = ("status", "organization")
+    actions = ("approve_requests", "deny_requests")
+    readonly_fields: ClassVar[tuple[str, ...]] = (
+        "organization",
+        "requested_by",
+        "status",
+        "reviewed_by",
+        "created_at",
+        "reviewed_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        if obj is not None and obj.status != WeeklySlotRequestStatus.PENDING:
+            fields.append("admin_comment")
+        return fields
+
+    def _decide(self, request, queryset, status):
+        decided = 0
+        for slot_request in queryset.filter(status=WeeklySlotRequestStatus.PENDING):
+            comment = slot_request.admin_comment.strip() or (
+                f"{WeeklySlotRequestStatus(status).label} in Django admin."
+            )
+            try:
+                slot_request.decide(admin=request.user, status=status, comment=comment)
+            except ValidationError as error:
+                self.message_user(
+                    request,
+                    f"{slot_request}: {'; '.join(error.messages)}",
+                    level=messages.ERROR,
+                )
+                continue
+            decided += 1
+        self.message_user(request, f"{decided} request(s) {status}.")
+
+    @admin.action(description="Approve selected pending requests")
+    def approve_requests(self, request, queryset):
+        self._decide(request, queryset, WeeklySlotRequestStatus.APPROVED)
+
+    @admin.action(description="Deny selected pending requests")
+    def deny_requests(self, request, queryset):
+        self._decide(request, queryset, WeeklySlotRequestStatus.DENIED)
+
+
+class WeeklySlotCreationRequestAdmin(WeeklySlotRequestAdmin):
+    list_display = (
+        "__str__",
+        "organization",
+        "day",
+        "start_time",
+        "duration",
+        "requested_by",
+        "status",
+        "reviewed_by",
+        "created_at",
+    )
+    list_filter = ("status", "organization", "day")
+    list_select_related = ("organization", "requested_by", "reviewed_by", "weekly_slot")
+    readonly_fields = WeeklySlotRequestAdmin.readonly_fields + (
+        "day",
+        "start_time",
+        "duration",
+        "weekly_slot",
+    )
+
+
+class WeeklySlotOwnershipRequestAdmin(WeeklySlotRequestAdmin):
+    list_display = (
+        "__str__",
+        "organization",
+        "weekly_slot",
+        "previous_organization",
+        "requested_by",
+        "status",
+        "reviewed_by",
+        "created_at",
+    )
+    list_select_related = (
+        "organization",
+        "weekly_slot",
+        "previous_organization",
+        "requested_by",
+        "reviewed_by",
+    )
+    readonly_fields = WeeklySlotRequestAdmin.readonly_fields + (
+        "weekly_slot",
+        "previous_organization",
+    )
 
 
 admin.site.register(Category, CategoryAdmin)
 admin.site.register(IngestJob, IngestJobAdmin)
 admin.site.register(Organization, OrganizationAdmin)
 admin.site.register(WeeklySlotSource, WeeklySlotSourceAdmin)
+admin.site.register(WeeklySlotCreationRequest, WeeklySlotCreationRequestAdmin)
+admin.site.register(WeeklySlotOwnershipRequest, WeeklySlotOwnershipRequestAdmin)
 admin.site.register(Scheduleitem, ScheduleitemAdmin)
 admin.site.register(Series, SeriesAdmin)
 admin.site.register(User, UserAdmin)
