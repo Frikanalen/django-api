@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.0.0](https://github.com/Frikanalen/django-api/compare/v1.0.0...v2.0.0) (2026-09-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** Video payloads no longer include ogvUrl or largeThumbnailUrl. Read files.theora.url and files.largeThumb.url from the files map instead; both keys are absent when the file does not exist, where the old fields returned null and /static/default_large_thumbnail.png respectively.
+
+### Features
+
+* **api:** drop ogvUrl and largeThumbnailUrl, prune dead URL helpers ([#77](https://github.com/Frikanalen/django-api/issues/77)) ([346acc5](https://github.com/Frikanalen/django-api/commit/346acc5e6e79eef7179b279478be647794955db4))
+* **video:** add dash_preview variant ([#75](https://github.com/Frikanalen/django-api/issues/75)) ([ea176e7](https://github.com/Frikanalen/django-api/commit/ea176e7da777e0ef266fc937a6a4f2ebd08058be))
+
 ## [1.0.0](https://github.com/Frikanalen/django-api/compare/v0.2.0...v1.0.0) (2026-08-27)
 
 
