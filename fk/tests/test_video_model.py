@@ -47,16 +47,13 @@ def test_videofile_url_is_the_relative_location(video: Video) -> None:
     assert video.videofile_url(VideoFileVariant.BROADCAST) == f"{video.pk}/broadcast/master.avi"
 
 
-def test_thumbnail_urls_resolve_to_the_media_host(video: Video) -> None:
-    add_file(video, VideoFileVariant.SMALL_THUMB, "small.jpg")
+def test_thumbnail_url_resolves_to_the_media_host(video: Video) -> None:
     add_file(video, VideoFileVariant.LARGE_THUMB, "large.jpg")
 
-    assert video.small_thumbnail_url() == f"{MEDIA}{video.pk}/small_thumb/small.jpg"
     assert video.large_thumbnail_url() == f"{MEDIA}{video.pk}/large_thumb/large.jpg"
 
 
-def test_thumbnail_urls_fall_back_to_static_defaults(video: Video) -> None:
-    assert video.small_thumbnail_url() == "/static/default_small_thumbnail.png"
+def test_thumbnail_url_falls_back_to_a_static_default(video: Video) -> None:
     assert video.large_thumbnail_url() == "/static/default_large_thumbnail.png"
 
 

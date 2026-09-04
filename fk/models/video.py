@@ -245,13 +245,6 @@ class Video(models.Model):
     def videofile_url(self, variant: VideoFileVariant) -> str:
         return self.videofile_set.get(variant=variant).location(relative=True)
 
-    def small_thumbnail_url(self) -> str:
-        try:
-            video_file = self.videofile_set.get(video=self, variant=VideoFileVariant.SMALL_THUMB)
-        except ObjectDoesNotExist:
-            return "/static/default_small_thumbnail.png"
-        return settings.FK_MEDIA_URLPREFIX + video_file.location(relative=True)
-
     def large_thumbnail_url(self) -> str:
         try:
             video_file = self.videofile_set.get(video=self, variant=VideoFileVariant.LARGE_THUMB)
@@ -260,7 +253,7 @@ class Video(models.Model):
         return settings.FK_MEDIA_URLPREFIX + video_file.location(relative=True)
 
     def ogv_url(self) -> str | None:
-        # None where the thumbnail methods fall back to a placeholder:
+        # None where large_thumbnail_url() falls back to a placeholder:
         # a video with no theora file has no OGV URL to offer, and the
         # API exposes the field as null. Pinned by test_ogv_url.
         try:
