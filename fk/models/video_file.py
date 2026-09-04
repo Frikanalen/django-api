@@ -110,9 +110,11 @@ class VideoFile(models.Model):
             "-id",
         )
         constraints = [
-            # Consumers look files up by (video, variant) and expect a
-            # single result -- videofile_url() and the thumbnail helpers
-            # all call .get() on the pair.
+            # A video has at most one file of each kind. The video
+            # serializer's `files` map is keyed by variant, so a second
+            # row for the same pair would not raise -- it would silently
+            # shadow the first, and which one survived would depend on
+            # row order.
             models.UniqueConstraint(fields=("video", "variant"), name="unique_variant_per_video"),
         ]
 

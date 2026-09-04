@@ -111,8 +111,6 @@ class BaseVideoSerializer(serializers.ModelSerializer):
             "created_time",
             "updated_time",
             "uploaded_time",
-            "ogv_url",
-            "large_thumbnail_url",
         )
         # `framerate` is writable: ingest works the exact rate out anyway --
         # it has to, to align DASH segments to whole frames -- and until now

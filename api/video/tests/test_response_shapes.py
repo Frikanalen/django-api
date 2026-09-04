@@ -120,8 +120,6 @@ def expected_video_json(video: Video) -> dict:
         "createdTime": "2015-01-01T10:00:00Z",
         "updatedTime": "2015-01-02T10:00:00Z",
         "uploadedTime": "2015-01-03T10:00:00Z",
-        "ogvUrl": f"{MEDIA}/{video.pk}/theora/video.ogv",
-        "largeThumbnailUrl": f"{MEDIA}/{video.pk}/large_thumb/thumb.jpg",
     }
 
 
@@ -202,7 +200,9 @@ def test_video_list_hides_improper_imports_by_default(
     assert [item["id"] for item in response.json()["results"]] == [listed.pk]
 
 
-def test_video_without_files_uses_fallback_urls(editor: User, organization: Organization) -> None:
+def test_video_without_files_has_an_empty_files_map(
+    editor: User, organization: Organization
+) -> None:
     video = Video.objects.create(
         name="Bare video",
         creator=editor,
@@ -212,9 +212,12 @@ def test_video_without_files_uses_fallback_urls(editor: User, organization: Orga
 
     payload = APIClient().get(reverse("api-video-detail", args=[video.pk])).json()
 
+    # An absent file is an absent key, not a placeholder URL. The payload
+    # used to carry ogvUrl and largeThumbnailUrl, which answered null and
+    # a /static/ default here; clients read `files` instead.
     assert payload["files"] == {}
-    assert payload["ogvUrl"] is None
-    assert payload["largeThumbnailUrl"] == "/static/default_large_thumbnail.png"
+    assert "ogvUrl" not in payload
+    assert "largeThumbnailUrl" not in payload
 
 
 def test_a_dash_manifest_is_offered_under_its_own_files_key(video: Video) -> None:

@@ -36,7 +36,6 @@ def test_a_dash_manifest_resolves_under_its_own_directory(video: Video) -> None:
     # The stored value is the name itself, so no row has to exist first.
     assert manifest.variant == "dash"
     assert manifest.location(relative=True) == f"{video.pk}/dash/manifest.mpd"
-    assert video.videofile_url(VideoFileVariant.DASH) == f"{video.pk}/dash/manifest.mpd"
 
 
 def test_an_unlisted_variant_is_rejected(video: Video) -> None:

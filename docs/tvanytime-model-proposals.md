@@ -290,9 +290,8 @@ Either fix works:
 
 - **`VideoFile.language`**, plus relaxing `unique_variant_per_video` to
   `(video, variant, language)`. Smaller change, but it loosens a constraint
-  that other code relies on — `videofile_url()` and the thumbnail helpers
-  all call `.get()` on the pair and would start raising
-  `MultipleObjectsReturned`.
+  the `files` map relies on: that map is keyed by variant, so a second row
+  for the same pair would silently shadow the first rather than raising.
 - **A `SubtitleTrack` model**, leaving `VideoFile` alone. More code, no
   risk to existing lookups.
 

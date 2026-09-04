@@ -40,28 +40,11 @@ def add_file(video: Video, variant: VideoFileVariant, filename: str) -> VideoFil
     return VideoFile.objects.create(video=video, variant=variant, filename=filename)
 
 
-def test_videofile_url_is_the_relative_location(video: Video) -> None:
-    add_file(video, VideoFileVariant.BROADCAST, "some/path/master.avi")
+def test_a_files_location_keeps_only_the_basename(video: Video) -> None:
+    video_file = add_file(video, VideoFileVariant.BROADCAST, "some/path/master.avi")
 
-    # location() keeps only the basename of the stored filename.
-    assert video.videofile_url(VideoFileVariant.BROADCAST) == f"{video.pk}/broadcast/master.avi"
-
-
-def test_thumbnail_url_resolves_to_the_media_host(video: Video) -> None:
-    add_file(video, VideoFileVariant.LARGE_THUMB, "large.jpg")
-
-    assert video.large_thumbnail_url() == f"{MEDIA}{video.pk}/large_thumb/large.jpg"
-
-
-def test_thumbnail_url_falls_back_to_a_static_default(video: Video) -> None:
-    assert video.large_thumbnail_url() == "/static/default_large_thumbnail.png"
-
-
-def test_ogv_url(video: Video) -> None:
-    assert video.ogv_url() is None
-
-    add_file(video, VideoFileVariant.THEORA, "video.ogv")
-    assert video.ogv_url() == f"{MEDIA}{video.pk}/theora/video.ogv"
+    # The stored filename may carry a path; the media layout does not.
+    assert video_file.location(relative=True) == f"{video.pk}/broadcast/master.avi"
 
 
 def test_public_queryset_requires_web_publishing_and_proper_import(
