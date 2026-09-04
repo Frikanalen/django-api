@@ -27,6 +27,12 @@ class VideoFileVariant(models.TextChoices):
     SRT = "srt", "SubRip subtitles"
     CLOUDFLARE_ID = "cloudflare_id", "Cloudflare Stream identifier"
     DASH = "dash", "MPEG-DASH manifest"
+    # A single low bitrate rung, encoded first so that a freshly
+    # uploaded video is playable in minutes rather than after the whole
+    # ladder finishes. It is transient by design: once `dash` exists for
+    # the same video, ingest deletes the preview and its segments, and a
+    # player should prefer `dash` whenever both are present.
+    DASH_PREVIEW = "dash_preview", "Transient low-quality MPEG-DASH manifest"
     WEBM_MED = "webm_med", "Medium-quality WebM"
 
     @property
@@ -55,6 +61,7 @@ MIME_TYPES = {
     VideoFileVariant.THEORA: "video/ogg",
     VideoFileVariant.SRT: "application/x-subrip",
     VideoFileVariant.DASH: "application/dash+xml",
+    VideoFileVariant.DASH_PREVIEW: "application/dash+xml",
     VideoFileVariant.WEBM_MED: "video/webm",
 }
 
