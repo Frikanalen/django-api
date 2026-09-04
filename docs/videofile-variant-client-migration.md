@@ -123,7 +123,10 @@ Do not "fix" these:
 - **The `files` map on a video payload** — always keyed by name, camel-cased
   by the renderer: `files.original`, `files.largeThumb`, `files.dash`. Each
   entry contains its `url` and a nullable `mimeType`.
-- **`ogvUrl`, `largeThumbnailUrl`** and the thumbnail fallbacks.
+- **`ogvUrl`, `largeThumbnailUrl`** and the thumbnail fallbacks — unchanged
+  *by this migration*, but removed by a later one. Read both from the
+  `files` map instead: `files.theora.url` and `files.largeThumb.url`, which
+  are simply absent when the file does not exist.
 - **Every other videofile field** — `id`, `video`, `filename`,
   `integratedLufs`, `truepeakLufs`, `createdTime`.
 

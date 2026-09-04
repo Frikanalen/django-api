@@ -1,17 +1,14 @@
 from datetime import timedelta
 from uuid import uuid4
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.postgres.indexes import GinIndex
 from django.contrib.postgres.search import SearchVector, SearchVectorField
-from django.core.exceptions import ObjectDoesNotExist
 from django.core.validators import MinValueValidator, RegexValidator
 from django.db import models
 
 from .category import Category
 from .organization import Organization
-from .video_file import VideoFileVariant
 
 
 class VideoManager(models.Manager):
@@ -241,53 +238,6 @@ class Video(models.Model):
 
     def last_broadcast(self):
         return self.scheduleitem_set.all().order_by("-starttime").first()
-
-    def videofile_url(self, variant: VideoFileVariant) -> str:
-        return self.videofile_set.get(variant=variant).location(relative=True)
-
-    def small_thumbnail_url(self) -> str:
-        try:
-            video_file = self.videofile_set.get(video=self, variant=VideoFileVariant.SMALL_THUMB)
-        except ObjectDoesNotExist:
-            return "/static/default_small_thumbnail.png"
-        return settings.FK_MEDIA_URLPREFIX + video_file.location(relative=True)
-
-    def large_thumbnail_url(self) -> str:
-        try:
-            video_file = self.videofile_set.get(video=self, variant=VideoFileVariant.LARGE_THUMB)
-        except ObjectDoesNotExist:
-            return "/static/default_large_thumbnail.png"
-        return settings.FK_MEDIA_URLPREFIX + video_file.location(relative=True)
-
-    def ogv_url(self) -> str | None:
-        # None where the thumbnail methods fall back to a placeholder:
-        # a video with no theora file has no OGV URL to offer, and the
-        # API exposes the field as null. Pinned by test_ogv_url.
-        try:
-            return settings.FK_MEDIA_URLPREFIX + self.videofile_url(VideoFileVariant.THEORA)
-        except ObjectDoesNotExist:
-            return None
-
-    def vod_files(self):
-        """Return a list of video files fit for the video on demand
-        presentation, with associated MIME type.
-
-        [
-          {
-            'url: 'https://../.../file.ogv',
-            'mime_type': 'video/ogg',
-          },
-        ]
-
-        """
-
-        vodfiles = []
-        published = VideoFileVariant.vod_published()
-        for videofile in self.videofile_set.all().filter(variant__in=published):
-            url = settings.FK_MEDIA_URLPREFIX + videofile.location(relative=True)
-            mime_type = VideoFileVariant(videofile.variant).mime_type
-            vodfiles.append({"url": url, "mime_type": mime_type})
-        return vodfiles
 
     def get_absolute_url(self):
         return f"/video/{self.id}/"

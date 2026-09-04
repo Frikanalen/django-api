@@ -40,13 +40,6 @@ class VideoFileVariant(models.TextChoices):
         """How the file is served when the variant determines it."""
         return MIME_TYPES.get(self)
 
-    @classmethod
-    def vod_published(cls) -> frozenset["VideoFileVariant"]:
-        """The variants vod_files() offers to a player: sources a
-        <video> element can play as they are. A DASH manifest needs a
-        player to interpret it, so it is not one of them."""
-        return frozenset({cls.THEORA})
-
 
 # Kept beside the enum rather than in it: a member's value is the string
 # itself, so metadata has to hang off a lookup either way, and a dict
@@ -117,9 +110,11 @@ class VideoFile(models.Model):
             "-id",
         )
         constraints = [
-            # Consumers look files up by (video, variant) and expect a
-            # single result -- videofile_url() and the thumbnail helpers
-            # all call .get() on the pair.
+            # A video has at most one file of each kind. The video
+            # serializer's `files` map is keyed by variant, so a second
+            # row for the same pair would not raise -- it would silently
+            # shadow the first, and which one survived would depend on
+            # row order.
             models.UniqueConstraint(fields=("video", "variant"), name="unique_variant_per_video"),
         ]
 
