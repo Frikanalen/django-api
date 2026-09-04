@@ -268,26 +268,5 @@ class Video(models.Model):
         except ObjectDoesNotExist:
             return None
 
-    def vod_files(self):
-        """Return a list of video files fit for the video on demand
-        presentation, with associated MIME type.
-
-        [
-          {
-            'url: 'https://../.../file.ogv',
-            'mime_type': 'video/ogg',
-          },
-        ]
-
-        """
-
-        vodfiles = []
-        published = VideoFileVariant.vod_published()
-        for videofile in self.videofile_set.all().filter(variant__in=published):
-            url = settings.FK_MEDIA_URLPREFIX + videofile.location(relative=True)
-            mime_type = VideoFileVariant(videofile.variant).mime_type
-            vodfiles.append({"url": url, "mime_type": mime_type})
-        return vodfiles
-
     def get_absolute_url(self):
         return f"/video/{self.id}/"

@@ -40,13 +40,6 @@ class VideoFileVariant(models.TextChoices):
         """How the file is served when the variant determines it."""
         return MIME_TYPES.get(self)
 
-    @classmethod
-    def vod_published(cls) -> frozenset["VideoFileVariant"]:
-        """The variants vod_files() offers to a player: sources a
-        <video> element can play as they are. A DASH manifest needs a
-        player to interpret it, so it is not one of them."""
-        return frozenset({cls.THEORA})
-
 
 # Kept beside the enum rather than in it: a member's value is the string
 # itself, so metadata has to hang off a lookup either way, and a dict

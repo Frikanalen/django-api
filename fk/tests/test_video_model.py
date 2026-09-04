@@ -67,15 +67,6 @@ def test_ogv_url(video: Video) -> None:
     assert video.ogv_url() == f"{MEDIA}{video.pk}/theora/video.ogv"
 
 
-def test_vod_files_lists_only_publishable_formats(video: Video) -> None:
-    add_file(video, VideoFileVariant.ORIGINAL, "master.mp4")
-    add_file(video, VideoFileVariant.THEORA, "video.ogv")
-
-    assert video.vod_files() == [
-        {"url": f"{MEDIA}{video.pk}/theora/video.ogv", "mime_type": "video/ogg"}
-    ]
-
-
 def test_public_queryset_requires_web_publishing_and_proper_import(
     editor: User, organization: Organization, video: Video
 ) -> None:

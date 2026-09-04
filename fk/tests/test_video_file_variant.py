@@ -12,8 +12,6 @@ from fk.models import Organization, User, Video, VideoFile, VideoFileVariant
 
 pytestmark = pytest.mark.django_db
 
-MEDIA = "https://frikanalen.no/media/"
-
 
 @pytest.fixture
 def video() -> Video:
@@ -66,18 +64,3 @@ def test_mime_types_are_declared_where_we_have_an_answer() -> None:
         VideoFileVariant.DASH_PREVIEW: "application/dash+xml",
         VideoFileVariant.WEBM_MED: "video/webm",
     }
-
-
-def test_only_directly_playable_variants_are_published_to_vod(video: Video) -> None:
-    VideoFile.objects.create(video=video, variant=VideoFileVariant.DASH, filename="manifest.mpd")
-    VideoFile.objects.create(
-        video=video, variant=VideoFileVariant.DASH_PREVIEW, filename="manifest.mpd"
-    )
-    VideoFile.objects.create(video=video, variant=VideoFileVariant.THEORA, filename="video.ogv")
-
-    # A manifest needs a player to interpret it, so it is not a source
-    # vod_files() can hand to a <video> element -- and the preview ladder
-    # is a manifest that is also about to be deleted.
-    assert video.vod_files() == [
-        {"url": f"{MEDIA}{video.pk}/theora/video.ogv", "mime_type": "video/ogg"}
-    ]
