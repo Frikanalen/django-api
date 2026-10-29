@@ -27,6 +27,7 @@ dependencies = [
     "psycopg2-binary>=2.9.10",
     "pymemcache>=4.0.0",
     "python-dateutil==2.9.0.post0",
+    "uvicorn>=0.30",
 ]
 
 [tool.ruff]
@@ -106,4 +107,5 @@ dev = [
     "types-django-filter>=26.1.0.20260713",
     "pre-commit>=3.4",
     "lxml-stubs>=0.5.1",
+    "types-psycopg2>=2.9.21.20261008",
 ]

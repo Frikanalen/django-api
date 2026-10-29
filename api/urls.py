@@ -11,6 +11,7 @@ import api.auth.views as auth_views
 import api.live.views as live_views
 import api.mediamtx as mediamtx_views
 import api.organization.views as organization_views
+import api.playout.views as playout_views
 import api.program_image.views as program_image_views
 import api.schedule.views as schedule_views
 import api.series.views as series_views
@@ -42,6 +43,7 @@ class ObtainAuthTokenJsonOnly(ObtainAuthToken):
 # contribute resolvers further down.
 api_patterns: list[URLPattern | URLResolver] = [
     path("mediamtx/auth", mediamtx_views.authenticate, name="api-mediamtx-auth"),
+    path("playout/events", playout_views.events, name="api-playout-events"),
     path("csrf", CsrfView.as_view(), name="api-csrf-detail"),
     # Auth
     path("user/register", auth_views.UserCreate.as_view(), name="api-user-create"),

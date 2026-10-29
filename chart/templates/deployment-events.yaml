@@ -1,0 +1,48 @@
+# The same image as the main deployment, run under ASGI for the long-lived
+# /api/playout/events stream. Gunicorn's sync workers would each be held for
+# good by one subscriber, so the ingress sends only that path here.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-events
+spec:
+  replicas: {{ .Values.events.replicas }}
+  selector:
+    matchLabels:
+      app: django-api-events
+  minReadySeconds: 5
+  template:
+    metadata:
+      annotations:
+        linkerd.io/inject: enabled
+      labels:
+        app: django-api-events
+    spec:
+      containers:
+        - name: django
+          image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag }}"
+          imagePullPolicy: {{ .Values.django.image.pullPolicy }}
+          # Not start.sh: migrations and static files belong to the main
+          # deployment, which this one only borrows code from.
+          command: ["uvicorn", "fkweb.asgi:application", "--host", "0.0.0.0", "--port", "8080"]
+          env:
+            {{- include "django.env" . | nindent 12 }}
+          ports:
+            - name: http-events
+              containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: django-api-events
+  labels:
+    app: django-api-events
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http-events
+  selector:
+    app: django-api-events
