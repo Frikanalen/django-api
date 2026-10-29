@@ -245,3 +245,14 @@ def test_the_cache_is_cleared_only_once_the_change_commits(
     for callback in callbacks:
         callback()
     assert not cached_pages()
+
+
+def test_browsers_must_revalidate_the_schedule(catalogue) -> None:
+    """Only the server's cache is cleared on a change, so browsers may not keep a copy."""
+    url = reverse("api-scheduleitem-list")
+    first = APIClient().get(url, {"date": "2015-06-01"})
+    second = APIClient().get(url, {"date": "2015-06-01"})
+
+    assert cached_pages(), "the server should still cache the schedule"
+    for response in (first, second):
+        assert "no-cache" in response["Cache-Control"]

@@ -231,6 +231,9 @@ TEMPLATES = [
 MIDDLEWARE = (
     # Must be first: it starts the request timer before anything else runs.
     "django_prometheus.middleware.PrometheusBeforeMiddleware",
+    # Outside the page cache, so it can rewrite what browsers are told
+    # without stopping the server from caching the page.
+    "fkweb.middleware.browser_revalidates_middleware",
     "django.middleware.cache.UpdateCacheMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     # Default Django middleware.

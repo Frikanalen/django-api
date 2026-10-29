@@ -14,6 +14,30 @@ def api_utc_middleware(get_response):
     return middleware
 
 
+# Pages the server's cache clears whenever they change (fk/signals.py). No
+# signal reaches a browser's copy, so browsers are told to ask every time;
+# the answer still comes from the server's cache.
+REVALIDATED_PATHS = ("/api/scheduleitems",)
+
+
+def browser_revalidates_middleware(get_response):
+    """Keep browsers from reusing a page the server may have invalidated.
+
+    Must sit outside UpdateCacheMiddleware: Django refuses to cache a
+    response marked no-cache, so the header is changed only after the page
+    has been stored, and on every copy served from the cache.
+    """
+
+    def middleware(request):
+        response = get_response(request)
+        if request.path.startswith(REVALIDATED_PATHS) and response.has_header("Cache-Control"):
+            response["Cache-Control"] = "no-cache"
+            del response["Expires"]
+        return response
+
+    return middleware
+
+
 def _carries_credentials(request) -> bool:
     """Whether the request presents anything that could identify a user.
 
