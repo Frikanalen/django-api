@@ -18,5 +18,6 @@ from .schedule import Scheduleitem, SchedulePurpose, WeeklySlot  # noqa: F401
 from .organization import Organization  # noqa: F401
 from .asrun import AsRun  # noqa: F401
 from .ingest import IngestJob, Asset  # noqa: F401
+from .live import LiveSource, LiveTransmission  # noqa: F401
 
 logger = logging.getLogger(__name__)
