@@ -39,7 +39,9 @@ class ScheduleitemViewSet(RequireSchedulingEligibility, viewsets.ModelViewSet):
     # Eagerly load the nested relations exposed by ScheduleitemReadSerializer.
     # The files themselves still need prefetching; their format does not,
     # now that it is a column on the row rather than a table to join.
-    queryset = Scheduleitem.objects.select_related("video__organization").prefetch_related(
+    queryset = Scheduleitem.objects.select_related(
+        "video__organization", "live_transmission__source"
+    ).prefetch_related(
         "video__categories",
         "video__videofile_set",
     )

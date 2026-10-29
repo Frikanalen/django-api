@@ -8,6 +8,7 @@ from agenda.scheduling import policy
 from fk.models import (
     AsRun,
     Category,
+    LiveTransmission,
     Organization,
     Scheduleitem,
     Video,
@@ -173,7 +174,17 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
         policy.displace(displaceable)
 
 
+class LiveTransmissionReadSerializer(serializers.ModelSerializer):
+    stream_id = serializers.UUIDField(source="source.stream_id", read_only=True)
+
+    class Meta:
+        model = LiveTransmission
+        fields = ("id", "source", "stream_id")
+        read_only_fields = fields
+
+
 class ScheduleitemReadSerializer(serializers.ModelSerializer):
+    live_transmission = LiveTransmissionReadSerializer(read_only=True, allow_null=True)
     video = ScheduleitemVideoSerializer(allow_null=True)
     starttime = serializers.DateTimeField(default_timezone=OSLO)
     endtime = serializers.DateTimeField(default_timezone=OSLO, read_only=True)
@@ -191,6 +202,7 @@ class ScheduleitemReadSerializer(serializers.ModelSerializer):
             "duration",
             "displaceable",
             "weekly_slot",
+            "live_transmission",
         )
         read_only_fields = fields
 

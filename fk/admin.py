@@ -7,11 +7,14 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.db.models import Count
+from django.forms.models import BaseInlineFormSet
 
 from fk.forms import UserChangeForm, UserCreationForm
 from fk.models import (
     Category,
     IngestJob,
+    LiveSource,
+    LiveTransmission,
     Organization,
     ProgramImage,
     Scheduleitem,
@@ -92,7 +95,40 @@ class SeriesAdmin(admin.ModelAdmin):
     ordering = ("organization__name", "name")
 
 
+class LiveTransmissionFormSet(BaseInlineFormSet):
+    def clean(self):
+        super().clean()
+        if any(self.errors):
+            return
+        for form in self.forms:
+            source = form.cleaned_data.get("source")
+            if form.cleaned_data.get("DELETE") or source is None:
+                continue
+            if not self.instance.video_id:
+                raise ValidationError("A live transmission requires a video.")
+            if not source.enabled:
+                form.add_error("source", "The live source is disabled.")
+            elif source.organization_id != self.instance.video.organization_id:
+                form.add_error("source", "The live source must belong to the video's organization.")
+
+
+class LiveTransmissionInline(admin.StackedInline):
+    model = LiveTransmission
+    formset = LiveTransmissionFormSet
+    fields = ("source",)
+    extra = 0
+    max_num = 1
+
+
+class LiveSourceAdmin(admin.ModelAdmin):
+    list_display = ("name", "organization", "enabled")
+    list_filter = ("enabled", "organization")
+    search_fields = ("name", "organization__name")
+    readonly_fields = ("stream_id",)
+
+
 class ScheduleitemAdmin(admin.ModelAdmin):
+    inlines = [LiveTransmissionInline]
     list_filter = ("starttime", "schedulereason", "video__organization", "is_live")
     list_display = ("__str__", "video", "schedulereason", "starttime", "duration", "is_live")
     # list_display_links = ('starttime', 'video',)
@@ -111,6 +147,21 @@ class ScheduleitemAdmin(admin.ModelAdmin):
             # as an API edit: the nightly re-pick must not overwrite it.
             obj.weekly_slot = None
         super().save_model(request, obj, form, change)
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        # Preserve legacy manually flagged live entries without an input.
+        # An attached input always denotes a live airing; removing one
+        # returns that booking to recorded playback.
+        removed = any(
+            isinstance(deleted, LiveTransmission)
+            for formset in formsets
+            for deleted in formset.deleted_objects
+        )
+        attached = LiveTransmission.objects.filter(schedule_item=form.instance).exists()
+        if attached or removed:
+            Scheduleitem.objects.filter(pk=form.instance.pk).update(is_live=attached)
+            form.instance.is_live = attached
 
 
 class IngestJobAdmin(admin.ModelAdmin):
@@ -406,6 +457,7 @@ admin.site.register(WeeklySlotSource, WeeklySlotSourceAdmin)
 admin.site.register(WeeklySlotCreationRequest, WeeklySlotCreationRequestAdmin)
 admin.site.register(WeeklySlotOwnershipRequest, WeeklySlotOwnershipRequestAdmin)
 admin.site.register(Scheduleitem, ScheduleitemAdmin)
+admin.site.register(LiveSource, LiveSourceAdmin)
 admin.site.register(Series, SeriesAdmin)
 admin.site.register(User, UserAdmin)
 admin.site.register(Video, VideoAdmin)
