@@ -33,6 +33,9 @@ memcached:
 
 env:
   DJANGO_SETTINGS_MODULE: fkweb.settings.production
+  # The memcached this chart deploys. Shared by every worker and pod, so a
+  # schedule change can clear the page cache everywhere at once.
+  CACHE_URL: pymemcache://memcached:11211
   ALLOWED_HOSTS: beta.frikanalen.no
   CSRF_TRUSTED_ORIGINS: https://beta.frikanalen.no
   # Handed to the frontend as a video's uploadUrl. Always set it: the settings

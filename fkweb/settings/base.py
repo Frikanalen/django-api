@@ -456,11 +456,26 @@ except ImproperlyConfigured:
     logger.warning("CACHE_URL not set, falling back to in-memory cache.")
     cache_from_env_or_memory = {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
 
+if cache_from_env_or_memory["BACKEND"] == "django.core.cache.backends.memcached.PyMemcacheCache":
+    # django-prometheus only counts cache reads through its own wrapper, the
+    # way DATABASES already goes through its database backend.
+    cache_from_env_or_memory["BACKEND"] = (
+        "django_prometheus.cache.backends.memcached.PyMemcacheCache"
+    )
+    # Without ignore_exc an unreachable memcached raises out of every request
+    # instead of behaving as a miss; the short timeouts keep a hung one from
+    # stalling them.
+    cache_from_env_or_memory.setdefault("OPTIONS", {}).update(
+        {"ignore_exc": True, "connect_timeout": 1, "timeout": 1}
+    )
+
 CACHES = {"default": cache_from_env_or_memory}
 
 # How stale an anonymous page may get. This is Django's own default, but it
 # only started to mean anything once the page cache actually began serving
 # responses, so state it here where the cost is visible: a video published
 # now can take this long to appear for logged-out visitors. Authenticated
-# callers bypass the cache entirely and always see current data.
+# callers bypass the cache entirely and always see current data. Schedule
+# changes clear the cache outright (fk/signals.py), which only reaches every
+# worker when CACHE_URL points at a shared cache such as the chart's memcached.
 CACHE_MIDDLEWARE_SECONDS = 600

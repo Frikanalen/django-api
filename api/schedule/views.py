@@ -1,6 +1,4 @@
 from django.utils import timezone
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import never_cache
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, viewsets
 from rest_framework.exceptions import PermissionDenied
@@ -22,11 +20,6 @@ from api.schedule.serializers import (
 from fk.models import Scheduleitem, WeeklySlot
 
 
-# Playout and the on-air graphics read the schedule anonymously, so the
-# site-wide page cache would hand them a copy up to CACHE_MIDDLEWARE_SECONDS
-# old -- long enough for a live slot booked at short notice to be missed.
-# A day's schedule is one indexed query; always answer it fresh.
-@method_decorator(never_cache, name="dispatch")
 class ScheduleitemViewSet(RequireSchedulingEligibility, viewsets.ModelViewSet):
     """
     Video events schedule
