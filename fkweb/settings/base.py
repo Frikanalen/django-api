@@ -32,6 +32,14 @@ FK_MEDIA_ROOT = "/tank/new_media/media"
 # on the main site, so this differs per environment.
 FK_UPLOAD_URL = env.str("FK_UPLOAD_URL")
 
+# Public MediaMTX listener URLs used only for credential connection examples.
+# Leave unset until the corresponding listener is deployed and reachable.
+FK_MEDIAMTX_SRT_URL = env.str("FK_MEDIAMTX_SRT_URL", default="")
+FK_MEDIAMTX_RTMP_URL = env.str("FK_MEDIAMTX_RTMP_URL", default="")
+FK_MEDIAMTX_RTSP_URL = env.str("FK_MEDIAMTX_RTSP_URL", default="")
+FK_MEDIAMTX_WEBRTC_URL = env.str("FK_MEDIAMTX_WEBRTC_URL", default="")
+FK_MEDIAMTX_HLS_URL = env.str("FK_MEDIAMTX_HLS_URL", default="")
+
 # How long a claimed ingest job may stay silent before another worker is
 # allowed to take it over. Generous on purpose: two phases of an ingest
 # genuinely report nothing for a long time -- archiving a multi-gigabyte

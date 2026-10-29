@@ -8,6 +8,8 @@ from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.db.models import Count
 from django.forms.models import BaseInlineFormSet
+from django.template.response import TemplateResponse
+from django.utils import timezone
 
 from fk.forms import UserChangeForm, UserCreationForm
 from fk.models import (
@@ -20,6 +22,7 @@ from fk.models import (
     Scheduleitem,
     Series,
     SlotSourceType,
+    StreamCredential,
     User,
     Video,
     VideoFile,
@@ -29,6 +32,7 @@ from fk.models import (
     WeeklySlotRequestStatus,
     WeeklySlotSource,
 )
+from fk.stream_connections import connection_examples
 
 
 class UserAdmin(BaseUserAdmin):
@@ -125,6 +129,47 @@ class LiveSourceAdmin(admin.ModelAdmin):
     list_filter = ("enabled", "organization")
     search_fields = ("name", "organization__name")
     readonly_fields = ("stream_id",)
+
+
+class StreamCredentialAdmin(admin.ModelAdmin):
+    list_display = ("label", "source", "action", "created_at", "expires_at", "revoked_at")
+    list_filter = ("action", "revoked_at", "source__organization")
+    search_fields = ("label", "source__name", "source__organization__name")
+    fields = ("source", "label", "action", "key_id", "created_at", "expires_at", "revoked_at")
+    readonly_fields = ("key_id", "created_at", "revoked_at")
+    actions = ("revoke_credentials",)
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is not None:
+            return (*self.readonly_fields, "source", "action")
+        return self.readonly_fields
+
+    def response_add(self, request, obj, post_url_continue=None):
+        # Called inside the admin's transaction. The cleartext secret exists
+        # only in this response, never in a message/session or a model field.
+        secret = obj.generate_secret()
+        obj.save(update_fields=["secret_hash"])
+        response = TemplateResponse(
+            request,
+            "admin/fk/streamcredential/issued.html",
+            {
+                **self.admin_site.each_context(request),
+                "title": "Stream credential created",
+                "opts": self.model._meta,
+                "credential": obj,
+                "secret": secret,
+                "stream_path": f"live/{obj.source.stream_id}",
+                "connection_examples": connection_examples(obj, secret),
+            },
+        )
+        response["Cache-Control"] = "no-store, private"
+        response["Referrer-Policy"] = "no-referrer"
+        return response
+
+    @admin.action(description="Revoke selected stream credentials", permissions=["change"])
+    def revoke_credentials(self, request, queryset):
+        count = queryset.filter(revoked_at__isnull=True).update(revoked_at=timezone.now())
+        self.message_user(request, f"Revoked {count} stream credential(s).")
 
 
 class ScheduleitemAdmin(admin.ModelAdmin):
@@ -458,6 +503,7 @@ admin.site.register(WeeklySlotCreationRequest, WeeklySlotCreationRequestAdmin)
 admin.site.register(WeeklySlotOwnershipRequest, WeeklySlotOwnershipRequestAdmin)
 admin.site.register(Scheduleitem, ScheduleitemAdmin)
 admin.site.register(LiveSource, LiveSourceAdmin)
+admin.site.register(StreamCredential, StreamCredentialAdmin)
 admin.site.register(Series, SeriesAdmin)
 admin.site.register(User, UserAdmin)
 admin.site.register(Video, VideoAdmin)
