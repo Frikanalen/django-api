@@ -15,6 +15,16 @@ class LiveSource(models.Model):
     stream_id = models.UUIDField(default=uuid4, unique=True, editable=False)
     enabled = models.BooleanField(default=True)
 
+    # MediaMTX path names (no leading slash). Everything lives under contrib/
+    # so its WebRTC endpoints claim one prefix on the site's hostname.
+    @property
+    def contribution_path(self):
+        return f"contrib/live/{self.stream_id}"
+
+    @property
+    def preview_path(self):
+        return f"contrib/preview/{self.stream_id}"
+
     def __str__(self):
         return self.name
 

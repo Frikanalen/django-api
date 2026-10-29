@@ -26,7 +26,7 @@ def test_connection_urls_use_configured_listeners_and_credential_scope(endpoints
     )
     secret = "copy-this-password"
     examples = {item["label"]: item for item in connection_examples(credential, secret)}
-    path = f"live/{source.stream_id}"
+    path = f"contrib/live/{source.stream_id}"
     srt = urlsplit(examples["SRT"]["url"])
     assert srt.netloc == "contribute.example.test:8890"
     assert parse_qs(srt.query) == {
@@ -65,8 +65,8 @@ def test_converter_examples_are_only_the_allowed_rtsp_paths(endpoints):
     examples = connection_examples(credential, "secret")
     assert len(examples) == 2
     assert all(item["url"].startswith("rtsps://") for item in examples)
-    assert urlsplit(examples[0]["url"]).path == f"/live/{source.stream_id}"
-    assert urlsplit(examples[1]["url"]).path == f"/preview/{source.stream_id}"
+    assert urlsplit(examples[0]["url"]).path == f"/contrib/live/{source.stream_id}"
+    assert urlsplit(examples[1]["url"]).path == f"/contrib/preview/{source.stream_id}"
 
 
 def test_read_credentials_include_derived_opus_whep_path(endpoints):
@@ -74,5 +74,8 @@ def test_read_credentials_include_derived_opus_whep_path(endpoints):
     credential = StreamCredential(source=source, action=StreamCredential.Action.READ)
     examples = connection_examples(credential, "secret")
     preview = next(item for item in examples if item["label"] == "WebRTC / Opus preview")
-    assert preview["url"] == f"https://contribute.example.test/rtc/preview/{source.stream_id}/whep"
+    assert (
+        preview["url"]
+        == f"https://contribute.example.test/rtc/contrib/preview/{source.stream_id}/whep"
+    )
     assert preview["token"] == f"{credential.key_id}:secret"
