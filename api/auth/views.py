@@ -1,41 +1,21 @@
-from django.contrib.auth import login, logout, authenticate
-from django.shortcuts import get_object_or_404
+from django.contrib.auth import authenticate, login, logout
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics
-from rest_framework.authentication import BasicAuthentication
 from rest_framework.authtoken.models import Token
-from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.generics import CreateAPIView
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
-from rest_framework.views import APIView
 
-from api.auth.serializers import TokenSerializer, NewUserSerializer, UserSerializer, LoginSerializer
-
-
-class XBasicAuth(BasicAuthentication):
-    def authenticate_header(self, request):
-        return "XXXBasic"
-
-
-@method_decorator(never_cache, name="get")
-class ObtainAuthToken(generics.RetrieveAPIView):
-    """
-    Get a token you can use as a header instead of basic auth.
-
-    Use the header with HTTP like:
-        Authorization: Token 000000000000...
-    """
-
-    queryset = Token.objects.all()
-    serializer_class = TokenSerializer
-    authentication_classes = [XBasicAuth]
-    permission_classes = (IsAuthenticated,)
-
-    def get_object(self, queryset=None):
-        return get_object_or_404(Token, user=self.request.user)
+from api.auth.serializers import (
+    LoginSerializer,
+    LogoutSerializer,
+    NewUserSerializer,
+    UserSerializer,
+)
 
 
 class UserCreate(generics.CreateAPIView):
@@ -62,6 +42,14 @@ class UserDetail(generics.RetrieveUpdateDestroyAPIView):
     def get_object(self, queryset=None):
         return self.request.user
 
+    def perform_destroy(self, instance):
+        # Deleting the row would raise ProtectedError for anyone who has
+        # uploaded a video; see User.anonymize for why the account is
+        # scrubbed instead. Still a 204 - from the caller's side the
+        # account is gone.
+        Token.objects.filter(user=instance).delete()
+        instance.anonymize()
+
 
 class UserLogin(CreateAPIView):
     """Sets a session cookie for the user"""
@@ -76,17 +64,22 @@ class UserLogin(CreateAPIView):
         data = serializer.validated_data
         user = authenticate(username=data["email"], password=data["password"])
 
+        # ModelBackend refuses inactive users, so they land here too and
+        # are indistinguishable from a wrong password - deliberately: a
+        # dedicated "disabled" answer would reveal the account exists.
         if not user:
             raise AuthenticationFailed("Incorrect email or password.")
-
-        if not user.is_active:
-            raise PermissionDenied("User is disabled.")
 
         login(request._request, user)
         return Response(UserSerializer(user).data)
 
 
-class UserLogout(APIView):
+class UserLogout(generics.GenericAPIView):
+    serializer_class = LogoutSerializer
+
+    @extend_schema(responses=LogoutSerializer)
     def post(self, request):
         logout(request)
-        return Response()
+        # Return a small JSON confirmation so the endpoint is documented and
+        # the schema generator can describe its response type.
+        return Response({"detail": "Logged out"})

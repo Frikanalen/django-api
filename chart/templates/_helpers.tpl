@@ -1,12 +1,8 @@
 {{- define "django.env" -}}
-- name: CSRF_TRUSTED_ORIGINS
-  value: {{ .Values.env.CSRF_TRUSTED_ORIGINS }}
-- name: DJANGO_SETTINGS_MODULE
-  value: {{ .Values.env.DJANGO_SETTINGS_MODULE }}
-- name: ALLOWED_HOSTS
-  value: {{ .Values.env.ALLOWED_HOSTS }}
-- name: SMTP_SERVER
-  value: {{ .Values.env.SMTP_SERVER }}
+{{- range $key, $value := .Values.env }}
+- name: {{ $key }}
+  value: {{ $value | quote }}
+{{- end }}
 - name: SECRET_KEY
   valueFrom:
     secretKeyRef:

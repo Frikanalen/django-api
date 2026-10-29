@@ -48,6 +48,30 @@ source .venv/bin/activate
 uv sync
 ```
 
+##### Git hooks (pre-commit)
+
+This repository includes a `.pre-commit-config.yaml` that runs `ruff format` and `ruff check --fix` on staged Python files.
+
+Enable hooks using the project's uv workflow (recommended):
+
+```sh
+# Install pre-commit via uv's tool manager and enable the pre-commit uv plugin
+uv tool install pre-commit --with pre-commit-uv
+# Install the git hooks
+pre-commit install
+# Optionally run the hooks across the entire repository
+uv run pre-commit run --all-files
+```
+
+Notes:
+- `uv tool install ... --with pre-commit-uv` installs the pre-commit tool and the `pre-commit-uv` helper so pre-commit hooks can use tools managed by `uv`.
+- `pre-commit install` registers the hooks with Git for this repository.
+- `uv run pre-commit run --all-files` runs the configured hooks across the repository using uv-managed tools.
+
+pre-commit normally creates isolated venvs for each hook; installing the `pre-commit-uv` helper lets hooks use tools installed and managed by `uv` instead, if configured that way.
+
+If you'd like the hooks to always run Ruff via `uv run ruff` rather than the hook venvs, the configuration can be adjusted — tell me and I'll update the `.pre-commit-config.yaml` accordingly.
+
 #### Initializing database
 
 ```sh
@@ -79,21 +103,62 @@ Start the webserver:
 
 Point your browser to http://127.0.0.1:8000/admin and log in.
 
+#### Running tests
+
+The test suite uses pytest with pytest-django. Existing Django `TestCase` and DRF
+`APITestCase` tests are collected alongside pytest-style tests.
+
+```sh
+uv run pytest
+```
+
+To run a specific test module or directory, pass its path to pytest:
+
+```sh
+uv run pytest api/schedule
+```
+
+To run the full suite with branch coverage and missing-line reporting:
+
+```sh
+uv run pytest --cov
+```
+
+## Schedule feeds
+
+The broadcast schedule is published in two machine-readable formats.
+
+- **NorDig TV-Anytime** at `/api/tvanytime/upcoming` (and
+  `/api/tvanytime/YYYY/MM/DD`), indexed at `/api/tvanytime`,
+  which is what Nordic distributors pull an EPG in. It describes each
+  programme once, says separately when it airs and whether it is available
+  on demand, and carries genre, subtitles, credits and actual broadcast
+  times. See [docs/tvanytime.md](docs/tvanytime.md), and
+  [docs/tvanytime-model-proposals.md](docs/tvanytime-model-proposals.md)
+  for the model changes that would enrich it further.
+- **XMLTV** at `/xmltv/upcoming/` (and `/xmltv/YYYY/MM/DD`), a flat list of
+  programme slots, kept for the consumers already using it.
+
 ## Management commands
 
-In addition to the HTTP API, the following commands are executed periodically as Kubernetes cron jobs in our cluster:
+In addition to the HTTP API, the following command is executed nightly by one Kubernetes CronJob. It implements the broadcast-week lifecycle defined in `agenda/scheduling/policy.py`: every week is drafted two Mondays before it airs, stays open for member organizations to replace jukebox fillers with picks of their own for one week, and is frozen from the Monday before airing.
+
+```sh
+./manage.py draft_broadcast_schedule
+```
+
+The command captures one timestamp, places videos defined by the WeeklySlot model through the end of the open broadcast week, and only then fills the remaining airtime with jukebox videos. If weekly-slot placement fails, the jukebox stage does not run against the incomplete draft.
+
+The CronJob runs at 00:05 in `Europe/Oslo`, immediately after the Monday scheduling boundary when a new week enters the horizon. Overlapping runs are forbidden.
+
+The individual stages remain available for maintenance:
 
 ```sh
 ./manage.py fill_next_weeks_agenda
-```
-
-This job will fill the next week's schedule with videos as defined by the WeeklySlot model. This will generally be entries like "Fill Mondays 12-13 with the latest videos from NUUG".
-
-```sh
 ./manage.py fill_agenda_with_jukebox
 ```
 
-This job will fill the remaining unpopulated areas with videos as randomly selected from the set of all videos marked with is_filler=True.
+The first places entries such as "Fill Mondays 12-13 with the latest videos from NUUG". The second draws from videos marked with `is_filler=True`, using weighted randomness that prefers fresh uploads and organizations with little airtime that week (see `agenda/scheduling/selection.py`). Production always invokes them through the orchestration command so their order is guaranteed.
 
 ## Test data
 

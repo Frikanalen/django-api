@@ -10,14 +10,28 @@ transferred.
 
 import logging
 
+from .asrun import AsRun  # noqa: F401
 from .category import Category  # noqa: F401
+from .ingest import IngestJob, IngestKind, IngestState  # noqa: F401
+from .live import LiveSource, LiveTransmission  # noqa: F401
+from .organization import Organization  # noqa: F401
+from .program_image import ImageMediaType, ImageRole, ProgramImage  # noqa: F401
+from .schedule import (  # noqa: F401
+    Scheduleitem,
+    airtime_end,
+)
+from .series import Series  # noqa: F401
 from .user import User, UserManager  # noqa: F401
 from .video import Video  # noqa: F401
-from .video_file import FileFormat, VideoFile  # noqa: F401
-from .schedule import Scheduleitem, SchedulePurpose, WeeklySlot  # noqa: F401
-from .organization import Organization  # noqa: F401
-from .asrun import AsRun  # noqa: F401
-from .ingest import IngestJob, Asset  # noqa: F401
-from .live import LiveSource, LiveTransmission  # noqa: F401
+from .video_file import VideoFile, VideoFileVariant  # noqa: F401
+from .weeklyslot import (  # noqa: F401
+    SlotSourceStrategy,
+    SlotSourceType,
+    WeeklySlot,
+    WeeklySlotCreationRequest,
+    WeeklySlotOwnershipRequest,
+    WeeklySlotRequestStatus,
+    WeeklySlotSource,
+)
 
 logger = logging.getLogger(__name__)

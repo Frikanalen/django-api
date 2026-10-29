@@ -46,11 +46,17 @@ class AsRun(TimeStampedModel):
 
     def __str__(self):
         if self.video:
-            return "{s.playout} video: {s.video}".format(s=self)
-        return "{s.playout}: {s.program_name}".format(s=self)
+            return f"{self.playout} video: {self.video}"
+        return f"{self.playout}: {self.program_name}"
 
     class Meta:
         ordering = (
             "-played_at",
             "-id",
         )
+        indexes = [
+            # An append-only playout log, listed newest-first and paged
+            # through. Matching the ordering exactly lets that walk the
+            # index instead of sorting the whole log per request.
+            models.Index(fields=["-played_at", "-id"], name="asrun_played_at_desc_idx"),
+        ]

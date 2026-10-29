@@ -1,10 +1,9 @@
 from datetime import date, datetime, time, timedelta
-from typing import Union
 from zoneinfo import ZoneInfo
 
 from django.db import models
-from django.db.models import Q, Window, F
-from django.db.models.functions import Lag, Lead
+from django.db.backends.postgresql.psycopg_any import DateTimeTZRange
+from django.db.models import Q, Subquery
 
 
 class ScheduleitemQuerySet(models.QuerySet):
@@ -14,7 +13,7 @@ class ScheduleitemQuerySet(models.QuerySet):
 
     TZ = ZoneInfo("Europe/Oslo")
 
-    def normalize_date(self, value: Union[str, date, datetime, None]) -> date | None:
+    def normalize_date(self, value: str | date | datetime | None) -> date | None:
         """
         Normalize various date representations to a date object.
         Accepts strings in 'YYYY-MM-DD', date, datetime, or None.
@@ -27,21 +26,23 @@ class ScheduleitemQuerySet(models.QuerySet):
             return value.astimezone(self.TZ).date()
         if isinstance(value, str):
             try:
-                return datetime.strptime(value, "%Y-%m-%d").date()
+                # Date-only input, and only the date survives the call, so an
+                # absent zone cannot affect the result.
+                return datetime.strptime(value, "%Y-%m-%d").date()  # noqa: DTZ007
             except ValueError:
                 return None
         return None
 
     def by_day(
         self,
-        start_date: Union[str, date, datetime, None] = None,
+        start_date: str | date | datetime | None = None,
         days: int = 7,
         include_surrounding: bool = False,
     ) -> models.QuerySet:
         """
         Return items from `start_date` (defaults to today) for `days` days.
         If `include_surrounding` is True, also include the immediately
-        preceding and following items via window functions in one pass.
+        preceding and following items using scalar subqueries.
         """
         # Normalize and compute datetime bounds
         date_obj = self.normalize_date(start_date) or datetime.now(self.TZ).date()
@@ -54,48 +55,25 @@ class ScheduleitemQuerySet(models.QuerySet):
         if not include_surrounding:
             return self.filter(main_filter).order_by("starttime")
 
-        # Annotate each row with previous and next PKs
-        annotated = self.annotate(
-            prev_pk=Window(expression=Lag("pk"), order_by=[F("starttime")]),
-            next_pk=Window(expression=Lead("pk"), order_by=[F("starttime")]),
-        )
+        previous_pk = self.filter(starttime__lt=start_dt).order_by("-starttime").values("pk")[:1]
+        next_pk = self.filter(starttime__gte=end_dt).order_by("starttime").values("pk")[:1]
 
-        # Filter for main range or matching prev/next PK
-        range_q = main_filter
-        prev_q = Q(pk=F("prev_pk"))
-        next_q = Q(pk=F("next_pk"))
+        return self.filter(
+            main_filter | Q(pk__in=Subquery(previous_pk)) | Q(pk__in=Subquery(next_pk))
+        ).order_by("starttime")
 
-        return annotated.filter(range_q | prev_q | next_q).order_by("starttime")
-
-    def expand_to_surrounding(
-        self, start_dt: datetime, end_dt: datetime
-    ) -> tuple[datetime, datetime]:
+    def overlapping(self, start_dt: datetime, end_dt: datetime) -> models.QuerySet:
         """
-        Expand [start_dt, end_dt] to include the immediate event before start_dt
-        and the immediate event after end_dt, if they exist.
+        Items whose airtime intersects [start_dt, end_dt).
 
-        Performs at most two extra queries:
-          - one ORDER BY -starttime to find the latest <= start_dt
-          - one ORDER BY starttime to find the earliest >= end_dt
+        This is the one definition of "that airtime is already taken". The
+        bounds are half-open, so an item ending exactly at `start_dt` does not
+        count -- back-to-back programming is not a conflict.
+
+        Asked of `airtime`, the generated range column, so the question is
+        one indexed `&&` against its GiST index. The predicate this replaces
+        compared `starttime + duration` row by row, which no index could
+        answer -- the starttime half is unbounded to the left, so settling
+        "is this slot free" meant reading every item ever broadcast.
         """
-        # previous event at or before start_dt
-        prev_start = (
-            self.filter(starttime__lte=start_dt)
-            .order_by("-starttime")
-            .values_list("starttime", flat=True)
-            .first()
-        )
-        if prev_start:
-            start_dt = prev_start
-
-        # next event at or after end_dt
-        next_start = (
-            self.filter(starttime__gte=end_dt)
-            .order_by("starttime")
-            .values_list("starttime", flat=True)
-            .first()
-        )
-        if next_start:
-            end_dt = next_start
-
-        return start_dt, end_dt
+        return self.filter(airtime__overlap=DateTimeTZRange(start_dt, end_dt, "[)"))

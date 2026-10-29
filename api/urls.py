@@ -1,43 +1,31 @@
 # Copyright (c) 2012-2013 Benjamin Bruheim <grolgh@gmail.com>
 # This file is covered by the LGPLv3 or later, read COPYING for details.
-from django.urls import re_path as url
-from django.urls import include, path
+from django.urls import URLPattern, URLResolver, include, path, re_path
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from rest_framework import parsers
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.routers import SimpleRouter
-from rest_framework.urlpatterns import format_suffix_patterns
-from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
-import api.auth.views
-import api.organization.views
-import api.video.views
-import api.videofile.views as videofile_views
+import agenda.tvanytime.views as tvanytime_views
+import api.auth.views as auth_views
+import api.organization.views as organization_views
+import api.program_image.views as program_image_views
 import api.schedule.views as schedule_views
+import api.series.views as series_views
+import api.video.views as video_views
+import api.videofile.views as videofile_views
+import api.weekly_slot.views as weekly_slot_views
 from fkweb.views import CsrfView
+
 from . import views
 
-
-router = SimpleRouter()
-router.register(r"api/asrun", views.AsRunViewSet, "asrun")
-router.register(r"api/categories", views.CategoryViewSet)
-router.register(r"api/scheduleitems", schedule_views.ScheduleitemViewSet, "api-scheduleitem")
-
-# I am manually generating these to in order to have the transition to a ViewSet be
-# as compatible as at all possible with legacy frontend etc. until we can phase it out.
-videofile_list = videofile_views.VideoFileViewSet.as_view(
-    {
-        "get": "list",
-        "post": "create",
-    }
-)
-videofile_detail = videofile_views.VideoFileViewSet.as_view(
-    {
-        "get": "retrieve",
-        "put": "update",
-        "patch": "partial_update",
-        "delete": "destroy",
-    }
-)
+# Registered under the "api/" prefix that path("api/", include(...)) supplies
+# at the bottom of this file, so none of these repeat it.
+router = SimpleRouter(trailing_slash=False)
+router.register(r"asrun", views.AsRunViewSet, "asrun")
+router.register(r"categories", views.CategoryViewSet)
+router.register(r"scheduleitems", schedule_views.ScheduleitemViewSet, "api-scheduleitem")
+router.register(r"videofiles", videofile_views.VideoFileViewSet, "api-videofile")
 
 
 class ObtainAuthTokenJsonOnly(ObtainAuthToken):
@@ -47,55 +35,146 @@ class ObtainAuthTokenJsonOnly(ObtainAuthToken):
     parser_classes = (parsers.JSONParser,)
 
 
-urlpatterns = [
-    url(r"^api/$", views.api_root, name="api-root"),
-    url(r"^api/csrf/$", CsrfView.as_view(), name="api-csrf-detail"),
-    url(r"^api/jukebox_csv$", views.jukebox_csv, name="jukebox-csv"),
-    url(r"^api/user/register$", api.auth.views.UserCreate.as_view(), name="api-user-create"),
-    url(r"^api/user/login$", api.auth.views.UserLogin.as_view(), name="api-user-login"),
-    url(r"^api/user/logout$", api.auth.views.UserLogout.as_view(), name="api-user-logout"),
-    url(r"^api/user$", api.auth.views.UserDetail.as_view(), name="api-user-detail"),
-    url(r"^api/obtain-token$", ObtainAuthTokenJsonOnly.as_view(), name="api-token-auth"),
-    url(r"^api/videos/$", api.video.views.VideoList.as_view(), name="api-video-list"),
-    url(
-        r"^api/videos/(?P<pk>\d+)/upload_token$",
-        api.video.views.VideoUploadTokenDetail.as_view(),
+# Annotated because the opening literal is all patterns, which would fix
+# the inferred type as list[URLPattern]; the router and include() both
+# contribute resolvers further down.
+api_patterns: list[URLPattern | URLResolver] = [
+    path("csrf", CsrfView.as_view(), name="api-csrf-detail"),
+    # Auth
+    path("user/register", auth_views.UserCreate.as_view(), name="api-user-create"),
+    path("user/login", auth_views.UserLogin.as_view(), name="api-user-login"),
+    path("user/logout", auth_views.UserLogout.as_view(), name="api-user-logout"),
+    path("user", auth_views.UserDetail.as_view(), name="api-user-detail"),
+    path("obtain-token", ObtainAuthTokenJsonOnly.as_view(), name="api-token-auth"),
+    # Video
+    path("videos", video_views.VideoList.as_view(), name="api-video-list"),
+    path(
+        "videos/<int:video_id>/images",
+        program_image_views.ProgramImageViewSet.as_view({"get": "list", "post": "create"}),
+        name="api-program-image-list",
+    ),
+    path(
+        "videos/<int:video_id>/images/<int:pk>",
+        program_image_views.ProgramImageViewSet.as_view(
+            {
+                "get": "retrieve",
+                "put": "update",
+                "patch": "partial_update",
+                "delete": "destroy",
+            }
+        ),
+        name="api-program-image-detail",
+    ),
+    path(
+        "videos/<int:pk>/upload_token",
+        video_views.VideoUploadTokenDetail.as_view(),
         name="api-video-upload-token-detail",
     ),
-    url(
-        r"^api/videos/(?P<pk>\d+)$", api.video.views.VideoDetail.as_view(), name="api-video-detail"
+    path(
+        "videos/<int:pk>/upload_token/verify",
+        video_views.VideoUploadTokenVerification.as_view(),
+        name="api-video-upload-token-verification",
     ),
-    url(r"^api/videofiles/$", videofile_list, name="api-videofile-list"),
-    url(r"^api/videofiles/(?P<pk>\d+)$", videofile_detail, name="api-videofile-detail"),
-    url(
-        r"^api/organization/$",
-        api.organization.views.OrganizationList.as_view(),
+    path(
+        "videos/<int:pk>/ingest",
+        video_views.VideoIngestJobDetail.as_view(),
+        name="api-video-ingest-job-detail",
+    ),
+    path("videos/<int:pk>", video_views.VideoDetail.as_view(), name="api-video-detail"),
+    # Ingest. Not under videos/ like the reporting endpoint above: a claim
+    # asks for whichever video needs work next, so there is no id to hang
+    # it off.
+    path("ingest/claim", video_views.IngestClaim.as_view(), name="api-ingest-claim"),
+    # Series
+    path("series", series_views.SeriesList.as_view(), name="api-series-list"),
+    path("series/<int:pk>", series_views.SeriesDetail.as_view(), name="api-series-detail"),
+    # Organization
+    path(
+        "organization",
+        organization_views.OrganizationList.as_view(),
         name="api-organization-list",
     ),
-    url(
-        r"^api/organization/(?P<pk>\d+)$",
-        api.organization.views.OrganizationDetail.as_view(),
+    path(
+        "organization/<int:pk>",
+        organization_views.OrganizationDetail.as_view(),
         name="api-organization-detail",
     ),
+    # Recurring airtime. Members control only what fills an allocated slot;
+    # changes to its day, start, and duration go through an audited request.
+    path(
+        "weekly-slot-sources",
+        weekly_slot_views.WeeklySlotSourceList.as_view(),
+        name="api-weekly-slot-source-list",
+    ),
+    path(
+        "weekly-slot-sources/<int:pk>",
+        weekly_slot_views.WeeklySlotSourceDetail.as_view(),
+        name="api-weekly-slot-source-detail",
+    ),
+    path(
+        "weekly-slots/<int:pk>",
+        weekly_slot_views.WeeklySlotDetail.as_view(),
+        name="api-weekly-slot-detail",
+    ),
+    path(
+        "weekly-slot-requests",
+        weekly_slot_views.WeeklySlotRequestList.as_view(),
+        name="api-weekly-slot-request-list",
+    ),
+    path(
+        "weekly-slot-requests/creation",
+        weekly_slot_views.WeeklySlotCreationRequestCreate.as_view(),
+        name="api-weekly-slot-creation-request-create",
+    ),
+    path(
+        "weekly-slot-requests/ownership",
+        weekly_slot_views.WeeklySlotOwnershipRequestCreate.as_view(),
+        name="api-weekly-slot-ownership-request-create",
+    ),
 ]
-urlpatterns += router.urls
+api_patterns += router.urls
 
-# Format suffixes
-urlpatterns = format_suffix_patterns(urlpatterns, allowed=["json", "api", "xml"])
-
-# Default login/logout views
-urlpatterns += [
-    # Spectacular API views
-    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+api_patterns += [
     path(
-        "api/schema/swagger-ui/",
-        SpectacularSwaggerView.as_view(url_name="schema"),
-        name="swagger-ui",
+        "scheduling/policy",
+        schedule_views.SchedulingPolicyView.as_view(),
+        name="api-scheduling-policy",
+    ),
+    # The root of the tvanytime path is the human-readable index rather
+    # than a feed, which is the shape /xmltv/ already has and the one a
+    # distributor arriving at the bare URL expects. The feeds hang below
+    # it, so neither has to be guessed at.
+    path(
+        "tvanytime",
+        tvanytime_views.tvanytime_home,
+        name="api-tvanytime-home",
     ),
     path(
-        "api/schema/redoc/",
-        SpectacularRedocView.as_view(url_name="schema"),
-        name="redoc",
+        "tvanytime/upcoming",
+        tvanytime_views.TVAnytimeUpcomingView.as_view(),
+        name="api-tvanytime-upcoming",
     ),
-    url(r"^api/api-auth/", include("rest_framework.urls", namespace="rest_framework")),
+    re_path(
+        r"^tvanytime/(?P<year>\d{4})/(?P<month>\d{2})/(?P<day>\d{2})$",
+        tvanytime_views.TVAnytimeDateView.as_view(),
+        name="api-tvanytime-date",
+    ),
+]
+
+api_patterns += [
+    # drf-spectacular schema and docs UIs, plus DRF's own browsable-API
+    # login/logout views - not part of the API surface itself.
+    path("schema/", SpectacularAPIView.as_view(), name="schema"),
+    path(
+        "schema/swagger-ui/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"
+    ),
+    path("schema/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    path("api-auth/", include("rest_framework.urls", namespace="rest_framework")),
+]
+
+urlpatterns: list[URLPattern | URLResolver] = [
+    # Bare "/api", with no trailing slash, lives outside the include() below
+    # since path("api/", ...) can only ever match paths that have the slash.
+    path("api", views.api_root, name="api-root"),
+    path("api/", include(api_patterns)),
 ]

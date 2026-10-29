@@ -1,0 +1,27 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: draft-broadcast-schedule
+spec:
+  schedule: "5 0 * * *"
+  timeZone: Europe/Oslo
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: django-api
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: django-api
+              image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag }}"
+              imagePullPolicy: {{ .Values.django.image.pullPolicy }}
+              args:
+                - ./manage.py
+                - draft_broadcast_schedule
+                - -v
+                - '2'
+              env:
+                {{- include "django.env" . | nindent 16 }}

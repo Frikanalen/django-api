@@ -3,9 +3,18 @@
     ".": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "python",
+      "extra-files": [
+        "chart/Chart.yaml",
+        {
+          "path": "uv.lock",
+          "type": "toml",
+          "jsonpath": "$.package[?(@.name.value=='fkweb')].version"
+        }
+      ],
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": false,
       "include-v-in-tag": true,
+      "include-component-in-tag": false,
       "draft": false,
       "prerelease": false
     }

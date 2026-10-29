@@ -4,45 +4,69 @@ from django.conf import settings
 from django.db import models
 
 
-# we are slowly getting these out of the database, but can't make schema changes
-# until we have migrated away from the old version of Django.
-FILE_FORMATS = [
-    "large_thumb",
-    "broadcast",
-    "vc1",
-    "med_thumb",
-    "small_thumb",
-    "original",
-    "theora",
-    "srt",
-    "cloudflare_id",
-]
+class VideoFileVariant(models.TextChoices):
+    """Which rendition of a video a file is.
+
+    Not quite a format, which is what this used to be called: `srt` is a
+    subtitle track and `cloudflare_id` is not a file at all. What they
+    have in common is being one of the things that exist *for* a video.
+
+    The name doubles as the directory the file lives in -- see
+    VideoFile.location() -- so these values are baked into media URLs
+    and into the layout of the media volume. Renaming one is a
+    filesystem migration, not a code change.
+    """
+
+    LARGE_THUMB = "large_thumb", "Large thumbnail"
+    BROADCAST = "broadcast", "Broadcast master"
+    VC1 = "vc1", "VC-1"
+    MED_THUMB = "med_thumb", "Medium thumbnail"
+    SMALL_THUMB = "small_thumb", "Small thumbnail"
+    ORIGINAL = "original", "Original upload"
+    THEORA = "theora", "Ogg Theora"
+    SRT = "srt", "SubRip subtitles"
+    CLOUDFLARE_ID = "cloudflare_id", "Cloudflare Stream identifier"
+    DASH = "dash", "MPEG-DASH manifest"
+    # A single low bitrate rung, encoded first so that a freshly
+    # uploaded video is playable in minutes rather than after the whole
+    # ladder finishes. It is transient by design: once `dash` exists for
+    # the same video, ingest deletes the preview and its segments, and a
+    # player should prefer `dash` whenever both are present.
+    DASH_PREVIEW = "dash_preview", "Transient low-quality MPEG-DASH manifest"
+    WEBM_MED = "webm_med", "Medium-quality WebM"
+
+    @property
+    def mime_type(self) -> str | None:
+        """How the file is served when the variant determines it."""
+        return MIME_TYPES.get(self)
 
 
-class FileFormat(models.Model):
-    id = models.AutoField(primary_key=True)
-    description = models.TextField(unique=True, max_length=255, null=True, blank=True)
-    fsname = models.CharField(max_length=20, choices=[(f, f) for f in FILE_FORMATS])
-    vod_publish = models.BooleanField("Present video format to video on demand?", default=False)
-    mime_type = models.CharField(max_length=256, null=True, blank=True)
-
-    # httpprefix = models.CharField(max_length=200)
-    # metadata framerate, resolution, etc?
-
-    class Meta:
-        verbose_name = "video file format"
-        verbose_name_plural = "video file formats"
-        ordering = ("fsname", "-id")
-
-    def __str__(self):
-        return self.fsname
+# Kept beside the enum rather than in it: a member's value is the string
+# itself, so metadata has to hang off a lookup either way, and a dict
+# says "this is a table" more plainly than ten three-tuples would.
+MIME_TYPES = {
+    VideoFileVariant.LARGE_THUMB: "image/jpeg",
+    VideoFileVariant.BROADCAST: "video/DV",
+    VideoFileVariant.VC1: "video/vc1",
+    VideoFileVariant.MED_THUMB: "image/jpeg",
+    VideoFileVariant.SMALL_THUMB: "image/jpeg",
+    VideoFileVariant.ORIGINAL: "application/octet-stream",
+    VideoFileVariant.THEORA: "video/ogg",
+    VideoFileVariant.SRT: "application/x-subrip",
+    VideoFileVariant.DASH: "application/dash+xml",
+    VideoFileVariant.DASH_PREVIEW: "application/dash+xml",
+    VideoFileVariant.WEBM_MED: "video/webm",
+}
 
 
 class VideoFile(models.Model):
     id = models.AutoField(primary_key=True)
     # uploader = models.ForeignKey(User) # Not migrated
-    video = models.ForeignKey("Video", on_delete=models.CASCADE)
-    format = models.ForeignKey("FileFormat", on_delete=models.PROTECT)
+    # No index of its own: unique_variant_per_video below is a btree on
+    # (video, variant), and a video_id-only lookup uses its leading column
+    # just as well. A second index on video_id would only cost writes.
+    video = models.ForeignKey("Video", on_delete=models.CASCADE, db_index=False)
+    variant = models.CharField(max_length=20, choices=VideoFileVariant)
     filename = models.CharField(max_length=256)
     # source = video = models.ForeignKey("VideoFile")
     integrated_lufs = models.FloatField(
@@ -51,8 +75,29 @@ class VideoFile(models.Model):
     truepeak_lufs = models.FloatField(
         "True peak LUFS of file defined in ITU R.128", blank=True, null=True
     )
+    # Set by Django on every save; the nullability only ever described
+    # legacy imports, of which production had none. See migration 0020.
     created_time = models.DateTimeField(
-        auto_now_add=True, null=True, help_text="Time the video file was created"
+        auto_now_add=True, help_text="Time the video file was created"
+    )
+    # What the field is for is telling apart "this video has DASH" from
+    # "this video has *current* DASH", so that a profile change can be
+    # backfilled without crawling the archive.
+    #
+    # Zero is the sentinel rather than NULL, and not nullable at all.
+    # Ingest numbers its profile templates from 1, so 0 is a revision no
+    # template can ever claim, and it is what every row already in the
+    # table honestly means: made before any of this was recorded. Keeping
+    # the column NOT NULL is also what lets the planning query be a plain
+    # `profile_revision__lt` -- under three-valued logic a NULL row would
+    # fall out of `< 2`, and those rows are precisely the ones ingest most
+    # needs to find.
+    profile_revision = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Revision of the encoding profile that produced this file. "
+            "0 means it predates profile tracking."
+        ),
     )
     # metadata frames, width, height, framerate? mlt profile name?
     # edl for in/out?
@@ -64,16 +109,24 @@ class VideoFile(models.Model):
             "-video_id",
             "-id",
         )
+        constraints = [
+            # A video has at most one file of each kind. The video
+            # serializer's `files` map is keyed by variant, so a second
+            # row for the same pair would not raise -- it would silently
+            # shadow the first, and which one survived would depend on
+            # row order.
+            models.UniqueConstraint(fields=("video", "variant"), name="unique_variant_per_video"),
+        ]
 
     def __str__(self):
-        return "%s version of %s" % (self.format.fsname, self.video.name)
+        return f"{self.get_variant_display()} of {self.video.name}"
 
     def location(self, relative=False):
         filename = os.path.basename(self.filename)
 
-        path = "/".join((str(self.video.id), self.format.fsname, filename))
+        path = "/".join((str(self.video.id), self.variant, filename))
 
         if relative:
             return path
         else:
-            return "/".join((settings.FK_MEDIA_ROOT, path))
+            return f"{settings.FK_MEDIA_ROOT}/{path}"

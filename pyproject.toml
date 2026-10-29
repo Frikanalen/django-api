@@ -1,35 +1,109 @@
 [project]
 name = "fkweb"
-version = "0.1.2"
+version = "1.0.0"
 description = "Frikanalen's Django-based backend API"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "dj-database-url==2.3.0",
-    "django==5.2",
-    "django-cors-headers==4.7.0",
+    "django==5.2.17",
+    "django-cors-headers==4.9.0",
     "django-durationfield==0.5.5",
     "django-environ>=0.12.0",
-    "django-filter==25.1",
+    "django-filter==26.1",
     "django-model-utils==5.0.0",
-    "django-phonenumber-field[phonenumbers]==8.0.0",
-    "djangorestframework==3.16.0",
+    "django-phonenumber-field[phonenumbers]==8.5.0",
+    "django-prometheus>=2.5.0",
+    "djangorestframework==3.18.0",
     "djangorestframework-camel-case>=1.4.2",
-    "drf-spectacular==0.28.0",
-    "drf-standardized-errors[openapi]>=0.15.0",
-    "gunicorn==23.0.0",
-    "markdown==3.7",
+    "drf-spectacular==0.30.0",
+    "drf-standardized-errors[openapi]>=0.16.0",
+    "gunicorn==26.0.0",
+    # Nothing imports this, but DRF picks it up if it is installed and uses it
+    # to render view docstrings in the browsable API. VideoList documents every
+    # filter in backtick code spans, so without it that page shows the literal
+    # backticks instead of formatted markup.
+    "markdown==3.10.3",
     "mypy>=1.11",
     "psycopg2-binary>=2.9.10",
     "pymemcache>=4.0.0",
     "python-dateutil==2.9.0.post0",
-    "requests==2.32.3",
 ]
 
 [tool.ruff]
 line-length = 100
+exclude = [
+    # Vendored third-party type stubs. Copies of upstream sources, not our code:
+    # linting or reformatting them only makes the next refresh harder to diff.
+    "typings",
+    # Migrations are archival. They record what was applied to the database and
+    # are never edited after the fact, so the linter has no business in them.
+    "*/migrations",
+]
+# Without this, `ruff check fk/migrations` (or a pre-commit hook passing
+# filenames) would lint the excluded paths anyway.
+force-exclude = true
+
+[tool.ruff.lint]
+ignore = [
+    # Django and DRF are declarative: `fields`, `permission_classes` and
+    # `list_display` are all mutable class attributes by design, and the
+    # frameworks read them off the class. Every occurrence in this codebase is
+    # one of those, so the rule only buys us `ClassVar` noise on ~25 lines.
+    "RUF012",
+]
+
+[tool.pytest]
+minversion = "9.1"
+DJANGO_SETTINGS_MODULE = "fkweb.settings.test"
+python_files = ["tests.py", "test_*.py", "*_test.py", "*_tests.py"]
+addopts = ["-ra", "--strict-config", "--strict-markers"]
+xfail_strict = true
+# The jukebox filler drives an unbounded while-loop, so a mistake in its
+# pool bookkeeping hangs the suite rather than failing it.  Fail instead.
+timeout = "60"
+
+[tool.mypy]
+# Without the plugin, every model field is an untyped descriptor: mypy sees
+# `starttime` as the DateTimeField object rather than a datetime, and the
+# implicit `<fk>_id` attributes Django generates do not exist at all.
+plugins = ["mypy_django_plugin.main"]
+# The vendored stubs; without this on the path they are dead weight and
+# `import environ` reports missing stubs.
+mypy_path = "typings"
+exclude = ["typings/", "migrations/"]
+
+[tool.django-stubs]
+# Any settings module that loads the full app registry will do; the test one
+# needs no database or secrets to import.
+django_settings_module = "fkweb.settings.test"
+
+[tool.coverage.run]
+branch = true
+source = ["agenda", "api", "fk", "fkweb", "news"]
+omit = ["*/migrations/*", "*/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
 
 [dependency-groups]
 dev = [
+    # Tests only, and only for one thing: validating the TV-Anytime feed
+    # against the vendored ETSI XSD. Nothing in the application imports
+    # it -- the feed itself is built with the stdlib ElementTree -- but
+    # xml.etree cannot validate, and element order in TV-Anytime is a
+    # schema constraint a distributor's parser would otherwise be first
+    # to discover.
+    "lxml>=6.1.2",
+    "django-stubs[compatible-mypy]>=6.1.0",
+    "djangorestframework-stubs~=3.18.0",
     "mypy>=1.17.1",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-django>=4.12.0",
+    "pytest-timeout>=2.4.0",
+    "ruff>=0.16.1",
+    "types-django-filter>=26.1.0.20260713",
+    "pre-commit>=3.4",
+    "lxml-stubs>=0.5.1",
 ]

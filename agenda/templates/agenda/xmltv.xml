@@ -12,7 +12,7 @@
       stop="{{ program.endtime|date:'YmdHis O' }}">
     {% if program.video %}
       <title lang="no">{{ program.video.name }}</title>
-      <desc lang="no">{{ program.video.header }}</desc>
+      <desc lang="no">{{ program.video.description }}</desc>
       <url>{{ site_url }}{{ program.video.get_absolute_url }}</url>
       <length units="seconds">{{ program.video.duration.seconds }}</length>
     {% else %}

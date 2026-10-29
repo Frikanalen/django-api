@@ -3,54 +3,167 @@ name: Django API service
 on:
   push:
     branches: ["*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Superseded runs on a feature branch are pointless; on main they may be
+# mid-release or mid-push, so let those finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
-  contents: write
-  pull-requests: write
-  issues: write
-  packages: write # Needed to push to ghcr.io
+  contents: read
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # The suite runs on PostgreSQL, so CI has to provide one. Credentials and
+    # database name match the DATABASE_URL committed in .env.local, which is
+    # what both this job and a developer's docker-compose stack read.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: fk
+          POSTGRES_DB: fkweb
+        ports:
+          - 5432:5432
+        # Without this the job can start `uv sync` before the server accepts
+        # connections and the first test errors out on a refused socket.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Check for missing migrations
+        run: uv run python manage.py makemigrations --check --dry-run --settings=fkweb.settings.test
+
+      - name: Run tests with coverage
+        run: uv run pytest --cov
+
+      # Reporting only. Coverage is deliberately not a merge gate: a change that
+      # lowers the percentage is still allowed to land.
+      - name: Publish coverage summary
+        if: always()
+        continue-on-error: true
+        run: |
+          {
+            echo '### Coverage'
+            echo ''
+            echo '```'
+            uv run coverage report
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check --output-format=github
+
+      - name: Check formatting
+        # run even if lint step failed
+        if: always()
+        run: uv run ruff format --check
+
+      - name: Type check (advisory)
+        if: always()
+        continue-on-error: true
+        run: |
+          uv run mypy . | tee "$RUNNER_TEMP/mypy.txt"
+          status=${PIPESTATUS[0]}
+          {
+            echo '### Type check'
+            echo ''
+            echo '```'
+            cat "$RUNNER_TEMP/mypy.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
   build:
     name: Build and push Docker image to GHCR
     runs-on: ubuntu-latest
+    needs: [test, lint]
+    # Pull requests get the test and lint jobs as their gate. They must not push
+    # images: the tags would be meaningless, and GITHUB_TOKEN on a fork PR has
+    # no packages:write anyway.
+    if: github.event_name != 'pull_request'
+
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      packages: write # Needed to push to ghcr.io
 
     steps:
       - name: Release PR or GitHub Release
 
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
         id: release
-        if: ${{ github.ref == 'refs/heads/main' }}
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         with:
-          release-type: python
+          # No release-type here on purpose: passing it puts the action in
+          # single-package mode, where release-please-config.json is never read
+          # and its extra-files (chart/Chart.yaml) are silently ignored.
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
 
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Extract Docker metadata (tags, labels)
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/frikanalen/django-api
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
             type=ref,event=tag
             type=ref,event=branch
             type=raw,value=${{ steps.release.outputs.tag_name }},enable=${{ github.ref == 'refs/heads/main' && steps.release.outputs.release_created == 'true' }}
             type=sha
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and (if not PR) push
-        uses: docker/build-push-action@v5
+      - name: Build and push
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # vim: ts=4 sts=4 expandtab ai
 
 # Copyright (c) 2012-2013 Benjamin Bruheim <grolgh@gmail.com>
@@ -7,12 +6,15 @@
 """Common settings and globals."""
 
 import logging
-from os.path import abspath, basename, dirname, join, normpath
 import sys
+from datetime import timedelta
+from os.path import abspath, basename, dirname, join, normpath
 
 from environ import ImproperlyConfigured
 
 from .env import env, load_env_from
+
+logger = logging.getLogger(__name__)
 
 load_env_from(".env")
 
@@ -22,14 +24,24 @@ load_env_from(".env")
 WEB_NO_TONO = True
 
 # Where all the media files are stored (Must have trailing slash)
-FK_MEDIA_URLPREFIX = "https://upload.frikanalen.no/media/"
+FK_MEDIA_URLPREFIX = env.str("FK_MEDIA_URLPREFIX", default="https://frikanalen.no/media/")
+# TODO: Is this in use at all?
 FK_MEDIA_ROOT = "/tank/new_media/media"
 
-FK_UPLOAD_URL = "https://upload.frikanalen.no/upload"
+# Handed to the frontend as a video's uploadUrl. tusd is served under /upload
+# on the main site, so this differs per environment.
+FK_UPLOAD_URL = env.str("FK_UPLOAD_URL")
+
+# How long a claimed ingest job may stay silent before another worker is
+# allowed to take it over. Generous on purpose: two phases of an ingest
+# genuinely report nothing for a long time -- archiving a multi-gigabyte
+# original over SFTP, and the loudness analysis, which decodes an entire
+# audio track before it has anything to say. A lease shorter than the
+# longest silent phase does not recover abandoned work; it duplicates
+# running work, which is the more expensive mistake of the two.
+FK_INGEST_LEASE = timedelta(minutes=env.int("FK_INGEST_LEASE_MINUTES", default=60))
 
 AUTH_USER_MODEL = "fk.User"
-LOGIN_URL = "/login/"
-LOGOUT_REDIRECT_URL = "/"
 
 # Channel ID per RFC 2838 (Uniform Resource Identifier for Television Broadcasts)
 CHANNEL_ID = "frikanalen.tv"
@@ -39,6 +51,47 @@ CHANNEL_DISPLAY_NAMES = ["Frikanalen"]
 
 # URL to the website for references in feeds (No trailing slash)
 SITE_URL = "https://frikanalen.no"
+
+########## TV-ANYTIME / NorDig EPG METADATA
+# The NorDig EPG/Event metadata exchange format (NorDig TVA Implementation
+# Guidelines 1.4) is TV-Anytime, ETSI TS 102 822-3-1. What follows is the
+# per-broadcaster part of it: everything a consumer needs to attribute the
+# feed to us and to tell our two services apart.
+
+# The CRID authority. Every crid:// we mint is `crid://<authority>/<data>`,
+# and it is the domain -- not the data -- that makes the identifier globally
+# unique, so this must stay a domain we actually control (Guidelines 2.3.1).
+# Deliberately not CHANNEL_ID: "frikanalen.tv" is an RFC 2838 broadcast URI,
+# not a registered domain, and minting CRIDs under it would claim a namespace
+# that is not ours. Changing this orphans every CRID already published.
+TVA_AUTHORITY = "frikanalen.no"
+
+# Attribution, carried in MetadataOriginationInformationTable.
+TVA_PUBLISHER = "Foreningen Frikanalen"
+TVA_RIGHTS_OWNER = "Foreningen Frikanalen"
+TVA_COPYRIGHT_NOTICE = (
+    "Sendeskjemaet kan gjengis fritt med kildehenvisning til Frikanalen. "
+    "Rettighetene til programmene tilhører den enkelte medlemsorganisasjonen."
+)
+
+# Our two TVA services. The ids are `<authority>/<service>`, which is the
+# convention the NorDig example files use (e.g. "nrk.no/NRK1"), and they are
+# what ScheduleEvent/OnDemandProgram reference by serviceIDRef.
+TVA_LINEAR_SERVICE_ID = f"{TVA_AUTHORITY}/frikanalen"
+TVA_ONDEMAND_SERVICE_ID = f"{TVA_AUTHORITY}/vod"
+
+# ServiceURL entries, keyed by the `name` attribute that says which carrier
+# each one describes. A DVB triplet for our DTT carriage belongs here as
+# "DTT": dvb://<original_network_id>.<transport_stream_id>.<service_id>, but
+# we do not have ours on file, and a guessed triplet would point receivers at
+# somebody else's service -- so the key is simply absent until someone can
+# supply it.
+TVA_LINEAR_SERVICE_URLS = {"WWW": f"{SITE_URL}/"}
+TVA_ONDEMAND_SERVICE_URLS = {"WWW": f"{SITE_URL}/"}
+
+# Spoken language assumed for a video whose own field is blank, and the
+# document language of the feed itself.
+TVA_DEFAULT_LANGUAGE = "no"
 
 ########## PATH CONFIGURATION
 # Absolute filesystem path to the Django project directory:
@@ -109,9 +162,6 @@ STATIC_ROOT = normpath(join(PROJECT_ROOT, "collected_staticfiles"))
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#static-url
 STATIC_URL = "/static/"
 
-# See: https://docs.djangoproject.com/en/dev/ref/contrib/staticfiles/#std:setting-STATICFILES_DIRS
-STATICFILES_DIRS = (normpath(join(SITE_ROOT, "static")),)
-
 # See: https://docs.djangoproject.com/en/dev/ref/contrib/staticfiles/#staticfiles-finders
 STATICFILES_FINDERS = (
     "django.contrib.staticfiles.finders.FileSystemFinder",
@@ -171,6 +221,8 @@ TEMPLATES = [
 ########## MIDDLEWARE CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#middleware-classes
 MIDDLEWARE = (
+    # Must be first: it starts the request timer before anything else runs.
+    "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "django.middleware.cache.UpdateCacheMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     # Default Django middleware.
@@ -180,21 +232,32 @@ MIDDLEWARE = (
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "fkweb.middleware.api_utc_middleware",
     # "djangorestframework_camel_case.middleware.CamelCaseMiddleWare",
-    "django.middleware.cache.FetchFromCacheMiddleware",
+    "fkweb.middleware.AnonymousOnlyFetchFromCacheMiddleware",
+    # Must stay *inside* both cache middlewares. Django's cache key includes
+    # the active timezone, so with this in between them the pair wrote keys
+    # under TIME_ZONE and read them back under UTC, and no /api/ response was
+    # ever served from the cache.
+    "fkweb.middleware.api_utc_middleware",
+    # Must be last: it records the response metrics once everything else,
+    # including the cache middlewares above, has had a chance to act.
+    "django_prometheus.middleware.PrometheusAfterMiddleware",
 )
 ########## END MIDDLEWARE CONFIGURATION
 
 
 ########## URL CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#root-urlconf
-ROOT_URLCONF = "%s.urls" % SITE_NAME
+ROOT_URLCONF = f"{SITE_NAME}.urls"
 ########## END URL CONFIGURATION
 
 
 ########## APP CONFIGURATION
 DJANGO_APPS = (
+    # Must stay first in INSTALLED_APPS: django-prometheus patches model
+    # methods to time them, and needs to run before other apps' AppConfigs
+    # get a chance to use those methods.
+    "django_prometheus",
     # Default Django apps:
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -283,7 +346,7 @@ LOGGING = {
 
 ########## WSGI CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#wsgi-application
-WSGI_APPLICATION = "%s.wsgi.application" % SITE_NAME
+WSGI_APPLICATION = f"{SITE_NAME}.wsgi.application"
 ########## END WSGI CONFIGURATION
 
 ########## REST FRAMEWORK CONFIGURATION
@@ -338,6 +401,17 @@ SPECTACULAR_SETTINGS = {
     # This will avoid multiple warnings raised by drf-spectacular due to
     # the same set of error codes appearing in multiple operations.
     "ENUM_NAME_OVERRIDES": {
+        # Named after what it describes rather than after the field it
+        # happens to sit on: the generated name would be `StateEnum`,
+        # which the next model with a `state` field would collide with.
+        "IngestStateEnum": "fk.models.ingest.IngestState.choices",
+        # Named for what it describes, as above: the generated name would
+        # be `KindEnum`, which says nothing and collides with the next
+        # model to have a `kind`.
+        "IngestKindEnum": "fk.models.ingest.IngestKind.choices",
+        # Same reasoning, and the two serializers that expose a variant
+        # must share one component rather than generate one apiece.
+        "VideoFileVariantEnum": "fk.models.video_file.VideoFileVariant.choices",
         "ValidationErrorEnum": "drf_standardized_errors.openapi_serializers.ValidationErrorEnum.choices",
         "ClientErrorEnum": "drf_standardized_errors.openapi_serializers.ClientErrorEnum.choices",
         "ServerErrorEnum": "drf_standardized_errors.openapi_serializers.ServerErrorEnum.choices",
@@ -354,7 +428,7 @@ SPECTACULAR_SETTINGS = {
 
 # Everything with the API should be okay, since we don't share
 # the login cookie it's all safe.
-CORS_ORIGIN_ALLOW_ALL = True
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_URLS_REGEX = r"^/api/.*$"  # anyway, only enable CORS for the API
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
@@ -362,11 +436,23 @@ DEFAULT_FROM_EMAIL = "Frikanalen <noreply@frikanalen.no>"
 SECRET_KEY = env.str("SECRET_KEY")
 ALLOWED_HOSTS = env.str("ALLOWED_HOSTS").split(",")
 DATABASES = {"default": env.db()}
+# Swap in django-prometheus's wrapper backend so query counts/latencies get
+# exported; it's a drop-in that delegates everything to the real backend.
+DATABASES["default"]["ENGINE"] = (
+    "django_prometheus.db.backends." + DATABASES["default"]["ENGINE"].rsplit(".", 1)[-1]
+)
 CSRF_TRUSTED_ORIGINS = env.str("CSRF_TRUSTED_ORIGINS").split(",")
 try:
     cache_from_env_or_memory = env.cache()
-except ImproperlyConfigured:  # noqa: F821
-    logging.warning("CACHE_URL not set, falling back to in-memory cache.")
+except ImproperlyConfigured:
+    logger.warning("CACHE_URL not set, falling back to in-memory cache.")
     cache_from_env_or_memory = {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
 
 CACHES = {"default": cache_from_env_or_memory}
+
+# How stale an anonymous page may get. This is Django's own default, but it
+# only started to mean anything once the page cache actually began serving
+# responses, so state it here where the cost is visible: a video published
+# now can take this long to appear for logged-out visitors. Authenticated
+# callers bypass the cache entirely and always see current data.
+CACHE_MIDDLEWARE_SECONDS = 600
