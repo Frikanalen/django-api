@@ -191,3 +191,13 @@ credential named by `--keep` while it is valid and prints only
 `{"changed": false, ...}`. Otherwise it revokes earlier provisioned playout
 credentials and prints a new username and password, once, for the Secret.
 Playout credentials issued by hand in admin are left alone.
+
+## On-demand preview converter
+
+Rather than one worker Deployment and credential per source, MediaMTX can start
+the Opus converter itself when someone opens `contrib/preview/<UUID>`, and stop
+it when nobody is watching. That converter uses one **Preview converter (all
+enabled sources)** credential with no source: over RTSP it may read
+`contrib/live/<UUID>` and publish `contrib/preview/<UUID>` for any enabled
+source, and nothing else. Provision it like playout's reader with
+`manage.py ensure_preview_credential --keep <key UUID>`.

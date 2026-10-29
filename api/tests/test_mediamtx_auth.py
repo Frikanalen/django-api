@@ -316,3 +316,40 @@ def test_only_the_playout_reader_may_lack_a_source(playout):
         StreamCredential.objects.create(
             label="Bad", action=StreamCredential.Action.READ, secret_hash="x"
         )
+
+
+@pytest.fixture
+def converter(playout):
+    _, _, sources = playout
+    credential = StreamCredential(label="Converter", action=StreamCredential.Action.PREVIEW)
+    secret = credential.generate_secret()
+    credential.save()
+    return credential, secret, sources
+
+
+def as_converter(credential, secret, action, path, **overrides):
+    overrides = {"action": action, "protocol": "rtsp", "path": path, **overrides}
+    return authenticate(credential, secret, **overrides).status_code
+
+
+def test_converter_reads_originals_and_publishes_previews_of_any_source(converter):
+    credential, secret, sources = converter
+    later = LiveSource.objects.create(name="Late", organization=sources[0].organization)
+    for source in [*sources, later]:
+        assert as_converter(credential, secret, "read", source.contribution_path) == 204
+        assert as_converter(credential, secret, "publish", source.preview_path) == 204
+
+
+def test_converter_cannot_swap_directions_leave_rtsp_or_touch_disabled_sources(converter):
+    credential, secret, sources = converter
+    source = sources[0]
+    assert as_converter(credential, secret, "publish", source.contribution_path) == 401
+    assert as_converter(credential, secret, "read", source.preview_path) == 401
+    assert as_converter(credential, secret, "read", f"contrib/live/{uuid4()}") == 401
+    assert (
+        as_converter(credential, secret, "read", source.contribution_path, protocol="webrtc") == 401
+    )
+    assert as_converter(credential, "wrong", "read", source.contribution_path) == 401
+    source.enabled = False
+    source.save()
+    assert as_converter(credential, secret, "publish", source.preview_path) == 401

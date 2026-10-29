@@ -56,7 +56,10 @@ def authenticate(request):
     credential = (
         StreamCredential.objects.select_related("source")
         .filter(key_id=key_id, revoked_at__isnull=True)
-        .filter(Q(source__enabled=True) | Q(action=StreamCredential.Action.PLAYOUT))
+        .filter(
+            Q(source__enabled=True)
+            | Q(action__in=[StreamCredential.Action.PLAYOUT, StreamCredential.Action.PREVIEW])
+        )
         .first()
     )
     if credential is None:
@@ -68,7 +71,15 @@ def authenticate(request):
         allowed = (
             action == "read"
             and payload.get("protocol") == "rtsp"
-            and _is_enabled_contribution(path)
+            and _is_enabled_source_path(path, "contribution_path")
+        )
+        return _grant(credential, password) if allowed else HttpResponse(status=401)
+    if credential.action == StreamCredential.Action.PREVIEW:
+        # MediaMTX's on-demand converter, for any enabled source: it reads an
+        # original and publishes that source's preview, both over RTSP.
+        allowed = payload.get("protocol") == "rtsp" and (
+            (action == "read" and _is_enabled_source_path(path, "contribution_path"))
+            or (action == "publish" and _is_enabled_source_path(path, "preview_path"))
         )
         return _grant(credential, password) if allowed else HttpResponse(status=401)
     live_path = credential.source.contribution_path
@@ -105,8 +116,8 @@ def _grant(credential, password):
     return HttpResponse(status=204)
 
 
-def _is_enabled_contribution(path):
-    """Whether path is exactly the contribution path of an enabled source."""
+def _is_enabled_source_path(path, kind):
+    """Whether path is exactly an enabled source's contribution_path or preview_path."""
     if not isinstance(path, str):
         return False
     try:
@@ -114,9 +125,9 @@ def _is_enabled_contribution(path):
     except ValueError:
         return False
     source = LiveSource.objects.filter(stream_id=stream_id, enabled=True).first()
-    # Compare the whole path, so neither the preview nor a variant spelling
-    # of the UUID passes for the contribution.
-    return source is not None and source.contribution_path == path
+    # Compare the whole path, so neither the other kind of path nor a
+    # variant spelling of the UUID passes.
+    return source is not None and getattr(source, kind) == path
 
 
 @sensitive_variables("token")

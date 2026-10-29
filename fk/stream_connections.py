@@ -30,6 +30,20 @@ def connection_examples(credential, secret):
             )
         return examples
 
+    if credential.action == StreamCredential.Action.PREVIEW:
+        # MediaMTX starts the converter itself, filling in the stream UUID
+        # of whichever source a member is previewing.
+        if base := settings.FK_MEDIAMTX_RTSP_URL:
+            source = LiveSource(stream_id=PLACEHOLDER_STREAM_ID)
+            for label, stream_path in (
+                ("Contribution input (read)", source.contribution_path),
+                ("Preview output (publish)", source.preview_path),
+            ):
+                parts = urlsplit(f"{base.rstrip('/')}/{stream_path}")
+                netloc = f"{quote(username, safe='')}:{quote(secret, safe='')}@{parts.netloc}"
+                examples.append({"label": label, "url": urlunsplit(parts._replace(netloc=netloc))})
+        return examples
+
     path = credential.source.contribution_path
 
     if credential.action == StreamCredential.Action.CONVERT:

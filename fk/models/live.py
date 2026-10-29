@@ -60,6 +60,9 @@ class StreamCredential(models.Model):
         # Playout reads whichever source the schedule books, so it cannot
         # hold one credential per source without restarting for each new one.
         PLAYOUT = "playout", "Playout reader (all enabled sources)"
+        # Likewise MediaMTX's on-demand Opus converter, started for whichever
+        # source a member previews.
+        PREVIEW = "preview", "Preview converter (all enabled sources)"
 
     source = models.ForeignKey(
         LiveSource,
@@ -67,7 +70,7 @@ class StreamCredential(models.Model):
         related_name="credentials",
         null=True,
         blank=True,
-        help_text="Required, except for the playout reader, which has no source.",
+        help_text="Required, except for the playout reader and preview converter.",
     )
     label = models.CharField(max_length=100)
     key_id = models.UUIDField(default=uuid4, unique=True, editable=False)
@@ -80,18 +83,22 @@ class StreamCredential(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(action="playout", source__isnull=True)
-                | (~models.Q(action="playout") & models.Q(source__isnull=False)),
-                name="streamcredential_source_unless_playout",
+                condition=models.Q(action__in=["playout", "preview"], source__isnull=True)
+                | (~models.Q(action__in=["playout", "preview"]) & models.Q(source__isnull=False)),
+                name="streamcredential_source_unless_all_sources",
             ),
         ]
 
     def clean(self):
         super().clean()
-        if self.action == self.Action.PLAYOUT and self.source_id is not None:
-            raise ValidationError({"source": "The playout reader is not tied to a source."})
-        if self.action != self.Action.PLAYOUT and self.source_id is None:
+        if self.covers_all_sources and self.source_id is not None:
+            raise ValidationError({"source": "This credential covers every enabled source."})
+        if not self.covers_all_sources and self.source_id is None:
             raise ValidationError({"source": "This credential needs a source."})
+
+    @property
+    def covers_all_sources(self):
+        return self.action in (self.Action.PLAYOUT, self.Action.PREVIEW)
 
     def generate_secret(self):
         """Set a fresh password hash and return the secret without saving."""
@@ -103,4 +110,4 @@ class StreamCredential(models.Model):
         return check_password(secret, self.secret_hash)
 
     def __str__(self):
-        return f"{self.source or 'Playout'}: {self.label}"
+        return f"{self.source or 'All sources'}: {self.label}"
