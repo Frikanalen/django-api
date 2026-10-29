@@ -132,3 +132,22 @@ select an input at its booked time.
 
 References: [MediaMTX HTTP authentication](https://mediamtx.org/docs/features/authentication)
 and [SRT clients](https://mediamtx.org/docs/publish/srt).
+
+## Opus preview workers
+
+Read credentials are scoped to the source: they can read both `live/<UUID>` and
+its derived `preview/<UUID>`. A normal Publish credential can publish only the
+original `live/<UUID>` input and cannot replace the derived preview.
+
+Issue a **Preview conversion worker** credential for a configured source and
+put its username/password in a Kubernetes Secret referenced by the MediaMTX
+chart's `preview.sources` entry. This worker role has exactly two operations,
+both over RTSP: read `live/<UUID>` and publish `preview/<UUID>`. It cannot publish
+the contribution, read its own preview output, access another source, or use
+administrative actions. Its admin dialog shows only those two permitted RTSP
+URLs. Expiry, revocation and disabled-source checks apply to workers too.
+
+The WebRTC examples for a Read credential now include both the direct WHEP URL
+and the Opus-preview WHEP URL. The latter requires a configured worker. No
+cleartext worker secret is recoverable from Django after issuance; provision it
+into the cluster Secret at issuance or rotate it.

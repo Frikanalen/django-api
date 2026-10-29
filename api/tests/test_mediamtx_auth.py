@@ -152,3 +152,61 @@ def test_only_json_post_is_accepted():
     url = reverse("api-mediamtx-auth")
     assert client.get(url).status_code == 405
     assert client.post(url, {"user": "someone"}).status_code == 401
+
+
+@pytest.mark.parametrize(
+    "action,prefix,protocol,allowed",
+    [
+        ("read", "live", "rtsp", True),
+        ("publish", "preview", "rtsp", True),
+        ("publish", "live", "rtsp", False),
+        ("read", "preview", "rtsp", False),
+        ("publish", "preview", "srt", False),
+        ("read", "live", "webrtc", False),
+        ("convert", "preview", "rtsp", False),
+    ],
+)
+def test_conversion_worker_has_only_its_two_rtsp_operations(
+    issued, action, prefix, protocol, allowed
+):
+    credential, secret = issued
+    credential.action = StreamCredential.Action.CONVERT
+    credential.save()
+    response = authenticate(
+        credential,
+        secret,
+        action=action,
+        protocol=protocol,
+        path=f"{prefix}/{credential.source.stream_id}",
+    )
+    assert response.status_code == (204 if allowed else 401)
+
+
+def test_read_key_can_read_same_source_preview_but_encoder_cannot_publish_it(issued):
+    credential, secret = issued
+    path = f"preview/{credential.source.stream_id}"
+    assert authenticate(credential, secret, path=path).status_code == 401
+    credential.action = StreamCredential.Action.READ
+    credential.save()
+    assert (
+        authenticate(credential, secret, action="read", protocol="webrtc", path=path).status_code
+        == 204
+    )
+    assert authenticate(credential, secret, action="publish", path=path).status_code == 401
+    assert (
+        authenticate(credential, secret, action="read", path=f"preview/{uuid4()}").status_code
+        == 401
+    )
+
+
+def test_worker_cannot_access_another_source(issued):
+    credential, secret = issued
+    credential.action = StreamCredential.Action.CONVERT
+    credential.save()
+    for action, prefix in [("read", "live"), ("publish", "preview")]:
+        assert (
+            authenticate(
+                credential, secret, action=action, protocol="rtsp", path=f"{prefix}/{uuid4()}"
+            ).status_code
+            == 401
+        )

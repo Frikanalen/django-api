@@ -38,7 +38,7 @@ def authenticate(request):
         or not isinstance(password, str)
         or not password
         or len(password) > 256
-        or action not in StreamCredential.Action.values
+        or action not in ("publish", "read")
     ):
         return HttpResponse(status=401)
     try:
@@ -48,12 +48,28 @@ def authenticate(request):
 
     credential = (
         StreamCredential.objects.select_related("source")
-        .filter(key_id=key_id, action=action, revoked_at__isnull=True, source__enabled=True)
+        .filter(key_id=key_id, revoked_at__isnull=True, source__enabled=True)
         .first()
     )
     if credential is None:
         return HttpResponse(status=401)
-    if payload.get("path") != f"live/{credential.source.stream_id}":
+    live_path = f"live/{credential.source.stream_id}"
+    preview_path = f"preview/{credential.source.stream_id}"
+    path = payload.get("path")
+    if credential.action == StreamCredential.Action.PUBLISH:
+        allowed = action == "publish" and path == live_path
+    elif credential.action == StreamCredential.Action.READ:
+        allowed = action == "read" and path in (live_path, preview_path)
+    elif credential.action == StreamCredential.Action.CONVERT:
+        # A worker may read only its original and publish only its preview.
+        # It cannot replace the contribution or consume its own output.
+        allowed = payload.get("protocol") == "rtsp" and (
+            (action == "read" and path == live_path)
+            or (action == "publish" and path == preview_path)
+        )
+    else:
+        allowed = False
+    if not allowed:
         return HttpResponse(status=401)
     if credential.expires_at is not None and credential.expires_at <= timezone.now():
         return HttpResponse(status=401)

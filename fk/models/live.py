@@ -44,6 +44,7 @@ class StreamCredential(models.Model):
     class Action(models.TextChoices):
         PUBLISH = "publish", "Publish"
         READ = "read", "Read"
+        CONVERT = "convert", "Preview conversion worker"
 
     source = models.ForeignKey(LiveSource, on_delete=models.CASCADE, related_name="credentials")
     label = models.CharField(max_length=100)

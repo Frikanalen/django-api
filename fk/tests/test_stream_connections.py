@@ -57,3 +57,22 @@ def test_unconfigured_listeners_are_not_advertised(settings):
     for protocol in ["SRT", "RTMP", "RTSP", "WEBRTC", "HLS"]:
         setattr(settings, f"FK_MEDIAMTX_{protocol}_URL", "")
     assert connection_examples(StreamCredential(source=LiveSource()), "secret") == []
+
+
+def test_converter_examples_are_only_the_allowed_rtsp_paths(endpoints):
+    source = LiveSource()
+    credential = StreamCredential(source=source, action=StreamCredential.Action.CONVERT)
+    examples = connection_examples(credential, "secret")
+    assert len(examples) == 2
+    assert all(item["url"].startswith("rtsps://") for item in examples)
+    assert urlsplit(examples[0]["url"]).path == f"/live/{source.stream_id}"
+    assert urlsplit(examples[1]["url"]).path == f"/preview/{source.stream_id}"
+
+
+def test_read_credentials_include_derived_opus_whep_path(endpoints):
+    source = LiveSource()
+    credential = StreamCredential(source=source, action=StreamCredential.Action.READ)
+    examples = connection_examples(credential, "secret")
+    preview = next(item for item in examples if item["label"] == "WebRTC / Opus preview")
+    assert preview["url"] == f"https://contribute.example.test/rtc/preview/{source.stream_id}/whep"
+    assert preview["token"] == f"{credential.key_id}:secret"
