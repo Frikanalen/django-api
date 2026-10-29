@@ -22,6 +22,7 @@ class OrganizationLiveSourceList(generics.ListAPIView):
     serializer_class = LiveSourceSerializer
     permission_classes = (permissions.IsAuthenticated,)
     pagination_class = None
+    filter_backends = ()
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
