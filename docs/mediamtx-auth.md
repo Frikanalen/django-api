@@ -170,3 +170,17 @@ enabled and the user is active and still belongs to the organization. Nothing is
 stored; expiry only stops new sessions from starting, not one already playing.
 Browsers cannot decode the original feed's AAC audio, so only the Opus preview
 path carries sound.
+
+## Playout reader
+
+Playout plays whichever source the schedule books, so a per-source Read
+credential would mean reconfiguring and restarting playout for every new
+source. Instead, issue one **Playout reader (all enabled sources)** credential,
+leaving **Source** empty, and give it to playout as
+`LIVE_READER_CREDENTIAL=<username>:<password>`.
+
+It can only read `contrib/live/<UUID>` of an enabled source, and only over
+RTSP, since CasparCG reads the contribution that way. It cannot publish, read
+previews, read disabled sources or use administrative actions. Expiry and
+revocation apply as usual. Every other credential type still requires a source,
+which a database constraint enforces.

@@ -2,6 +2,7 @@ import secrets
 from uuid import uuid4
 
 from django.contrib.auth.hashers import check_password, make_password
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -45,18 +46,29 @@ class LiveTransmission(models.Model):
 
 
 class StreamCredential(models.Model):
-    """A revocable, source-scoped encoder or reader credential.
+    """A revocable encoder or reader credential.
 
-    The key ID is the MediaMTX username. Only the issuing caller sees the
-    generated password; the database stores its Django password hash.
+    All but the playout reader are scoped to one source. The key ID is the
+    MediaMTX username. Only the issuing caller sees the generated password;
+    the database stores its Django password hash.
     """
 
     class Action(models.TextChoices):
         PUBLISH = "publish", "Publish"
         READ = "read", "Read"
         CONVERT = "convert", "Preview conversion worker"
+        # Playout reads whichever source the schedule books, so it cannot
+        # hold one credential per source without restarting for each new one.
+        PLAYOUT = "playout", "Playout reader (all enabled sources)"
 
-    source = models.ForeignKey(LiveSource, on_delete=models.CASCADE, related_name="credentials")
+    source = models.ForeignKey(
+        LiveSource,
+        on_delete=models.CASCADE,
+        related_name="credentials",
+        null=True,
+        blank=True,
+        help_text="Required, except for the playout reader, which has no source.",
+    )
     label = models.CharField(max_length=100)
     key_id = models.UUIDField(default=uuid4, unique=True, editable=False)
     action = models.CharField(max_length=7, choices=Action.choices, default=Action.PUBLISH)
@@ -64,6 +76,22 @@ class StreamCredential(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField(null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True, editable=False)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(action="playout", source__isnull=True)
+                | (~models.Q(action="playout") & models.Q(source__isnull=False)),
+                name="streamcredential_source_unless_playout",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.action == self.Action.PLAYOUT and self.source_id is not None:
+            raise ValidationError({"source": "The playout reader is not tied to a source."})
+        if self.action != self.Action.PLAYOUT and self.source_id is None:
+            raise ValidationError({"source": "This credential needs a source."})
 
     def generate_secret(self):
         """Set a fresh password hash and return the secret without saving."""
@@ -75,4 +103,4 @@ class StreamCredential(models.Model):
         return check_password(secret, self.secret_hash)
 
     def __str__(self):
-        return f"{self.source}: {self.label}"
+        return f"{self.source or 'Playout'}: {self.label}"

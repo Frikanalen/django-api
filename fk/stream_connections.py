@@ -4,13 +4,33 @@ from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 
 from django.conf import settings
 
-from fk.models import StreamCredential
+from fk.models import LiveSource, StreamCredential
+
+# Shown where the playout reader's path depends on the booked source.
+PLACEHOLDER_STREAM_ID = "<source stream UUID>"
 
 
 def connection_examples(credential, secret):
-    path = credential.source.contribution_path
     username = str(credential.key_id)
     examples = []
+
+    if credential.action == StreamCredential.Action.PLAYOUT:
+        # Playout takes the stream UUID from the schedule; it reads any
+        # enabled source's contribution over RTSP and nothing else.
+        if base := settings.FK_MEDIAMTX_RTSP_URL:
+            path = LiveSource(stream_id=PLACEHOLDER_STREAM_ID).contribution_path
+            parts = urlsplit(f"{base.rstrip('/')}/{path}")
+            netloc = f"{quote(username, safe='')}:{quote(secret, safe='')}@{parts.netloc}"
+            examples.append(
+                {
+                    "label": "RTSP (read any enabled source)",
+                    "url": urlunsplit(parts._replace(netloc=netloc)),
+                    "note": "Give playout LIVE_READER_CREDENTIAL=<username>:<password>.",
+                }
+            )
+        return examples
+
+    path = credential.source.contribution_path
 
     if credential.action == StreamCredential.Action.CONVERT:
         # Worker credentials are not encoder credentials: show only their

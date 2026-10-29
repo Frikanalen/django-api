@@ -130,3 +130,29 @@ def test_issuance_renders_copyable_urls_without_persisting_secrets(operator, sou
     credential = StreamCredential.objects.get()
     later = operator.get(reverse("admin:fk_streamcredential_change", args=[credential.pk]))
     assert secret.encode() not in later.content
+
+
+def test_issues_a_playout_reader_without_a_source(operator, source, settings):
+    settings.FK_MEDIAMTX_RTSP_URL = "rtsp://contribute.example.test:8554"
+    response = operator.post(
+        reverse("admin:fk_streamcredential_add"),
+        {"source": "", "label": "Playout", "action": "playout"},
+    )
+    assert response.status_code == 200
+    credential = StreamCredential.objects.get()
+    assert credential.source is None
+    assert credential.check_secret(response.context["secret"])
+    assert response.context["stream_path"] == "contrib/live/<source stream UUID>"
+    [example] = response.context["connection_examples"]
+    assert example["url"].startswith(f"rtsp://{credential.key_id}:")
+    assert b"All enabled sources" in response.content
+
+
+def test_admin_requires_a_source_except_for_playout(operator, source):
+    url = reverse("admin:fk_streamcredential_add")
+    response = operator.post(url, {"source": "", "label": "OBS", "action": "publish"})
+    assert response.status_code == 200
+    assert "secret" not in response.context
+    response = operator.post(url, {"source": source.pk, "label": "P", "action": "playout"})
+    assert "secret" not in response.context
+    assert not StreamCredential.objects.exists()

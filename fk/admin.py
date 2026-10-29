@@ -32,7 +32,7 @@ from fk.models import (
     WeeklySlotRequestStatus,
     WeeklySlotSource,
 )
-from fk.stream_connections import connection_examples
+from fk.stream_connections import PLACEHOLDER_STREAM_ID, connection_examples
 
 
 class UserAdmin(BaseUserAdmin):
@@ -158,7 +158,11 @@ class StreamCredentialAdmin(admin.ModelAdmin):
                 "opts": self.model._meta,
                 "credential": obj,
                 "secret": secret,
-                "stream_path": obj.source.contribution_path,
+                "stream_path": (
+                    obj.source.contribution_path
+                    if obj.source
+                    else LiveSource(stream_id=PLACEHOLDER_STREAM_ID).contribution_path
+                ),
                 "connection_examples": connection_examples(obj, secret),
             },
         )

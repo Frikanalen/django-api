@@ -3,6 +3,7 @@
 import json
 from uuid import UUID
 
+from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
@@ -12,7 +13,7 @@ from django.views.decorators.http import require_POST
 
 from api.auth.permissions import can_administer_organization
 from fk import preview_tokens
-from fk.models import StreamCredential
+from fk.models import LiveSource, StreamCredential
 
 
 @csrf_exempt
@@ -54,14 +55,24 @@ def authenticate(request):
 
     credential = (
         StreamCredential.objects.select_related("source")
-        .filter(key_id=key_id, revoked_at__isnull=True, source__enabled=True)
+        .filter(key_id=key_id, revoked_at__isnull=True)
+        .filter(Q(source__enabled=True) | Q(action=StreamCredential.Action.PLAYOUT))
         .first()
     )
     if credential is None:
         return HttpResponse(status=401)
+    path = payload.get("path")
+    if credential.action == StreamCredential.Action.PLAYOUT:
+        # Playout reads only the original contribution of an enabled source,
+        # over RTSP from CasparCG: never previews, never publishing.
+        allowed = (
+            action == "read"
+            and payload.get("protocol") == "rtsp"
+            and _is_enabled_contribution(path)
+        )
+        return _grant(credential, password) if allowed else HttpResponse(status=401)
     live_path = credential.source.contribution_path
     preview_path = credential.source.preview_path
-    path = payload.get("path")
     if credential.action == StreamCredential.Action.PUBLISH:
         allowed = action == "publish" and path == live_path
     elif credential.action == StreamCredential.Action.READ:
@@ -77,6 +88,12 @@ def authenticate(request):
         allowed = False
     if not allowed:
         return HttpResponse(status=401)
+    return _grant(credential, password)
+
+
+@sensitive_variables()
+def _grant(credential, password):
+    """Check expiry and the secret of a credential already allowed this request."""
     if credential.expires_at is not None and credential.expires_at <= timezone.now():
         return HttpResponse(status=401)
     if not credential.check_secret(password):
@@ -86,6 +103,20 @@ def authenticate(request):
     if credential.expires_at is not None:
         return JsonResponse({"expireAt": credential.expires_at.isoformat()})
     return HttpResponse(status=204)
+
+
+def _is_enabled_contribution(path):
+    """Whether path is exactly the contribution path of an enabled source."""
+    if not isinstance(path, str):
+        return False
+    try:
+        stream_id = UUID(path.rsplit("/", 1)[-1])
+    except ValueError:
+        return False
+    source = LiveSource.objects.filter(stream_id=stream_id, enabled=True).first()
+    # Compare the whole path, so neither the preview nor a variant spelling
+    # of the UUID passes for the contribution.
+    return source is not None and source.contribution_path == path
 
 
 @sensitive_variables("token")
