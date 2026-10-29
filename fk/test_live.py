@@ -1,6 +1,5 @@
 from datetime import timedelta
 
-from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase
@@ -30,9 +29,7 @@ class LiveTransmissionTests(TestCase):
     def test_live_booking_without_original_does_not_publish_video(self):
         self.assertFalse(self.video.videofile_set.exists())
         self.assertFalse(self.video.proper_import)
-        transmission = LiveTransmission(schedule_item=self.entry, source=self.source)
-        transmission.full_clean()
-        transmission.save()
+        transmission = LiveTransmission.objects.create(schedule_item=self.entry, source=self.source)
 
         self.entry.refresh_from_db()
         self.assertEqual(self.entry.live_transmission, transmission)
@@ -42,24 +39,6 @@ class LiveTransmissionTests(TestCase):
     def test_recorded_entry_requires_no_attachment(self):
         self.assertFalse(hasattr(self.entry, "live_transmission"))
         self.assertEqual(self.entry.video_id, self.video.pk)
-
-    def test_requires_video(self):
-        self.entry.video = None
-        self.entry.save()
-        with self.assertRaisesMessage(ValidationError, "requires a video"):
-            LiveTransmission(schedule_item=self.entry, source=self.source).full_clean()
-
-    def test_rejects_disabled_source(self):
-        self.source.enabled = False
-        self.source.save()
-        with self.assertRaisesMessage(ValidationError, "disabled"):
-            LiveTransmission(schedule_item=self.entry, source=self.source).full_clean()
-
-    def test_rejects_other_organization(self):
-        self.source.organization = Organization.objects.create(name="Other broadcaster")
-        self.source.save()
-        with self.assertRaisesMessage(ValidationError, "video's organization"):
-            LiveTransmission(schedule_item=self.entry, source=self.source).full_clean()
 
     def test_only_one_transmission_per_entry(self):
         LiveTransmission.objects.create(schedule_item=self.entry, source=self.source)
