@@ -17,13 +17,15 @@ Two properties matter, and they pull against each other:
     much depend on who asked.
 """
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from django.core.cache import cache
 from django.urls import reverse
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
-from fk.models import Organization, User, Video
+from fk.models import Organization, Scheduleitem, User, Video
 
 pytestmark = pytest.mark.django_db
 
@@ -186,3 +188,60 @@ def test_the_cache_key_survives_the_api_timezone_override(catalogue, settings) -
     pages = cached_pages()
     assert len(pages) == 1, pages
     assert pages[0].endswith(f".{settings.TIME_ZONE}")
+
+
+def test_a_schedule_change_clears_the_cache(catalogue, django_capture_on_commit_callbacks) -> None:
+    """Playout reads the schedule anonymously and must see a late booking.
+
+    The schedule is cached like any other page, but a slot booked minutes
+    before it airs has to reach playout at once, not when the entry expires.
+    """
+    video = Video.objects.get(name="first video")
+    starttime = datetime(2015, 6, 1, 12, tzinfo=UTC)
+    url = reverse("api-scheduleitem-list")
+    client = APIClient()
+
+    def book(offset: timedelta) -> Scheduleitem:
+        with django_capture_on_commit_callbacks(execute=True):
+            return Scheduleitem.objects.create(
+                video=video,
+                starttime=starttime + offset,
+                duration=timedelta(minutes=30),
+                schedulereason=Scheduleitem.REASON_ADMIN,
+            )
+
+    def listed() -> int:
+        return len(client.get(url, {"date": "2015-06-01"}).json()["results"])
+
+    first = book(timedelta(0))
+    assert listed() == 1
+    assert cached_pages(), "the schedule should still be cached between changes"
+
+    book(timedelta(hours=1))
+    assert listed() == 2
+
+    with django_capture_on_commit_callbacks(execute=True):
+        first.delete()
+    assert listed() == 1
+
+
+def test_the_cache_is_cleared_only_once_the_change_commits(
+    catalogue, django_capture_on_commit_callbacks
+) -> None:
+    """Cleared any earlier, a request racing the commit would re-cache old rows."""
+    video = Video.objects.get(name="first video")
+    APIClient().get(reverse("api-video-list"))
+    assert cached_pages()
+
+    with django_capture_on_commit_callbacks(execute=False) as callbacks:
+        Scheduleitem.objects.create(
+            video=video,
+            starttime=datetime(2015, 6, 1, 12, tzinfo=UTC),
+            duration=timedelta(minutes=30),
+            schedulereason=Scheduleitem.REASON_ADMIN,
+        )
+    assert cached_pages(), "cleared before the commit"
+
+    for callback in callbacks:
+        callback()
+    assert not cached_pages()
