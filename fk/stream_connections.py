@@ -8,7 +8,7 @@ from fk.models import StreamCredential
 
 
 def connection_examples(credential, secret):
-    path = f"live/{credential.source.stream_id}"
+    path = credential.source.contribution_path
     username = str(credential.key_id)
     examples = []
 
@@ -16,11 +16,11 @@ def connection_examples(credential, secret):
         # Worker credentials are not encoder credentials: show only their
         # two permitted RTSP operations, never a bogus SRT "convert" URL.
         if base := settings.FK_MEDIAMTX_RTSP_URL:
-            for label, prefix in (
-                ("Contribution input (read)", "live"),
-                ("Preview output (publish)", "preview"),
+            for label, stream_path in (
+                ("Contribution input (read)", path),
+                ("Preview output (publish)", credential.source.preview_path),
             ):
-                parts = urlsplit(f"{base.rstrip('/')}/{prefix}/{credential.source.stream_id}")
+                parts = urlsplit(f"{base.rstrip('/')}/{stream_path}")
                 netloc = f"{quote(username, safe='')}:{quote(secret, safe='')}@{parts.netloc}"
                 examples.append({"label": label, "url": urlunsplit(parts._replace(netloc=netloc))})
         return examples
@@ -56,7 +56,7 @@ def connection_examples(credential, secret):
             examples.append(
                 {
                     "label": "WebRTC / Opus preview",
-                    "url": f"{base.rstrip('/')}/preview/{credential.source.stream_id}/whep",
+                    "url": f"{base.rstrip('/')}/{credential.source.preview_path}/whep",
                     "token": f"{username}:{secret}",
                     "note": "Requires a configured preview conversion worker for this source.",
                 }

@@ -15,12 +15,12 @@ or disconnection of active sessions.
    session, messages, or database. Django stores a salted password hash.
 
 The username is the credential's key UUID. The path is exactly
-`live/<source stream UUID>` (no leading slash). Configure the username/password
+`contrib/live/<source stream UUID>` (no leading slash). Configure the username/password
 in the encoder using its protocol's MediaMTX credential syntax. For example:
 
 ```text
-srt://<host>:8890?streamid=publish:live/<source stream UUID>:<key UUID>:<password>&pkt_size=1316
-rtsp://<key UUID>:<password>@<host>:8554/live/<source stream UUID>
+srt://<host>:8890?streamid=publish:contrib/live/<source stream UUID>:<key UUID>:<password>&pkt_size=1316
+rtsp://<key UUID>:<password>@<host>:8554/contrib/live/<source stream UUID>
 ```
 
 Use SRT transport encryption (configured separately) or a trusted network/VPN;
@@ -96,7 +96,7 @@ MediaMTX sends JSON such as:
   "token": "",
   "ip": "192.0.2.1",
   "action": "publish",
-  "path": "live/<source stream UUID>",
+  "path": "contrib/live/<source stream UUID>",
   "protocol": "srt",
   "id": "<MediaMTX connection ID>",
   "query": "",
@@ -135,14 +135,14 @@ and [SRT clients](https://mediamtx.org/docs/publish/srt).
 
 ## Opus preview workers
 
-Read credentials are scoped to the source: they can read both `live/<UUID>` and
-its derived `preview/<UUID>`. A normal Publish credential can publish only the
-original `live/<UUID>` input and cannot replace the derived preview.
+Read credentials are scoped to the source: they can read both `contrib/live/<UUID>` and
+its derived `contrib/preview/<UUID>`. A normal Publish credential can publish only the
+original `contrib/live/<UUID>` input and cannot replace the derived preview.
 
 Issue a **Preview conversion worker** credential for a configured source and
 put its username/password in a Kubernetes Secret referenced by the MediaMTX
 chart's `preview.sources` entry. This worker role has exactly two operations,
-both over RTSP: read `live/<UUID>` and publish `preview/<UUID>`. It cannot publish
+both over RTSP: read `contrib/live/<UUID>` and publish `contrib/preview/<UUID>`. It cannot publish
 the contribution, read its own preview output, access another source, or use
 administrative actions. Its admin dialog shows only those two permitted RTSP
 URLs. Expiry, revocation and disabled-source checks apply to workers too.
@@ -151,3 +151,22 @@ The WebRTC examples for a Read credential now include both the direct WHEP URL
 and the Opus-preview WHEP URL. The latter requires a configured worker. No
 cleartext worker secret is recoverable from Django after issuance; provision it
 into the cluster Secret at issuance or rotate it.
+
+## Browser previews for organization members
+
+MediaMTX does not see the site's login cookie, so a logged-in member's browser
+uses a short-lived bearer token instead of a stream credential:
+
+1. `GET /api/organization/<id>/live-sources` lists the organization's sources,
+   their `contrib/` paths and the bookings that have not ended yet.
+2. `POST /api/live-sources/<id>/preview-token` returns a signed token, valid for
+   five minutes, naming the source and the member.
+3. The browser sends a WHEP offer to `https://<site>/<path>/whep` with
+   `Authorization: Bearer <token>`. MediaMTX forwards it as `token`.
+
+The callback accepts such a token only for `read` over `webrtc` on that source's
+`contrib/live/<UUID>` or `contrib/preview/<UUID>`. It rechecks that the source is
+enabled and the user is active and still belongs to the organization. Nothing is
+stored; expiry only stops new sessions from starting, not one already playing.
+Browsers cannot decode the original feed's AAC audio, so only the Opus preview
+path carries sound.

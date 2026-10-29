@@ -34,7 +34,7 @@ def authenticate(credential, secret, **overrides):
         "token": "",
         "ip": "192.0.2.1",
         "action": "publish",
-        "path": f"live/{credential.source.stream_id}",
+        "path": f"contrib/live/{credential.source.stream_id}",
         "protocol": "srt",
         "id": str(uuid4()),
         "query": "",
@@ -130,9 +130,13 @@ def test_another_sources_valid_path_is_not_authorized(issued):
     other = LiveSource.objects.create(
         name="Other studio", organization=credential.source.organization
     )
-    assert authenticate(credential, secret, path=f"live/{other.stream_id}").status_code == 401
     assert (
-        authenticate(credential, secret, path=f"/live/{credential.source.stream_id}").status_code
+        authenticate(credential, secret, path=f"contrib/live/{other.stream_id}").status_code == 401
+    )
+    assert (
+        authenticate(
+            credential, secret, path=f"/contrib/live/{credential.source.stream_id}"
+        ).status_code
         == 401
     )
 
@@ -157,13 +161,13 @@ def test_only_json_post_is_accepted():
 @pytest.mark.parametrize(
     "action,prefix,protocol,allowed",
     [
-        ("read", "live", "rtsp", True),
-        ("publish", "preview", "rtsp", True),
-        ("publish", "live", "rtsp", False),
-        ("read", "preview", "rtsp", False),
-        ("publish", "preview", "srt", False),
-        ("read", "live", "webrtc", False),
-        ("convert", "preview", "rtsp", False),
+        ("read", "contrib/live", "rtsp", True),
+        ("publish", "contrib/preview", "rtsp", True),
+        ("publish", "contrib/live", "rtsp", False),
+        ("read", "contrib/preview", "rtsp", False),
+        ("publish", "contrib/preview", "srt", False),
+        ("read", "contrib/live", "webrtc", False),
+        ("convert", "contrib/preview", "rtsp", False),
     ],
 )
 def test_conversion_worker_has_only_its_two_rtsp_operations(
@@ -184,7 +188,7 @@ def test_conversion_worker_has_only_its_two_rtsp_operations(
 
 def test_read_key_can_read_same_source_preview_but_encoder_cannot_publish_it(issued):
     credential, secret = issued
-    path = f"preview/{credential.source.stream_id}"
+    path = f"contrib/preview/{credential.source.stream_id}"
     assert authenticate(credential, secret, path=path).status_code == 401
     credential.action = StreamCredential.Action.READ
     credential.save()
@@ -194,7 +198,9 @@ def test_read_key_can_read_same_source_preview_but_encoder_cannot_publish_it(iss
     )
     assert authenticate(credential, secret, action="publish", path=path).status_code == 401
     assert (
-        authenticate(credential, secret, action="read", path=f"preview/{uuid4()}").status_code
+        authenticate(
+            credential, secret, action="read", path=f"contrib/preview/{uuid4()}"
+        ).status_code
         == 401
     )
 
@@ -203,10 +209,18 @@ def test_worker_cannot_access_another_source(issued):
     credential, secret = issued
     credential.action = StreamCredential.Action.CONVERT
     credential.save()
-    for action, prefix in [("read", "live"), ("publish", "preview")]:
+    for action, prefix in [("read", "contrib/live"), ("publish", "contrib/preview")]:
         assert (
             authenticate(
                 credential, secret, action=action, protocol="rtsp", path=f"{prefix}/{uuid4()}"
             ).status_code
             == 401
         )
+
+
+def test_paths_outside_contrib_prefix_are_rejected(issued):
+    credential, secret = issued
+    assert (
+        authenticate(credential, secret, path=f"live/{credential.source.stream_id}").status_code
+        == 401
+    )
