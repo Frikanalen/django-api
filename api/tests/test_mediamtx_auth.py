@@ -34,7 +34,7 @@ def authenticate(credential, secret, **overrides):
         "token": "",
         "ip": "192.0.2.1",
         "action": "publish",
-        "path": f"contrib/live/{credential.source.stream_id}",
+        "path": credential.source.contribution_path if credential.source else "",
         "protocol": "srt",
         "id": str(uuid4()),
         "query": "",
@@ -224,3 +224,95 @@ def test_paths_outside_contrib_prefix_are_rejected(issued):
         authenticate(credential, secret, path=f"live/{credential.source.stream_id}").status_code
         == 401
     )
+
+
+@pytest.fixture
+def playout():
+    org = Organization.objects.create(name="Contributor")
+    sources = [
+        LiveSource.objects.create(name="Studio A", organization=org),
+        LiveSource.objects.create(name="Studio B", organization=org),
+    ]
+    credential = StreamCredential(label="Playout", action=StreamCredential.Action.PLAYOUT)
+    secret = credential.generate_secret()
+    credential.save()
+    return credential, secret, sources
+
+
+def read_as_playout(credential, secret, path, **overrides):
+    overrides = {"action": "read", "protocol": "rtsp", "path": path, **overrides}
+    return authenticate(credential, secret, **overrides).status_code
+
+
+def test_playout_reads_every_enabled_sources_contribution(playout):
+    credential, secret, sources = playout
+    for source in sources:
+        assert read_as_playout(credential, secret, source.contribution_path) == 204
+    # A source added after the credential was issued needs nothing new.
+    later = LiveSource.objects.create(name="Late", organization=sources[0].organization)
+    assert read_as_playout(credential, secret, later.contribution_path) == 204
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"action": "publish"},
+        {"protocol": "webrtc"},
+        {"protocol": "srt"},
+        {"action": "playback"},
+        {"action": "api"},
+    ],
+)
+def test_playout_only_reads_over_rtsp(playout, overrides):
+    credential, secret, sources = playout
+    assert read_as_playout(credential, secret, sources[0].contribution_path, **overrides) == 401
+
+
+def test_playout_cannot_read_previews_unknown_or_disabled_sources(playout):
+    credential, secret, sources = playout
+    source = sources[0]
+    stream_id = str(source.stream_id)
+    for path in [
+        source.preview_path,
+        f"contrib/live/{uuid4()}",
+        f"live/{stream_id}",
+        f"contrib/live/{stream_id.upper()}",
+        f"contrib/live/{{{stream_id}}}",
+        f"contrib/live/{stream_id}/extra",
+        "contrib/live/not-a-uuid",
+        "",
+    ]:
+        assert read_as_playout(credential, secret, path) == 401, path
+    source.enabled = False
+    source.save()
+    assert read_as_playout(credential, secret, source.contribution_path) == 401
+
+
+def test_playout_rejects_wrong_password_revocation_and_expiry(playout):
+    credential, secret, sources = playout
+    path = sources[0].contribution_path
+    assert read_as_playout(credential, "wrong", path) == 401
+    credential.expires_at = timezone.now() - timedelta(minutes=1)
+    credential.save()
+    assert read_as_playout(credential, secret, path) == 401
+    credential.expires_at = None
+    credential.revoked_at = timezone.now()
+    credential.save()
+    assert read_as_playout(credential, secret, path) == 401
+
+
+def test_only_the_playout_reader_may_lack_a_source(playout):
+    from django.core.exceptions import ValidationError
+    from django.db import IntegrityError, transaction
+
+    *_, sources = playout
+    with pytest.raises(ValidationError):
+        StreamCredential(label="Bad", action=StreamCredential.Action.READ).full_clean()
+    with pytest.raises(ValidationError):
+        StreamCredential(
+            label="Bad", action=StreamCredential.Action.PLAYOUT, source=sources[0]
+        ).full_clean()
+    with pytest.raises(IntegrityError), transaction.atomic():
+        StreamCredential.objects.create(
+            label="Bad", action=StreamCredential.Action.READ, secret_hash="x"
+        )

@@ -151,3 +151,17 @@ The WebRTC examples for a Read credential now include both the direct WHEP URL
 and the Opus-preview WHEP URL. The latter requires a configured worker. No
 cleartext worker secret is recoverable from Django after issuance; provision it
 into the cluster Secret at issuance or rotate it.
+
+## Playout reader
+
+Playout plays whichever source the schedule books, so a per-source Read
+credential would mean reconfiguring and restarting playout for every new
+source. Instead, issue one **Playout reader (all enabled sources)** credential,
+leaving **Source** empty, and give it to playout as
+`LIVE_READER_CREDENTIAL=<username>:<password>`.
+
+It can only read `contrib/live/<UUID>` of an enabled source, and only over
+RTSP, since CasparCG reads the contribution that way. It cannot publish, read
+previews, read disabled sources or use administrative actions. Expiry and
+revocation apply as usual. Every other credential type still requires a source,
+which a database constraint enforces.
