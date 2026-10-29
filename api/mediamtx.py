@@ -53,8 +53,8 @@ def authenticate(request):
     )
     if credential is None:
         return HttpResponse(status=401)
-    live_path = f"live/{credential.source.stream_id}"
-    preview_path = f"preview/{credential.source.stream_id}"
+    live_path = credential.source.contribution_path
+    preview_path = credential.source.preview_path
     path = payload.get("path")
     if credential.action == StreamCredential.Action.PUBLISH:
         allowed = action == "publish" and path == live_path
