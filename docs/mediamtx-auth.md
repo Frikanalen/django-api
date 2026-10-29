@@ -184,3 +184,10 @@ RTSP, since CasparCG reads the contribution that way. It cannot publish, read
 previews, read disabled sources or use administrative actions. Expiry and
 revocation apply as usual. Every other credential type still requires a source,
 which a database constraint enforces.
+
+Infra's Ansible provisions it automatically with
+`manage.py ensure_playout_credential --keep <key UUID>`. That command keeps the
+credential named by `--keep` while it is valid and prints only
+`{"changed": false, ...}`. Otherwise it revokes earlier provisioned playout
+credentials and prints a new username and password, once, for the Secret.
+Playout credentials issued by hand in admin are left alone.
