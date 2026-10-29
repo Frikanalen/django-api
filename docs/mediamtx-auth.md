@@ -42,6 +42,31 @@ requires the future controller to call MediaMTX's session-management API. Expiry
 is also returned as `expireAt`; MediaMTX versions supporting this response field
 can close a session when that instant arrives.
 
+## Copyable connection examples
+
+The one-time confirmation page includes selectable, read-only connection URLs
+for listeners configured in the current environment. Configure their externally
+reachable base addresses (no stream path, credentials, query, or fragment):
+
+| Environment variable | Example |
+| --- | --- |
+| `FK_MEDIAMTX_SRT_URL` | `srt://contribute.example.org:8890` |
+| `FK_MEDIAMTX_RTMP_URL` | `rtmp://contribute.example.org:1935` |
+| `FK_MEDIAMTX_RTSP_URL` | `rtsp://contribute.example.org:8554` |
+| `FK_MEDIAMTX_WEBRTC_URL` | `https://contribute.example.org` |
+| `FK_MEDIAMTX_HLS_URL` | `https://contribute.example.org/hls` |
+
+Only configured listeners are shown; no hostname is guessed from Django's own
+address. TLS listener schemes (`rtmps`, `rtsps`, `https`) are retained. SRT, RTMP
+and RTSP examples include credentials in the URL. WebRTC shows a WHIP publishing
+or WHEP reading URL and a separate `username:password` bearer token for the
+client's token field. Read credentials also get an HLS URL, with instructions to
+use the username/password when prompted. Publish credentials do not advertise HLS.
+
+The URLs and bearer token are shown only alongside the initial password and
+are not persisted. These settings advertise listeners; they do not deploy or
+configure MediaMTX, TLS, proxies or firewall rules.
+
 ## Connect MediaMTX to Django
 
 Use MediaMTX's external HTTP authentication method:

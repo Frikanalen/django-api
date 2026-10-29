@@ -32,6 +32,7 @@ from fk.models import (
     WeeklySlotRequestStatus,
     WeeklySlotSource,
 )
+from fk.stream_connections import connection_examples
 
 
 class UserAdmin(BaseUserAdmin):
@@ -158,6 +159,7 @@ class StreamCredentialAdmin(admin.ModelAdmin):
                 "credential": obj,
                 "secret": secret,
                 "stream_path": f"live/{obj.source.stream_id}",
+                "connection_examples": connection_examples(obj, secret),
             },
         )
         response["Cache-Control"] = "no-store, private"

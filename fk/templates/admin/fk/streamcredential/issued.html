@@ -9,6 +9,20 @@
   <dt>Username</dt><dd><code>{{ credential.key_id }}</code></dd>
   <dt>Password</dt><dd><code>{{ secret }}</code></dd>
 </dl>
+<h2>Connection URLs</h2>
+{% for example in connection_examples %}
+<div class="form-row">
+  <label for="connection-url-{{ forloop.counter }}">{{ example.label }}</label>
+  <textarea id="connection-url-{{ forloop.counter }}" rows="3" cols="100" readonly onclick="this.select()">{{ example.url }}</textarea>
+  {% if example.token %}
+  <label for="connection-token-{{ forloop.counter }}">Bearer token (paste into your client's token field)</label>
+  <textarea id="connection-token-{{ forloop.counter }}" rows="2" cols="100" readonly onclick="this.select()">{{ example.token }}</textarea>
+  {% endif %}
+  {% if example.note %}<p>{{ example.note }}</p>{% endif %}
+</div>
+{% empty %}
+<p>MediaMTX connection addresses have not been configured for this environment.</p>
+{% endfor %}
 <p>Revocation rejects new connections. Disconnecting an existing session requires MediaMTX session management.</p>
 <p><a href="{% url 'admin:fk_streamcredential_changelist' %}">Return to stream credentials</a></p>
 {% endblock %}

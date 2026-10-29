@@ -1,5 +1,6 @@
 import pytest
 from django.urls import reverse
+from django.utils.html import escape
 
 from fk.models import LiveSource, Organization, StreamCredential, User
 
@@ -100,3 +101,32 @@ def test_non_admin_cannot_issue_credentials(client, source):
     )
     assert response.status_code == 302
     assert not StreamCredential.objects.exists()
+
+
+def test_issuance_renders_copyable_urls_without_persisting_secrets(operator, source, settings):
+    settings.FK_MEDIAMTX_SRT_URL = "srt://contribute.example.test:8890"
+    settings.FK_MEDIAMTX_RTMP_URL = "rtmp://contribute.example.test:1935"
+    settings.FK_MEDIAMTX_RTSP_URL = "rtsp://contribute.example.test:8554"
+    settings.FK_MEDIAMTX_WEBRTC_URL = "https://contribute.example.test"
+    response = operator.post(
+        reverse("admin:fk_streamcredential_add"),
+        {
+            "source": source.pk,
+            "label": "OBS",
+            "action": "publish",
+        },
+    )
+    assert response.status_code == 200
+    secret = response.context["secret"]
+    examples = response.context["connection_examples"]
+    assert {example["label"] for example in examples} == {"SRT", "RTMP", "RTSP", "WebRTC / WHIP"}
+    for example in examples:
+        assert example["url"].startswith(("srt://", "rtmp://", "rtsp://", "https://"))
+        assert str(source.stream_id) in example["url"]
+        assert escape(example["url"]).encode() in response.content
+    assert b"<textarea" in response.content
+    assert b"readonly" in response.content
+    assert secret not in str(dict(operator.session))
+    credential = StreamCredential.objects.get()
+    later = operator.get(reverse("admin:fk_streamcredential_change", args=[credential.pk]))
+    assert secret.encode() not in later.content
