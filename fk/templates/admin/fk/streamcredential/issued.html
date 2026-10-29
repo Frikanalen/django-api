@@ -1,0 +1,14 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<p>Copy this password now. It will not be shown again. To rotate it, create another credential and revoke this one.</p>
+<dl>
+  <dt>Source</dt><dd>{{ credential.source }}</dd>
+  <dt>Action</dt><dd>{{ credential.get_action_display }}</dd>
+  <dt>Stream path</dt><dd><code>{{ stream_path }}</code></dd>
+  <dt>Username</dt><dd><code>{{ credential.key_id }}</code></dd>
+  <dt>Password</dt><dd><code>{{ secret }}</code></dd>
+</dl>
+<p>Revocation rejects new connections. Disconnecting an existing session requires MediaMTX session management.</p>
+<p><a href="{% url 'admin:fk_streamcredential_changelist' %}">Return to stream credentials</a></p>
+{% endblock %}

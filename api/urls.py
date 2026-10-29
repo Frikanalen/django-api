@@ -8,6 +8,7 @@ from rest_framework.routers import SimpleRouter
 
 import agenda.tvanytime.views as tvanytime_views
 import api.auth.views as auth_views
+import api.mediamtx as mediamtx_views
 import api.organization.views as organization_views
 import api.program_image.views as program_image_views
 import api.schedule.views as schedule_views
@@ -39,6 +40,7 @@ class ObtainAuthTokenJsonOnly(ObtainAuthToken):
 # the inferred type as list[URLPattern]; the router and include() both
 # contribute resolvers further down.
 api_patterns: list[URLPattern | URLResolver] = [
+    path("mediamtx/auth", mediamtx_views.authenticate, name="api-mediamtx-auth"),
     path("csrf", CsrfView.as_view(), name="api-csrf-detail"),
     # Auth
     path("user/register", auth_views.UserCreate.as_view(), name="api-user-create"),
