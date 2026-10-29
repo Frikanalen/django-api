@@ -290,6 +290,7 @@ def test_list_serializes_nested_video_details(
             "duration": "01:00:00",
             "displaceable": False,
             "weekly_slot": None,
+            "live_transmission": None,
         }
     ]
 
@@ -344,5 +345,6 @@ def test_list_serializes_named_programming_without_a_video(
             "duration": "00:30:00",
             "displaceable": False,
             "weekly_slot": None,
+            "live_transmission": None,
         }
     ]
