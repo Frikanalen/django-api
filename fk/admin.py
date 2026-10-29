@@ -158,7 +158,7 @@ class StreamCredentialAdmin(admin.ModelAdmin):
                 "opts": self.model._meta,
                 "credential": obj,
                 "secret": secret,
-                "stream_path": f"live/{obj.source.stream_id}",
+                "stream_path": obj.source.contribution_path,
                 "connection_examples": connection_examples(obj, secret),
             },
         )

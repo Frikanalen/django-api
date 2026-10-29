@@ -15,12 +15,12 @@ or disconnection of active sessions.
    session, messages, or database. Django stores a salted password hash.
 
 The username is the credential's key UUID. The path is exactly
-`live/<source stream UUID>` (no leading slash). Configure the username/password
+`contrib/live/<source stream UUID>` (no leading slash). Configure the username/password
 in the encoder using its protocol's MediaMTX credential syntax. For example:
 
 ```text
-srt://<host>:8890?streamid=publish:live/<source stream UUID>:<key UUID>:<password>&pkt_size=1316
-rtsp://<key UUID>:<password>@<host>:8554/live/<source stream UUID>
+srt://<host>:8890?streamid=publish:contrib/live/<source stream UUID>:<key UUID>:<password>&pkt_size=1316
+rtsp://<key UUID>:<password>@<host>:8554/contrib/live/<source stream UUID>
 ```
 
 Use SRT transport encryption (configured separately) or a trusted network/VPN;
@@ -96,7 +96,7 @@ MediaMTX sends JSON such as:
   "token": "",
   "ip": "192.0.2.1",
   "action": "publish",
-  "path": "live/<source stream UUID>",
+  "path": "contrib/live/<source stream UUID>",
   "protocol": "srt",
   "id": "<MediaMTX connection ID>",
   "query": "",
@@ -135,14 +135,14 @@ and [SRT clients](https://mediamtx.org/docs/publish/srt).
 
 ## Opus preview workers
 
-Read credentials are scoped to the source: they can read both `live/<UUID>` and
-its derived `preview/<UUID>`. A normal Publish credential can publish only the
-original `live/<UUID>` input and cannot replace the derived preview.
+Read credentials are scoped to the source: they can read both `contrib/live/<UUID>` and
+its derived `contrib/preview/<UUID>`. A normal Publish credential can publish only the
+original `contrib/live/<UUID>` input and cannot replace the derived preview.
 
 Issue a **Preview conversion worker** credential for a configured source and
 put its username/password in a Kubernetes Secret referenced by the MediaMTX
 chart's `preview.sources` entry. This worker role has exactly two operations,
-both over RTSP: read `live/<UUID>` and publish `preview/<UUID>`. It cannot publish
+both over RTSP: read `contrib/live/<UUID>` and publish `contrib/preview/<UUID>`. It cannot publish
 the contribution, read its own preview output, access another source, or use
 administrative actions. Its admin dialog shows only those two permitted RTSP
 URLs. Expiry, revocation and disabled-source checks apply to workers too.

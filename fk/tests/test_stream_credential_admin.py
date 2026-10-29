@@ -80,7 +80,7 @@ def test_revoke_rejects_new_connections_and_cannot_be_undone_by_edit(operator, s
             "user": str(credential.key_id),
             "password": secret,
             "action": "publish",
-            "path": f"live/{source.stream_id}",
+            "path": f"contrib/live/{source.stream_id}",
         },
         content_type="application/json",
     )
