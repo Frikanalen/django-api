@@ -17,13 +17,15 @@ Two properties matter, and they pull against each other:
     much depend on who asked.
 """
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from django.core.cache import cache
 from django.urls import reverse
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
-from fk.models import Organization, User, Video
+from fk.models import Organization, Scheduleitem, User, Video
 
 pytestmark = pytest.mark.django_db
 
@@ -186,3 +188,32 @@ def test_the_cache_key_survives_the_api_timezone_override(catalogue, settings) -
     pages = cached_pages()
     assert len(pages) == 1, pages
     assert pages[0].endswith(f".{settings.TIME_ZONE}")
+
+
+def test_the_schedule_is_never_served_from_the_cache(catalogue) -> None:
+    """Playout reads the schedule anonymously and must see a late booking.
+
+    A slot booked minutes before it airs has to reach playout at once; a
+    ten-minute-old copy from the page cache would let it go out as filler.
+    """
+    video = Video.objects.get(name="first video")
+    starttime = datetime(2015, 6, 1, 12, tzinfo=UTC)
+    url = reverse("api-scheduleitem-list")
+    client = APIClient()
+
+    def book(offset: timedelta) -> None:
+        Scheduleitem.objects.create(
+            video=video,
+            starttime=starttime + offset,
+            duration=timedelta(minutes=30),
+            schedulereason=Scheduleitem.REASON_ADMIN,
+        )
+
+    book(timedelta(0))
+    first = client.get(url, {"date": "2015-06-01"}).json()["results"]
+    book(timedelta(hours=1))
+    second = client.get(url, {"date": "2015-06-01"}).json()["results"]
+
+    assert len(first) == 1
+    assert len(second) == 2
+    assert not cached_pages(), "a schedule response was written to the shared cache"
