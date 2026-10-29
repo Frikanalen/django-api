@@ -10,6 +10,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.debug import sensitive_variables
 from django.views.decorators.http import require_POST
 
+from api.auth.permissions import can_administer_organization
+from fk import preview_tokens
 from fk.models import StreamCredential
 
 
@@ -29,6 +31,10 @@ def authenticate(request):
         return HttpResponse(status=401)
     if not isinstance(payload, dict):
         return HttpResponse(status=401)
+
+    token = payload.get("token")
+    if isinstance(token, str) and token and not payload.get("password"):
+        return authenticate_preview_token(token, payload)
 
     user = payload.get("user")
     password = payload.get("password")
@@ -79,4 +85,23 @@ def authenticate(request):
     # Use the upstream wire format, not the public API's camelCase renderer.
     if credential.expires_at is not None:
         return JsonResponse({"expireAt": credential.expires_at.isoformat()})
+    return HttpResponse(status=204)
+
+
+@sensitive_variables("token")
+def authenticate_preview_token(token, payload):
+    # A member's browser previewing its own organization's feed over WHEP.
+    # The token stands in for the site session MediaMTX cannot see; it
+    # allows reading the source's two paths and nothing else.
+    if len(token) > 512 or payload.get("action") != "read" or payload.get("protocol") != "webrtc":
+        return HttpResponse(status=401)
+    claims = preview_tokens.verify(token)
+    if claims is None:
+        return HttpResponse(status=401)
+    source, user = claims
+    if payload.get("path") not in (source.contribution_path, source.preview_path):
+        return HttpResponse(status=401)
+    # Rechecked on use, so leaving the organization ends access at once.
+    if not can_administer_organization(user, source.organization):
+        return HttpResponse(status=401)
     return HttpResponse(status=204)
