@@ -1,6 +1,7 @@
 """MediaMTX HTTP authentication; intentionally independent of DRF sessions."""
 
 import json
+from ipaddress import ip_address
 from uuid import UUID
 
 from django.db.models import Q
@@ -36,6 +37,8 @@ def authenticate(request):
     token = payload.get("token")
     if isinstance(token, str) and token and not payload.get("password"):
         return authenticate_preview_token(token, payload)
+    if not payload.get("password") and _is_loopback(payload.get("ip")):
+        return authenticate_local_converter(payload)
 
     user = payload.get("user")
     password = payload.get("password")
@@ -68,7 +71,7 @@ def authenticate(request):
         allowed = (
             action == "read"
             and payload.get("protocol") == "rtsp"
-            and _is_enabled_contribution(path)
+            and _is_enabled_source_path(path, "contribution_path")
         )
         return _grant(credential, password) if allowed else HttpResponse(status=401)
     live_path = credential.source.contribution_path
@@ -105,8 +108,8 @@ def _grant(credential, password):
     return HttpResponse(status=204)
 
 
-def _is_enabled_contribution(path):
-    """Whether path is exactly the contribution path of an enabled source."""
+def _is_enabled_source_path(path, kind):
+    """Whether path is exactly an enabled source's contribution_path or preview_path."""
     if not isinstance(path, str):
         return False
     try:
@@ -114,9 +117,9 @@ def _is_enabled_contribution(path):
     except ValueError:
         return False
     source = LiveSource.objects.filter(stream_id=stream_id, enabled=True).first()
-    # Compare the whole path, so neither the preview nor a variant spelling
-    # of the UUID passes for the contribution.
-    return source is not None and source.contribution_path == path
+    # Compare the whole path, so neither the other kind of path nor a
+    # variant spelling of the UUID passes.
+    return source is not None and getattr(source, kind) == path
 
 
 @sensitive_variables("token")
@@ -136,3 +139,26 @@ def authenticate_preview_token(token, payload):
     if not can_administer_organization(user, source.organization):
         return HttpResponse(status=401)
     return HttpResponse(status=204)
+
+
+def _is_loopback(ip):
+    try:
+        return isinstance(ip, str) and ip_address(ip).is_loopback
+    except ValueError:
+        return False
+
+
+def authenticate_local_converter(payload):
+    # MediaMTX's own on-demand Opus converter, an FFmpeg it starts inside its
+    # pod when someone opens a preview. Only a process in that pod reaches
+    # MediaMTX from loopback (outside clients arrive through the
+    # LoadBalancer), so the address stands in for a credential. It may read
+    # an enabled source's original and publish that source's preview over
+    # RTSP, and nothing else.
+    action = payload.get("action")
+    path = payload.get("path")
+    allowed = payload.get("protocol") == "rtsp" and (
+        (action == "read" and _is_enabled_source_path(path, "contribution_path"))
+        or (action == "publish" and _is_enabled_source_path(path, "preview_path"))
+    )
+    return HttpResponse(status=204 if allowed else 401)

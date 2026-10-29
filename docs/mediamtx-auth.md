@@ -191,3 +191,14 @@ credential named by `--keep` while it is valid and prints only
 `{"changed": false, ...}`. Otherwise it revokes earlier provisioned playout
 credentials and prints a new username and password, once, for the Secret.
 Playout credentials issued by hand in admin are left alone.
+
+## On-demand preview converter
+
+The MediaMTX chart can produce `contrib/preview/<UUID>` on demand. When someone
+opens a preview, MediaMTX starts FFmpeg inside its own pod. FFmpeg reads the
+original over local RTSP and publishes the Opus preview back. It has no
+credential. Instead, the callback accepts an RTSP request with no password from
+a loopback address (`127.0.0.1` or `::1`). Such a request may read
+`contrib/live/<UUID>` or publish `contrib/preview/<UUID>` of an enabled source,
+and nothing else. Only a process in the MediaMTX pod can connect from loopback,
+because outside clients arrive through the LoadBalancer.

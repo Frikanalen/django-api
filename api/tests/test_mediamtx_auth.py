@@ -316,3 +316,58 @@ def test_only_the_playout_reader_may_lack_a_source(playout):
         StreamCredential.objects.create(
             label="Bad", action=StreamCredential.Action.READ, secret_hash="x"
         )
+
+
+def as_local_converter(action, path, **overrides):
+    payload = {
+        "user": "",
+        "password": "",
+        "token": "",
+        "ip": "127.0.0.1",
+        "action": action,
+        "path": path,
+        "protocol": "rtsp",
+        "id": str(uuid4()),
+        "query": "",
+        **overrides,
+    }
+    return (
+        Client(enforce_csrf_checks=True)
+        .post(reverse("api-mediamtx-auth"), payload, content_type="application/json")
+        .status_code
+    )
+
+
+@pytest.mark.parametrize("ip", ["127.0.0.1", "::1"])
+def test_loopback_converter_reads_originals_and_publishes_previews(playout, ip):
+    _, _, sources = playout
+    for source in sources:
+        assert as_local_converter("read", source.contribution_path, ip=ip) == 204
+        assert as_local_converter("publish", source.preview_path, ip=ip) == 204
+
+
+@pytest.mark.parametrize(
+    "action,kind,overrides",
+    [
+        ("publish", "contribution_path", {}),
+        ("read", "preview_path", {}),
+        ("read", "contribution_path", {"ip": "192.0.2.1"}),
+        ("read", "contribution_path", {"ip": "10.0.0.5"}),
+        ("read", "contribution_path", {"ip": "not-an-ip"}),
+        ("read", "contribution_path", {"protocol": "webrtc"}),
+        ("read", "contribution_path", {"protocol": "srt"}),
+    ],
+)
+def test_loopback_converter_gets_nothing_else(playout, action, kind, overrides):
+    _, _, sources = playout
+    assert as_local_converter(action, getattr(sources[0], kind), **overrides) == 401
+
+
+def test_loopback_converter_cannot_touch_unknown_or_disabled_sources(playout):
+    _, _, sources = playout
+    assert as_local_converter("read", f"contrib/live/{uuid4()}") == 401
+    source = sources[0]
+    source.enabled = False
+    source.save()
+    assert as_local_converter("read", source.contribution_path) == 401
+    assert as_local_converter("publish", source.preview_path) == 401
