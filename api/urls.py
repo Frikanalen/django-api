@@ -8,6 +8,7 @@ from rest_framework.routers import SimpleRouter
 
 import agenda.tvanytime.views as tvanytime_views
 import api.auth.views as auth_views
+import api.live.views as live_views
 import api.mediamtx as mediamtx_views
 import api.organization.views as organization_views
 import api.program_image.views as program_image_views
@@ -100,6 +101,17 @@ api_patterns: list[URLPattern | URLResolver] = [
         "organization/<int:pk>",
         organization_views.OrganizationDetail.as_view(),
         name="api-organization-detail",
+    ),
+    # Live contribution: an organization checks its own incoming feed.
+    path(
+        "organization/<int:pk>/live-sources",
+        live_views.OrganizationLiveSourceList.as_view(),
+        name="api-organization-live-source-list",
+    ),
+    path(
+        "live-sources/<int:pk>/preview-token",
+        live_views.LiveSourcePreviewToken.as_view(),
+        name="api-live-source-preview-token",
     ),
     # Recurring airtime. Members control only what fills an allocated slot;
     # changes to its day, start, and duration go through an audited request.

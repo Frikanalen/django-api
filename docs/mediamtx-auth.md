@@ -152,6 +152,25 @@ and the Opus-preview WHEP URL. The latter requires a configured worker. No
 cleartext worker secret is recoverable from Django after issuance; provision it
 into the cluster Secret at issuance or rotate it.
 
+## Browser previews for organization members
+
+MediaMTX does not see the site's login cookie, so a logged-in member's browser
+uses a short-lived bearer token instead of a stream credential:
+
+1. `GET /api/organization/<id>/live-sources` lists the organization's sources,
+   their `contrib/` paths and the bookings that have not ended yet.
+2. `POST /api/live-sources/<id>/preview-token` returns a signed token, valid for
+   five minutes, naming the source and the member.
+3. The browser sends a WHEP offer to `https://<site>/<path>/whep` with
+   `Authorization: Bearer <token>`. MediaMTX forwards it as `token`.
+
+The callback accepts such a token only for `read` over `webrtc` on that source's
+`contrib/live/<UUID>` or `contrib/preview/<UUID>`. It rechecks that the source is
+enabled and the user is active and still belongs to the organization. Nothing is
+stored; expiry only stops new sessions from starting, not one already playing.
+Browsers cannot decode the original feed's AAC audio, so only the Opus preview
+path carries sound.
+
 ## Playout reader
 
 Playout plays whichever source the schedule books, so a per-source Read
