@@ -21,6 +21,14 @@ spec:
                 name: django-api
                 port:
                   number: 8080
+          # Ahead of /api: the event stream is served by the ASGI deployment.
+          - path: /api/playout/events
+            pathType: Exact
+            backend:
+              service:
+                name: django-api-events
+                port:
+                  number: 8080
           - path: /api
             pathType: Prefix
             backend:

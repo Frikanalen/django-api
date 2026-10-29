@@ -5,6 +5,11 @@ django:
     pullPolicy: IfNotPresent
   secretName: django-secret
 
+events:
+  # Each process listens to the database once and serves any number of
+  # streams, so one is plenty; more only add failover.
+  replicas: 1
+
 nginx:
   image:
     repository: nginx
