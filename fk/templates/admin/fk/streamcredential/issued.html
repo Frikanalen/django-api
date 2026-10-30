@@ -1,5 +1,13 @@
 {% extends "admin/base_site.html" %}
 
+{% block extrastyle %}{{ block.super }}
+<style>
+  .connection-value { display: flex; align-items: start; gap: .75rem; margin: .5rem 0 1rem; }
+  .connection-value pre { flex: 1; margin: 0; padding: .75rem; overflow-wrap: anywhere; white-space: pre-wrap; }
+  .connection-value button { white-space: nowrap; }
+</style>
+{% endblock %}
+
 {% block content %}
 <p>Copy this password now. It will not be shown again. To rotate it, create another credential and revoke this one.</p>
 <dl>
@@ -12,17 +20,36 @@
 <h2>Connection URLs</h2>
 {% for example in connection_examples %}
 <div class="form-row">
-  <label for="connection-url-{{ forloop.counter }}">{{ example.label }}</label>
-  <textarea id="connection-url-{{ forloop.counter }}" rows="3" cols="100" readonly onclick="this.select()">{{ example.url }}</textarea>
+  <h3>{{ example.label }}</h3>
+  <div class="connection-value">
+    <pre><code id="connection-url-{{ forloop.counter }}">{{ example.url }}</code></pre>
+    <button type="button" data-copy="connection-url-{{ forloop.counter }}">Copy</button>
+  </div>
   {% if example.token %}
-  <label for="connection-token-{{ forloop.counter }}">Bearer token (paste into your client's token field)</label>
-  <textarea id="connection-token-{{ forloop.counter }}" rows="2" cols="100" readonly onclick="this.select()">{{ example.token }}</textarea>
+  <p>Bearer token (paste into your client's token field)</p>
+  <div class="connection-value">
+    <pre><code id="connection-token-{{ forloop.counter }}">{{ example.token }}</code></pre>
+    <button type="button" data-copy="connection-token-{{ forloop.counter }}">Copy</button>
+  </div>
   {% endif %}
   {% if example.note %}<p>{{ example.note }}</p>{% endif %}
 </div>
 {% empty %}
 <p>MediaMTX connection addresses have not been configured for this environment.</p>
 {% endfor %}
+{% if blackmagic_config_base64 %}
+<h2>Blackmagic Web Presenter</h2>
+<p>The configuration contains this one-time password. Store it securely and load it with <strong>Load Streaming Settings</strong> in Blackmagic Web Presenter Setup.</p>
+<p><a class="button" download="frikanalen-web-presenter.xml" href="data:application/xml;base64,{{ blackmagic_config_base64 }}">Download configuration</a></p>
+{% endif %}
 <p>Revocation rejects new connections. Disconnecting an existing session requires MediaMTX session management.</p>
 <p><a href="{% url 'admin:fk_streamcredential_changelist' %}">Return to stream credentials</a></p>
+<script>
+  document.querySelectorAll('[data-copy]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(document.getElementById(button.dataset.copy).textContent);
+      button.textContent = 'Copied';
+    });
+  });
+</script>
 {% endblock %}

@@ -1,6 +1,7 @@
-"""Connection examples for the one-time credential response, never persisted."""
+"""Connection details for the one-time credential response, never persisted."""
 
 from urllib.parse import quote, urlencode, urlsplit, urlunsplit
+from xml.etree import ElementTree
 
 from django.conf import settings
 
@@ -8,6 +9,49 @@ from fk.models import LiveSource, StreamCredential
 
 # Shown where the playout reader's path depends on the booked source.
 PLACEHOLDER_STREAM_ID = "<source stream UUID>"
+
+
+def blackmagic_web_presenter_config(credential, secret):
+    """Return an importable Blackmagic Streaming XML document when applicable."""
+    if credential.action != StreamCredential.Action.PUBLISH:
+        return None
+
+    urls = {
+        example["label"]: example["url"]
+        for example in connection_examples(credential, secret)
+        if example["label"] in {"SRT", "RTMP"}
+    }
+    if not urls:
+        return None
+
+    streaming = ElementTree.Element("streaming")
+    service = ElementTree.SubElement(streaming, "service")
+    ElementTree.SubElement(service, "name").text = "Frikanalen"
+    servers = ElementTree.SubElement(service, "servers")
+    for protocol in ("SRT", "RTMP"):
+        if protocol not in urls:
+            continue
+        server = ElementTree.SubElement(servers, "server")
+        ElementTree.SubElement(server, "name").text = f"{credential.source.name} ({protocol})"
+        ElementTree.SubElement(server, "url").text = urls[protocol]
+
+    profiles = ElementTree.SubElement(service, "profiles", {"default": "Streaming High"})
+    for profile_name, bitrates in (
+        ("Streaming Low", {"720p": "3000000", "1080p": "4500000"}),
+        ("Streaming High", {"720p": "6000000", "1080p": "8000000"}),
+    ):
+        profile = ElementTree.SubElement(profiles, "profile")
+        ElementTree.SubElement(profile, "name").text = profile_name
+        for resolution, bitrate in bitrates.items():
+            config = ElementTree.SubElement(
+                profile,
+                "config",
+                {"resolution": resolution, "fps": "50", "codec": "H264"},
+            )
+            ElementTree.SubElement(config, "bitrate").text = bitrate
+            ElementTree.SubElement(config, "audio-bitrate").text = "128000"
+
+    return ElementTree.tostring(streaming, encoding="unicode", xml_declaration=True)
 
 
 def connection_examples(credential, secret):

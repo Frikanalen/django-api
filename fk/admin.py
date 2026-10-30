@@ -1,5 +1,6 @@
 # Copyright (c) 2012-2013 Benjamin Bruheim <grolgh@gmail.com>
 # This file is covered by the LGPLv3 or later, read COPYING for details.
+from base64 import b64encode
 from typing import ClassVar
 
 from django.contrib import admin, messages
@@ -32,7 +33,11 @@ from fk.models import (
     WeeklySlotRequestStatus,
     WeeklySlotSource,
 )
-from fk.stream_connections import PLACEHOLDER_STREAM_ID, connection_examples
+from fk.stream_connections import (
+    PLACEHOLDER_STREAM_ID,
+    blackmagic_web_presenter_config,
+    connection_examples,
+)
 
 
 class UserAdmin(BaseUserAdmin):
@@ -149,6 +154,7 @@ class StreamCredentialAdmin(admin.ModelAdmin):
         # only in this response, never in a message/session or a model field.
         secret = obj.generate_secret()
         obj.save(update_fields=["secret_hash"])
+        blackmagic_config = blackmagic_web_presenter_config(obj, secret)
         response = TemplateResponse(
             request,
             "admin/fk/streamcredential/issued.html",
@@ -164,6 +170,9 @@ class StreamCredentialAdmin(admin.ModelAdmin):
                     else LiveSource(stream_id=PLACEHOLDER_STREAM_ID).contribution_path
                 ),
                 "connection_examples": connection_examples(obj, secret),
+                "blackmagic_config_base64": (
+                    b64encode(blackmagic_config.encode()).decode() if blackmagic_config else None
+                ),
             },
         )
         response["Cache-Control"] = "no-store, private"
