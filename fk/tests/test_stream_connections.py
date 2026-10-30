@@ -1,10 +1,11 @@
 from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
+from xml.etree import ElementTree
 
 import pytest
 
 from fk.models import LiveSource, StreamCredential
-from fk.stream_connections import connection_examples
+from fk.stream_connections import blackmagic_web_presenter_config, connection_examples
 
 
 @pytest.fixture
@@ -79,3 +80,45 @@ def test_read_credentials_include_derived_opus_whep_path(endpoints):
         == f"https://contribute.example.test/rtc/contrib/preview/{source.stream_id}/whep"
     )
     assert preview["token"] == f"{credential.key_id}:secret"
+
+
+def test_blackmagic_config_contains_publish_urls_and_debug_profiles(endpoints):
+    source = LiveSource(
+        name="Main & backup",
+        stream_id=UUID("11111111-1111-1111-1111-111111111111"),
+    )
+    credential = StreamCredential(
+        source=source,
+        action=StreamCredential.Action.PUBLISH,
+        key_id=UUID("22222222-2222-2222-2222-222222222222"),
+    )
+    document = ElementTree.fromstring(blackmagic_web_presenter_config(credential, "a&b"))
+    servers = {
+        server.findtext("name"): urlsplit(server.findtext("url"))
+        for server in document.findall("./service/servers/server")
+    }
+    assert set(servers) == {"Main & backup (SRT)", "Main & backup (RTMP)"}
+    assert servers["Main & backup (SRT)"].scheme == "srt"
+    assert parse_qs(servers["Main & backup (SRT)"].query)["streamid"] == [
+        f"publish:{source.contribution_path}:{credential.key_id}:a&b"
+    ]
+    rtmp = servers["Main & backup (RTMP)"]
+    assert rtmp.scheme == "rtmps"
+    assert rtmp.path == f"/{source.contribution_path}"
+    assert parse_qs(rtmp.query) == {"user": [str(credential.key_id)], "pass": ["a&b"]}
+    profiles = {
+        profile.findtext("name"): {
+            config.attrib["resolution"]: (config.attrib["fps"], config.findtext("bitrate"))
+            for config in profile.findall("config")
+        }
+        for profile in document.findall("./service/profiles/profile")
+    }
+    assert profiles == {
+        "Streaming Low": {"720p": ("50", "3000000"), "1080p": ("50", "4500000")},
+        "Streaming High": {"720p": ("50", "6000000"), "1080p": ("50", "8000000")},
+    }
+
+
+def test_blackmagic_config_is_only_offered_for_publish_credentials(endpoints):
+    credential = StreamCredential(source=LiveSource(), action=StreamCredential.Action.READ)
+    assert blackmagic_web_presenter_config(credential, "secret") is None

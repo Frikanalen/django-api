@@ -1,3 +1,6 @@
+import base64
+from xml.etree import ElementTree
+
 import pytest
 from django.urls import reverse
 from django.utils.html import escape
@@ -124,8 +127,21 @@ def test_issuance_renders_copyable_urls_without_persisting_secrets(operator, sou
         assert example["url"].startswith(("srt://", "rtmp://", "rtsp://", "https://"))
         assert str(source.stream_id) in example["url"]
         assert escape(example["url"]).encode() in response.content
-    assert b"<textarea" in response.content
-    assert b"readonly" in response.content
+    assert b"<pre><code" in response.content
+    assert b"data-copy=" in response.content
+    assert b"<textarea" not in response.content
+    config = base64.b64decode(response.context["blackmagic_config_base64"])
+    document = ElementTree.fromstring(config)
+    assert document.findtext("./service/name") == "Frikanalen"
+    rtmp_server = next(
+        server
+        for server in document.findall("./service/servers/server")
+        if server.findtext("name").endswith("(RTMP)")
+    )
+    assert rtmp_server.findtext("url") == next(
+        example["url"] for example in examples if example["label"] == "RTMP"
+    )
+    assert b'download="frikanalen-web-presenter.xml"' in response.content
     assert secret not in str(dict(operator.session))
     credential = StreamCredential.objects.get()
     later = operator.get(reverse("admin:fk_streamcredential_change", args=[credential.pk]))
@@ -146,6 +162,7 @@ def test_issues_a_playout_reader_without_a_source(operator, source, settings):
     [example] = response.context["connection_examples"]
     assert example["url"].startswith(f"rtsp://{credential.key_id}:")
     assert b"All enabled sources" in response.content
+    assert response.context["blackmagic_config_base64"] is None
 
 
 def test_admin_requires_a_source_except_for_playout(operator, source):
