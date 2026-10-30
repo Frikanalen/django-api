@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.0.0](https://github.com/Frikanalen/django-api/compare/v1.0.0...v2.0.0) (2026-10-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** Video payloads no longer include ogvUrl or largeThumbnailUrl. Read files.theora.url and files.largeThumb.url from the files map instead; both keys are absent when the file does not exist, where the old fields returned null and /static/default_large_thumbnail.png respectively.
+
+### Features
+
+* add a playout reader credential for every enabled source ([#84](https://github.com/Frikanalen/django-api/issues/84)) ([8c9df5c](https://github.com/Frikanalen/django-api/commit/8c9df5c156020a8fdd7f800b394942a3aa9f37df))
+* Add live transmission data models ([#79](https://github.com/Frikanalen/django-api/issues/79)) ([dd581c6](https://github.com/Frikanalen/django-api/commit/dd581c6bd945cd9c30f64b19590c3c155645144b))
+* **api:** drop ogvUrl and largeThumbnailUrl, prune dead URL helpers ([#77](https://github.com/Frikanalen/django-api/issues/77)) ([346acc5](https://github.com/Frikanalen/django-api/commit/346acc5e6e79eef7179b279478be647794955db4))
+* book live transmissions in admin and expose schedule metadata ([#80](https://github.com/Frikanalen/django-api/issues/80)) ([30f6202](https://github.com/Frikanalen/django-api/commit/30f620263be36534a78815195f2bea60cf4f9702))
+* export Web Presenter stream config ([#91](https://github.com/Frikanalen/django-api/issues/91)) ([c3ee285](https://github.com/Frikanalen/django-api/commit/c3ee2857a887647db0d1755d748705b8a11757b6))
+* let MediaMTX's own on-demand converter make Opus previews ([#90](https://github.com/Frikanalen/django-api/issues/90)) ([788a6b9](https://github.com/Frikanalen/django-api/commit/788a6b9ff30a1959c20c77b526b0407bbba312cd))
+* let organization members preview their live feed over WHEP ([#83](https://github.com/Frikanalen/django-api/issues/83)) ([5550f65](https://github.com/Frikanalen/django-api/commit/5550f659256f8e93602198f693354f1c39713eff))
+* MediaMTX stream credentials and Django authentication callback ([#81](https://github.com/Frikanalen/django-api/issues/81)) ([fd30372](https://github.com/Frikanalen/django-api/commit/fd303721e55a9f87ea3bf7b79575f00194f6efe3))
+* **playout:** push schedule changes over /api/playout/events ([#87](https://github.com/Frikanalen/django-api/issues/87)) ([78f59da](https://github.com/Frikanalen/django-api/commit/78f59daef5cd670113962b9b90eacb0a48cd82fc))
+* provision playout's reader credential from a management command ([#85](https://github.com/Frikanalen/django-api/issues/85)) ([4166676](https://github.com/Frikanalen/django-api/commit/41666760d98f9b4c418026399164bc11f2e62e94))
+* **video:** add dash_preview variant ([#75](https://github.com/Frikanalen/django-api/issues/75)) ([ea176e7](https://github.com/Frikanalen/django-api/commit/ea176e7da777e0ef266fc937a6a4f2ebd08058be))
+
+
+### Bug Fixes
+
+* **cache:** share the page cache and clear it when the schedule changes ([#86](https://github.com/Frikanalen/django-api/issues/86)) ([ee5fbb1](https://github.com/Frikanalen/django-api/commit/ee5fbb1c2c669a71c3a10edd7d1050db2a6957ef))
+
 ## [1.0.0](https://github.com/Frikanalen/django-api/compare/v0.2.0...v1.0.0) (2026-08-27)
 
 
