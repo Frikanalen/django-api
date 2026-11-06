@@ -51,14 +51,15 @@ TVAMain
 The join between the two tables is a **CRID**, a location-independent
 content identifier:
 
-- `crid://frikanalen.tv/video/<id>` for a video
-- `crid://frikanalen.tv/series/<id>` for a series
-- `crid://frikanalen.tv/schedule/<id>` for a transmission with no video
+- `crid://frikanalen.no/video/<id>` for a video
+- `crid://frikanalen.no/series/<id>` for a series
+- `crid://frikanalen.no/schedule/<id>` for a transmission with no video
   behind it, such as a live session
 
 CRIDs are stable and consumers may store them. The authority half —
-`frikanalen.tv` — is what makes them globally unique, so it must remain a
-domain we control; it is `TVA_AUTHORITY` in settings. Note it is
+`frikanalen.no` — is what makes them globally unique, so it must remain a
+domain we control; it is `TVA_AUTHORITY` in settings. It stays `frikanalen.no`
+even though the site now runs on frikanalen.tv, so existing CRIDs keep working. Note it is
 deliberately *not* `CHANNEL_ID` (`frikanalen.tv`), which is an RFC 2838
 broadcast URI rather than a registered domain.
 

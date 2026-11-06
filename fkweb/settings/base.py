@@ -72,7 +72,7 @@ SITE_URL = "https://frikanalen.tv"
 # Deliberately not CHANNEL_ID: "frikanalen.tv" is an RFC 2838 broadcast URI,
 # not a registered domain, and minting CRIDs under it would claim a namespace
 # that is not ours. Changing this orphans every CRID already published.
-TVA_AUTHORITY = "frikanalen.tv"
+TVA_AUTHORITY = "frikanalen.no"
 
 # Attribution, carried in MetadataOriginationInformationTable.
 TVA_PUBLISHER = "Foreningen Frikanalen"

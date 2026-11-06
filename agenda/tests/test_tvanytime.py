@@ -250,7 +250,7 @@ def test_item_without_a_video_validates_and_is_described(tva_schema) -> None:
 
     information = one(document, ".//tva:ProgramInformation")
     program_id = information.get("programId") or ""
-    assert program_id.startswith("crid://frikanalen.tv/schedule/")
+    assert program_id.startswith("crid://frikanalen.no/schedule/")
     assert one(information, ".//tva:Title").text == "Direktesending fra Stortinget"
 
 
@@ -271,7 +271,7 @@ def test_programme_is_described_once_however_often_it_airs(video: Video) -> None
     events = document.findall(".//tva:ScheduleEvent", NS)
     assert len(events) == 2
     crids = {one(event, "tva:Program").get("crid") for event in events}
-    assert crids == {f"crid://frikanalen.tv/video/{video.id}"}
+    assert crids == {f"crid://frikanalen.no/video/{video.id}"}
 
 
 def test_series_is_grouped_and_episode_is_joined_by_stable_crid(
@@ -301,7 +301,7 @@ def test_series_is_grouped_and_episode_is_joined_by_stable_crid(
 
     document = assert_valid(tva_schema, feed_for(DAY))
     group = one(document, ".//tva:GroupInformation")
-    group_crid = f"crid://frikanalen.tv/series/{series.pk}"
+    group_crid = f"crid://frikanalen.no/series/{series.pk}"
 
     assert group.get("groupId") == group_crid
     assert group.get("numOfItems") == "2"
@@ -424,7 +424,7 @@ def test_published_video_is_offered_on_demand(video: Video) -> None:
     document = etree.fromstring(feed_for(DAY))
     program = one(document, ".//tva:OnDemandService/tva:OnDemandProgram")
 
-    assert one(program, "tva:Program").get("crid") == f"crid://frikanalen.tv/video/{video.id}"
+    assert one(program, "tva:Program").get("crid") == f"crid://frikanalen.no/video/{video.id}"
     assert one(program, "tva:ProgramURL").text == f"https://frikanalen.tv/video/{video.id}/"
     assert one(program, "tva:StartOfAvailability").text == "2024-03-01T12:00:00+01:00"
     assert one(program, "tva:DeliveryMode").text == "streaming"
@@ -483,9 +483,9 @@ def test_services_describe_the_channel_and_the_archive() -> None:
     services = document.findall(".//tva:ServiceInformation", NS)
 
     by_id = {service.get("serviceId"): service for service in services}
-    assert set(by_id) == {"frikanalen.tv/frikanalen", "frikanalen.tv/vod"}
+    assert set(by_id) == {"frikanalen.no/frikanalen", "frikanalen.no/vod"}
 
-    linear = by_id["frikanalen.tv/frikanalen"]
+    linear = by_id["frikanalen.no/frikanalen"]
     assert one(linear, "tva:Name").text == "Frikanalen"
     assert [t.get("href") for t in linear.findall("tva:ServiceType", NS)] == [
         "urn:nordig:metadata:cs:ServiceTypeCS:2019:linear",
@@ -498,7 +498,7 @@ def test_document_attributes_identify_the_publisher() -> None:
 
     assert etree.QName(document).localname == "TVAMain"
     assert document.get("type") == "epg"
-    assert document.get("originID") == "frikanalen.tv"
+    assert document.get("originID") == "frikanalen.no"
     assert document.get("publisher") == "Foreningen Frikanalen"
     assert document.get("{http://www.w3.org/XML/1998/namespace}lang") == "no"
 
