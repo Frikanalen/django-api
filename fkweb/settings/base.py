@@ -24,7 +24,7 @@ load_env_from(".env")
 WEB_NO_TONO = True
 
 # Where all the media files are stored (Must have trailing slash)
-FK_MEDIA_URLPREFIX = env.str("FK_MEDIA_URLPREFIX", default="https://frikanalen.no/media/")
+FK_MEDIA_URLPREFIX = env.str("FK_MEDIA_URLPREFIX", default="https://frikanalen.tv/media/")
 # TODO: Is this in use at all?
 FK_MEDIA_ROOT = "/tank/new_media/media"
 
@@ -58,7 +58,7 @@ CHANNEL_ID = "frikanalen.tv"
 CHANNEL_DISPLAY_NAMES = ["Frikanalen"]
 
 # URL to the website for references in feeds (No trailing slash)
-SITE_URL = "https://frikanalen.no"
+SITE_URL = "https://frikanalen.tv"
 
 ########## TV-ANYTIME / NorDig EPG METADATA
 # The NorDig EPG/Event metadata exchange format (NorDig TVA Implementation
@@ -72,7 +72,7 @@ SITE_URL = "https://frikanalen.no"
 # Deliberately not CHANNEL_ID: "frikanalen.tv" is an RFC 2838 broadcast URI,
 # not a registered domain, and minting CRIDs under it would claim a namespace
 # that is not ours. Changing this orphans every CRID already published.
-TVA_AUTHORITY = "frikanalen.no"
+TVA_AUTHORITY = "frikanalen.tv"
 
 # Attribution, carried in MetadataOriginationInformationTable.
 TVA_PUBLISHER = "Foreningen Frikanalen"
@@ -133,7 +133,7 @@ ADMINS = (
 
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#managers
 MANAGERS = ADMINS + (
-    ("Frikanalen styret", "styret@frikanalen.no"),
+    ("Frikanalen styret", "styret@frikanalen.tv"),
     ("Olav Hardang", "olav.hardang@p7.no"),
 )
 ########## END MANAGER CONFIGURATION
@@ -440,7 +440,7 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_URLS_REGEX = r"^/api/.*$"  # anyway, only enable CORS for the API
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = "Frikanalen <noreply@frikanalen.no>"
+DEFAULT_FROM_EMAIL = "Frikanalen <noreply@frikanalen.tv>"
 SECRET_KEY = env.str("SECRET_KEY")
 ALLOWED_HOSTS = env.str("ALLOWED_HOSTS").split(",")
 DATABASES = {"default": env.db()}

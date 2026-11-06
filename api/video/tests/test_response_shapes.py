@@ -18,7 +18,7 @@ from fk.models import Category, Organization, User, Video, VideoFile, VideoFileV
 
 pytestmark = pytest.mark.django_db
 
-MEDIA = "https://frikanalen.no/media"
+MEDIA = "https://frikanalen.tv/media"
 
 CREATED = datetime(2015, 1, 1, 10, 0, tzinfo=UTC)
 UPDATED = datetime(2015, 1, 2, 10, 0, tzinfo=UTC)

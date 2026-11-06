@@ -28,7 +28,7 @@ URL expects. It is rendered from
 footer.
 
 ```bash
-curl -s 'https://frikanalen.no/api/tvanytime/upcoming?days=14' -o frikanalen-epg.xml
+curl -s 'https://frikanalen.tv/api/tvanytime/upcoming?days=14' -o frikanalen-epg.xml
 ```
 
 The two feeds appear in the OpenAPI schema at `/api/schema/`; the index
@@ -51,13 +51,13 @@ TVAMain
 The join between the two tables is a **CRID**, a location-independent
 content identifier:
 
-- `crid://frikanalen.no/video/<id>` for a video
-- `crid://frikanalen.no/series/<id>` for a series
-- `crid://frikanalen.no/schedule/<id>` for a transmission with no video
+- `crid://frikanalen.tv/video/<id>` for a video
+- `crid://frikanalen.tv/series/<id>` for a series
+- `crid://frikanalen.tv/schedule/<id>` for a transmission with no video
   behind it, such as a live session
 
 CRIDs are stable and consumers may store them. The authority half —
-`frikanalen.no` — is what makes them globally unique, so it must remain a
+`frikanalen.tv` — is what makes them globally unique, so it must remain a
 domain we control; it is `TVA_AUTHORITY` in settings. Note it is
 deliberately *not* `CHANNEL_ID` (`frikanalen.tv`), which is an RFC 2838
 broadcast URI rather than a registered domain.
@@ -82,7 +82,7 @@ Named against the NorDig terms list (`NorDigTVATerms_v1_4.xlsx`).
 | program duration | `Duration` | `Video.duration` |
 | series | `GroupInformation` / `EpisodeOf` | `Video.series` |
 | episode number | `EpisodeOf index` | `Video.episode_number` |
-| alternativ id | `OtherIdentifier type="URI"` | the video's page on frikanalen.no |
+| alternativ id | `OtherIdentifier type="URI"` | the video's page on frikanalen.tv |
 | image format | `AVAttributes/VideoAttributes/FrameRate` | `Video.framerate` |
 | event id | `InstanceMetadataId` | `imi:<scheduleitem id>` |
 | event display start/endtime | `PublishedStartTime`/`PublishedEndTime` | `Scheduleitem.starttime` and `.endtime` |
@@ -173,7 +173,7 @@ before we did.
 To check a live response by hand:
 
 ```bash
-curl -s https://frikanalen.no/api/tvanytime/upcoming > feed.xml
+curl -s https://frikanalen.tv/api/tvanytime/upcoming > feed.xml
 xmllint --noout --schema agenda/tvanytime/schemas/tva_metadata_3-1.xsd feed.xml
 ```
 
