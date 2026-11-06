@@ -41,16 +41,16 @@ env:
   # The memcached this chart deploys. Shared by every worker and pod, so a
   # schedule change can clear the page cache everywhere at once.
   CACHE_URL: pymemcache://memcached:11211
-  ALLOWED_HOSTS: beta.frikanalen.no
-  CSRF_TRUSTED_ORIGINS: https://beta.frikanalen.no
+  ALLOWED_HOSTS: beta.frikanalen.tv
+  CSRF_TRUSTED_ORIGINS: https://beta.frikanalen.tv
   # Handed to the frontend as a video's uploadUrl. Always set it: the settings
   # default to the production URL, so leaving it out makes a non-production
   # deployment advertise production's endpoint. Points at tusd, which the
   # ingest chart serves under /upload on this same host.
-  FK_UPLOAD_URL: https://beta.frikanalen.no/upload
+  FK_UPLOAD_URL: https://beta.frikanalen.tv/upload
   # Same reasoning as FK_UPLOAD_URL above. Points at the media-server ingress
   # for this environment's own archive.
-  FK_MEDIA_URLPREFIX: https://beta.frikanalen.no/media/
+  FK_MEDIA_URLPREFIX: https://beta.frikanalen.tv/media/
 
 service:
   type: ClusterIP
@@ -59,7 +59,7 @@ service:
 ingress:
   enabled: true
   className: traefik
-  hostname: beta.frikanalen.no
+  hostname: beta.frikanalen.tv
 
 monitoring:
   # Off by default: the ServiceMonitor CRD only exists where

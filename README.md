@@ -1,6 +1,6 @@
 # fkweb
 
-Backend API for the Norwegian public access TV channel [Frikanalen](https://frikanalen.no/).
+Backend API for the Norwegian public access TV channel [Frikanalen](https://frikanalen.tv/).
 
 ## Configuration
 
@@ -171,9 +171,9 @@ It contains the following organizations:
 
 Additionally, the following users:
 
-- dev-admin@frikanalen.no _site administrator_
-- dev-org1-admin@frikanalen.no _administrator for org1_
-- dev-org1-member@frikanalen.no _member of org1_
-- dev-org2-admin@frikanalen.no _administrator for org2_
+- dev-admin@frikanalen.tv _site administrator_
+- dev-org1-admin@frikanalen.tv _administrator for org1_
+- dev-org1-member@frikanalen.tv _member of org1_
+- dev-org2-admin@frikanalen.tv _administrator for org2_
 
 For more advanced things you'd want to check [our infrastructure Ansible setup](../../infra/README.md).

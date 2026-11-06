@@ -425,7 +425,7 @@ def test_published_video_is_offered_on_demand(video: Video) -> None:
     program = one(document, ".//tva:OnDemandService/tva:OnDemandProgram")
 
     assert one(program, "tva:Program").get("crid") == f"crid://frikanalen.no/video/{video.id}"
-    assert one(program, "tva:ProgramURL").text == f"https://frikanalen.no/video/{video.id}/"
+    assert one(program, "tva:ProgramURL").text == f"https://frikanalen.tv/video/{video.id}/"
     assert one(program, "tva:StartOfAvailability").text == "2024-03-01T12:00:00+01:00"
     assert one(program, "tva:DeliveryMode").text == "streaming"
 

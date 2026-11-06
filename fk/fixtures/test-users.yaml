@@ -3,7 +3,7 @@
   fields:
     password: pbkdf2_sha256$216000$RUnVSlG5G8eg$exSswgMqCZP/l9wzCt+5SBU8BROd69AJkNznojhhMm4=
     last_login: 2021-08-28 18:27:04.003185+00:00
-    email: dev-admin@frikanalen.no
+    email: dev-admin@frikanalen.tv
     first_name: ''
     last_name: ''
     is_active: true
@@ -17,7 +17,7 @@
   fields:
     password: pbkdf2_sha256$216000$vFxBvubuz1hD$kNIOLjULQ7WyKshq4XAvhzYamX1n755HlFPY0MlZxO8=
     last_login: null
-    email: dev-org1-editor@frikanalen.no
+    email: dev-org1-editor@frikanalen.tv
     first_name: ''
     last_name: ''
     is_active: true
@@ -31,7 +31,7 @@
   fields:
     password: pbkdf2_sha256$216000$sIulX4V9OfI7$qv9wAAEfhYCU4gki4+COymdtq4N8ECiZBVvdpkpLvuw=
     last_login: null
-    email: dev-org1-member@frikanalen.no
+    email: dev-org1-member@frikanalen.tv
     first_name: ''
     last_name: ''
     is_active: true
@@ -45,7 +45,7 @@
   fields:
     password: pbkdf2_sha256$216000$WZkOfbmwSiet$3FvnmnP1yRDbiQsZkMifBY5Hh5Sm+UncceHOsMQn/xg=
     last_login: null
-    email: dev-org2-editor@frikanalen.no
+    email: dev-org2-editor@frikanalen.tv
     first_name: ''
     last_name: ''
     is_active: true
