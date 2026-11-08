@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/Frikanalen/django-api/compare/v2.0.0...v2.1.0) (2026-11-08)
+
+
+### Features
+
+* move from frikanalen.no to frikanalen.tv ([#92](https://github.com/Frikanalen/django-api/issues/92)) ([eae19ae](https://github.com/Frikanalen/django-api/commit/eae19aef1f8cf1e806ce6f3949f88f6d99ffec6e))
+
 ## [2.0.0](https://github.com/Frikanalen/django-api/compare/v1.0.0...v2.0.0) (2026-10-30)
 
 
