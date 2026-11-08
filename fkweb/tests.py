@@ -35,6 +35,13 @@ def test_operational_web_routes_remain_registered(path: str, view_name: str) -> 
     assert resolve(path).view_name == view_name
 
 
+def test_api_root_with_trailing_slash_redirects_to_bare_api() -> None:
+    response = Client().get("/api/")
+
+    assert response.status_code == 301
+    assert response["Location"] == "/api"
+
+
 def test_admin_assets_use_the_static_ingress_prefix() -> None:
     assert settings.STATIC_URL == "/static/"
 

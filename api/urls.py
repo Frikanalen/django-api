@@ -1,6 +1,7 @@
 # Copyright (c) 2012-2013 Benjamin Bruheim <grolgh@gmail.com>
 # This file is covered by the LGPLv3 or later, read COPYING for details.
 from django.urls import URLPattern, URLResolver, include, path, re_path
+from django.views.generic import RedirectView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from rest_framework import parsers
 from rest_framework.authtoken.views import ObtainAuthToken
@@ -192,5 +193,9 @@ urlpatterns: list[URLPattern | URLResolver] = [
     # Bare "/api", with no trailing slash, lives outside the include() below
     # since path("api/", ...) can only ever match paths that have the slash.
     path("api", views.api_root, name="api-root"),
+    # "/api/" with the slash matches the include() prefix but no pattern in
+    # it, so it used to 404. Send it to the canonical root instead; old links
+    # (the website footer pointed here) keep working.
+    path("api/", RedirectView.as_view(pattern_name="api-root", permanent=True)),
     path("api/", include(api_patterns)),
 ]
