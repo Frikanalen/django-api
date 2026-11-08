@@ -84,7 +84,7 @@ def test_daily_feed_document_structure(video: Video) -> None:
     channel = child(doc, "channel")
     assert channel.attrib == {"id": "frikanalen.tv"}
     assert [name.text for name in channel.findall("display-name")] == ["Frikanalen"]
-    assert child(channel, "url").text == "https://frikanalen.no"
+    assert child(channel, "url").text == "https://frikanalen.tv"
 
     with_video, without_video = doc.findall("programme")
 
@@ -96,7 +96,7 @@ def test_daily_feed_document_structure(video: Video) -> None:
     assert child(with_video, "title").attrib == {"lang": "no"}
     assert child(with_video, "title").text == "Documentary"
     assert child(with_video, "desc").text == "About the harbour"
-    assert child(with_video, "url").text == f"https://frikanalen.no/video/{video.id}/"
+    assert child(with_video, "url").text == f"https://frikanalen.tv/video/{video.id}/"
     assert child(with_video, "length").attrib == {"units": "seconds"}
     assert child(with_video, "length").text == "3600"
 

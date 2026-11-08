@@ -66,7 +66,7 @@ def test_ingest_can_register_an_archived_image(staff_client: APIClient, video: V
     assert created.filename == registration(video)["filename"]
     assert (created.width, created.height) == (1200, 675)
     assert response.json()["url"] == (
-        f"https://frikanalen.no/media/{video.pk}/images/2f92e90dbb444e67bdb0893b5fe1d697.png"
+        f"https://frikanalen.tv/media/{video.pk}/images/2f92e90dbb444e67bdb0893b5fe1d697.png"
     )
 
 
