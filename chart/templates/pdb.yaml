@@ -1,0 +1,16 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- range $name, $d := dict "django" (dict "app" "django-api" "replicas" .Values.django.replicas) "django-events" (dict "app" "django-api-events" "replicas" .Values.events.replicas) }}
+{{- if gt (int $d.replicas) 1 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}
+spec:
+  maxUnavailable: {{ $.Values.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      app: {{ $d.app }}
+{{- end }}
+{{- end }}
+{{- end }}

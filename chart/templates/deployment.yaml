@@ -3,6 +3,7 @@ kind: Deployment
 metadata:
   name: django
 spec:
+  replicas: {{ .Values.django.replicas }}
   selector:
     matchLabels:
       app: django-api
@@ -14,6 +15,15 @@ spec:
       labels:
         app: django-api
     spec:
+      {{- if gt (int .Values.django.replicas) 1 }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: django-api
+      {{- end }}
       containers:
         - name: django
           image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag }}"
