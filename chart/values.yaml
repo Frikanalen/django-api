@@ -4,11 +4,19 @@ django:
     tag: latest
     pullPolicy: IfNotPresent
   secretName: django-secret
+  # Two, on different nodes where possible, so draining a node never takes
+  # the API down; see templates/pdb.yaml.
+  replicas: 2
 
 events:
   # Each process listens to the database once and serves any number of
-  # streams, so one is plenty; more only add failover.
-  replicas: 1
+  # streams, so one would carry the load; the second is there so a node
+  # drain doesn't cut every playout subscriber off at once.
+  replicas: 2
+
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
 
 nginx:
   image:
