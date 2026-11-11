@@ -7,7 +7,6 @@ from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
-from django.db.models import Count
 from django.forms.models import BaseInlineFormSet
 from django.template.response import TemplateResponse
 from django.utils import timezone
@@ -20,18 +19,15 @@ from fk.models import (
     LiveTransmission,
     Organization,
     ProgramImage,
+    RecurringSlotCreationRequest,
+    RecurringSlotOwnershipRequest,
+    ReviewStatus,
     Scheduleitem,
     Series,
-    SlotSourceType,
     StreamCredential,
     User,
     Video,
     VideoFile,
-    WeeklySlot,
-    WeeklySlotCreationRequest,
-    WeeklySlotOwnershipRequest,
-    WeeklySlotRequestStatus,
-    WeeklySlotSource,
 )
 from fk.stream_connections import (
     PLACEHOLDER_STREAM_ID,
@@ -194,17 +190,10 @@ class ScheduleitemAdmin(admin.ModelAdmin):
     # exclude = ('video',)
     search_fields = ["video__name", "video__organization__name"]
     ordering = ("starttime",)
-    # Provenance is system-owned: visible for debugging, never
-    # hand-assigned -- an item with a slot recorded is one the nightly
-    # re-pick may replace.
-    readonly_fields = ("weekly_slot",)
-
-    def save_model(self, request, obj, form, change):
-        if change:
-            # An admin edit makes the item deliberate programming, same
-            # as an API edit: the nightly re-pick must not overwrite it.
-            obj.weekly_slot = None
-        super().save_model(request, obj, form, change)
+    # Provenance is system-owned: the grant the compiler wrote the row
+    # from, and the historical schedule reason. Staff entries leave both
+    # empty, which is what holds them to the no-overlap constraint.
+    readonly_fields = ("grant", "schedulereason")
 
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
@@ -247,136 +236,6 @@ class IngestJobAdmin(admin.ModelAdmin):
         return False
 
 
-class WeeklySlotInline(admin.TabularInline):
-    """The slots a source fills, shown from the source's side.
-
-    Read-only: a slot is airtime, and airtime is edited where airtime
-    lives. This is here so that "what does this source actually do?" has
-    an answer on the page, rather than requiring a trawl of the slot
-    list.
-    """
-
-    model = WeeklySlot
-    extra = 0
-    fields = ("day", "start_time", "duration")
-    readonly_fields = fields
-    can_delete = False
-    show_change_link = True
-    verbose_name_plural = "Slots filled from this source"
-
-    def has_add_permission(self, request, obj=None):
-        return False
-
-
-class WeeklySlotSourceAdmin(admin.ModelAdmin):
-    """A source answers "what airs here?" for a recurring slot.
-
-    The form is split along the two questions the model actually asks:
-    which videos are candidates, and which one of them goes on the air.
-    `eligible_videos` reports the answer the scheduler would get right
-    now -- including the videos it silently drops -- because a source
-    that quietly picks nothing looks identical to one that works.
-    """
-
-    list_display = (
-        "__str__",
-        "type",
-        "strategy",
-        "organization",
-        "slot_count",
-        "video_count",
-    )
-    list_filter = ("type", "strategy")
-    search_fields = ("name", "organization__name")
-    filter_horizontal = ("direct_videos",)
-    inlines = [WeeklySlotInline]
-    readonly_fields = ("eligible_videos",)
-    fieldsets = (
-        (None, {"fields": ("name",)}),
-        (
-            "Which videos are candidates",
-            {
-                "fields": ("type", "organization", "direct_videos"),
-                "description": (
-                    "Only the field matching the chosen type is read; the other is ignored."
-                ),
-            },
-        ),
-        (
-            "Which candidate airs",
-            {
-                "fields": ("strategy",),
-                "description": (
-                    "Applied afresh every time a slot comes round, so the answer may "
-                    "change between one week and the next."
-                ),
-            },
-        ),
-        ("Right now", {"fields": ("eligible_videos",)}),
-    )
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).annotate(_slot_count=Count("weeklyslot"))
-
-    @admin.display(description="slots", ordering="_slot_count")
-    def slot_count(self, obj):
-        return obj._slot_count
-
-    @admin.display(description="videos")
-    def video_count(self, obj):
-        """How many videos a source has, as eligible-of-total.
-
-        This column used to dump every title, which made the changelist
-        unreadable at the width a list is read for. The number that
-        matters here is whether the scheduler has anything to pick from;
-        which videos those are is a question for the change page.
-        """
-        if obj.type == SlotSourceType.ORGANIZATION and obj.organization_id is None:
-            return "--"
-        try:
-            total = obj.candidate_videos().count()
-        except ValueError:
-            # An unhandled type. The change page says so at length;
-            # a changelist cell has no room to explain.
-            return "--"
-        eligible = obj.videos_queryset().count()
-        return str(total) if eligible == total else f"{eligible} of {total}"
-
-    @admin.display(description="Eligible videos")
-    def eligible_videos(self, obj=None):
-        """What the scheduler would find, and what it threw away.
-
-        The two filters in `videos_queryset` are invisible to an editor:
-        a failed import and an organization with no responsible editor
-        both just produce a source that never airs anything."""
-        if obj is None or obj.pk is None:
-            return "Save the source to see what it would pick from."
-        if obj.type == SlotSourceType.ORGANIZATION and obj.organization_id is None:
-            return "Type is organization, but no organization is set, so nothing is eligible."
-        try:
-            candidates = obj.candidate_videos()
-        except ValueError as exc:
-            return str(exc)
-
-        total = candidates.count()
-        if not total:
-            return "The pool is empty."
-        eligible = obj.videos_queryset().count()
-        reasons = []
-        broken = candidates.filter(proper_import=False).count()
-        if broken:
-            reasons.append(f"{broken} did not import cleanly")
-        unattended = (
-            candidates.filter(proper_import=True)
-            .exclude(organization__in=Organization.objects.with_responsible_editor())
-            .count()
-        )
-        if unattended:
-            reasons.append(f"{unattended} from an organization with no responsible editor")
-        summary = f"{eligible} of {total} videos eligible"
-        return f"{summary} -- {', '.join(reasons)}." if reasons else f"{summary}."
-
-
 class CategoryAdmin(admin.ModelAdmin):
     """Where the TV-Anytime genre mapping is maintained.
 
@@ -390,26 +249,7 @@ class CategoryAdmin(admin.ModelAdmin):
     ordering = ("name",)
 
 
-class WeeklySlotAdmin(admin.ModelAdmin):
-    """A recurring hole in the schedule: when airtime repeats, and which
-    source fills it. A slot with no source still reserves the airtime --
-    it just means nothing is placed there automatically."""
-
-    list_display = (
-        "__str__",
-        "day",
-        "start_time",
-        "duration",
-        "end_time",
-        "organization",
-        "source",
-    )
-    list_filter = ("day", "organization", "source")
-    list_select_related = ("organization", "source")
-    autocomplete_fields = ("source",)
-
-
-class WeeklySlotRequestAdmin(admin.ModelAdmin):
+class ReviewedRequestAdmin(admin.ModelAdmin):
     """Shared audited decision controls for the two request types."""
 
     list_filter: ClassVar[tuple[str, ...]] = ("status", "organization")
@@ -431,15 +271,15 @@ class WeeklySlotRequestAdmin(admin.ModelAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         fields = list(super().get_readonly_fields(request, obj))
-        if obj is not None and obj.status != WeeklySlotRequestStatus.PENDING:
+        if obj is not None and obj.status != ReviewStatus.PENDING:
             fields.append("admin_comment")
         return fields
 
     def _decide(self, request, queryset, status):
         decided = 0
-        for slot_request in queryset.filter(status=WeeklySlotRequestStatus.PENDING):
+        for slot_request in queryset.filter(status=ReviewStatus.PENDING):
             comment = slot_request.admin_comment.strip() or (
-                f"{WeeklySlotRequestStatus(status).label} in Django admin."
+                f"{ReviewStatus(status).label} in Django admin."
             )
             try:
                 slot_request.decide(admin=request.user, status=status, comment=comment)
@@ -455,14 +295,14 @@ class WeeklySlotRequestAdmin(admin.ModelAdmin):
 
     @admin.action(description="Approve selected pending requests")
     def approve_requests(self, request, queryset):
-        self._decide(request, queryset, WeeklySlotRequestStatus.APPROVED)
+        self._decide(request, queryset, ReviewStatus.APPROVED)
 
     @admin.action(description="Deny selected pending requests")
     def deny_requests(self, request, queryset):
-        self._decide(request, queryset, WeeklySlotRequestStatus.DENIED)
+        self._decide(request, queryset, ReviewStatus.DENIED)
 
 
-class WeeklySlotCreationRequestAdmin(WeeklySlotRequestAdmin):
+class RecurringSlotCreationRequestAdmin(ReviewedRequestAdmin):
     list_display = (
         "__str__",
         "organization",
@@ -475,20 +315,20 @@ class WeeklySlotCreationRequestAdmin(WeeklySlotRequestAdmin):
         "created_at",
     )
     list_filter = ("status", "organization", "day")
-    list_select_related = ("organization", "requested_by", "reviewed_by", "weekly_slot")
-    readonly_fields = WeeklySlotRequestAdmin.readonly_fields + (
+    list_select_related = ("organization", "requested_by", "reviewed_by", "slot")
+    readonly_fields = ReviewedRequestAdmin.readonly_fields + (
         "day",
         "start_time",
         "duration",
-        "weekly_slot",
+        "slot",
     )
 
 
-class WeeklySlotOwnershipRequestAdmin(WeeklySlotRequestAdmin):
+class RecurringSlotOwnershipRequestAdmin(ReviewedRequestAdmin):
     list_display = (
         "__str__",
         "organization",
-        "weekly_slot",
+        "slot",
         "previous_organization",
         "requested_by",
         "status",
@@ -497,13 +337,13 @@ class WeeklySlotOwnershipRequestAdmin(WeeklySlotRequestAdmin):
     )
     list_select_related = (
         "organization",
-        "weekly_slot",
+        "slot",
         "previous_organization",
         "requested_by",
         "reviewed_by",
     )
-    readonly_fields = WeeklySlotRequestAdmin.readonly_fields + (
-        "weekly_slot",
+    readonly_fields = ReviewedRequestAdmin.readonly_fields + (
+        "slot",
         "previous_organization",
     )
 
@@ -511,9 +351,8 @@ class WeeklySlotOwnershipRequestAdmin(WeeklySlotRequestAdmin):
 admin.site.register(Category, CategoryAdmin)
 admin.site.register(IngestJob, IngestJobAdmin)
 admin.site.register(Organization, OrganizationAdmin)
-admin.site.register(WeeklySlotSource, WeeklySlotSourceAdmin)
-admin.site.register(WeeklySlotCreationRequest, WeeklySlotCreationRequestAdmin)
-admin.site.register(WeeklySlotOwnershipRequest, WeeklySlotOwnershipRequestAdmin)
+admin.site.register(RecurringSlotCreationRequest, RecurringSlotCreationRequestAdmin)
+admin.site.register(RecurringSlotOwnershipRequest, RecurringSlotOwnershipRequestAdmin)
 admin.site.register(Scheduleitem, ScheduleitemAdmin)
 admin.site.register(LiveSource, LiveSourceAdmin)
 admin.site.register(StreamCredential, StreamCredentialAdmin)
@@ -521,7 +360,6 @@ admin.site.register(Series, SeriesAdmin)
 admin.site.register(User, UserAdmin)
 admin.site.register(Video, VideoAdmin)
 admin.site.register(VideoFile)
-admin.site.register(WeeklySlot, WeeklySlotAdmin)
 
 # We're not using Django's built-in permissions as it is
 admin.site.unregister(Group)

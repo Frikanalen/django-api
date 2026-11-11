@@ -1,11 +1,10 @@
 from datetime import UTC, datetime, timedelta
 
-from django.contrib.postgres.fields import DateTimeRangeField
+from django.contrib.postgres.constraints import ExclusionConstraint
+from django.contrib.postgres.fields import DateTimeRangeField, RangeOperators
 from django.contrib.postgres.indexes import GistIndex
-from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
-from django.utils.translation import gettext as _
 
 from api.schedule.query_set import ScheduleitemQuerySet
 
@@ -40,19 +39,25 @@ class Scheduleitem(models.Model):
     )
 
     id = models.AutoField(primary_key=True)
+    # Historical rows only: live items will point to a live transmission.
     default_name = models.CharField(max_length=255, blank=True)
     video = models.ForeignKey("Video", null=True, blank=True, on_delete=models.SET_NULL)
-    schedulereason = models.IntegerField(blank=True, choices=SCHEDULE_REASONS)
+    # Historical rows only, and the marker of one: rows written under
+    # airtime grants -- by the compiler or by staff -- leave it NULL, and
+    # only those are held to the no-overlap constraint below, so the
+    # historical overlaps from before the cut-over cannot block it.
+    schedulereason = models.IntegerField(null=True, blank=True, choices=SCHEDULE_REASONS)
     starttime = models.DateTimeField()
     duration = models.DurationField(validators=[MinValueValidator(timedelta(0))])
-    # Which WeeklySlot placed this item, for REASON_AUTO placements made
-    # after this field existed. The nightly filler may re-pick its *own*
-    # unfrozen placements when the source's answer changes; an item
-    # with no slot recorded (member picks, admin entries, pre-provenance
-    # rows) is deliberate programming and is never touched. SET_NULL so
-    # deleting a slot definition strands its drafted items as deliberate
-    # programming instead of ripping them off the air.
-    weekly_slot = models.ForeignKey("WeeklySlot", null=True, blank=True, on_delete=models.SET_NULL)
+    # Provenance: set means compiled from that grant, null means a staff
+    # entry (or a historical row). Only the compiler and staff write here.
+    grant = models.ForeignKey(
+        "scheduling.AirtimeGrant",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="schedule_items",
+    )
 
     # Published as <Live> in the TV-Anytime feed. A property of the
     # transmission, not of the video, which is why it sits here: the same
@@ -109,11 +114,18 @@ class Scheduleitem(models.Model):
         ]
         constraints = [
             # An item's airtime would otherwise end before it began, which
-            # makes it invisible to the jukebox's gap search and lets it
-            # schedule over programming that is really going out.
+            # makes it invisible to overlap checks.
             models.CheckConstraint(
                 condition=models.Q(duration__gte=timedelta(0)),
                 name="scheduleitem_duration_not_negative",
+            ),
+            # Two programmes never share the air. Partial: historical rows
+            # overlap, and are recognisable by their schedule reason.
+            ExclusionConstraint(
+                name="scheduleitem_no_overlap",
+                expressions=[("airtime", RangeOperators.OVERLAPS)],
+                condition=models.Q(schedulereason__isnull=True),
+                violation_error_message="Another programme is scheduled at that time.",
             ),
         ]
 
@@ -152,40 +164,3 @@ class Scheduleitem(models.Model):
         super().save(*args, **kwargs)
         if updating:
             self.refresh_from_db(fields=["airtime"])
-
-    def _timing_changed(self):
-        """Whether this save moves the item in time, for an item that exists."""
-        stored = Scheduleitem.objects.filter(pk=self.pk).values("starttime", "duration").first()
-        if stored is None:
-            return True
-        return stored["starttime"] != self.starttime or stored["duration"] != self.duration
-
-    def clean(self):
-        """Refuse to put two programmes on the air at once.
-
-        ModelForms call this, so it covers the admin. It deliberately does not
-        run on every save: editing an unrelated field on one of the historical
-        overlapping rows would otherwise fail on a conflict the editor neither
-        caused nor can resolve. Only a change of airtime is re-checked, which
-        is the same rule ScheduleitemModifySerializer applies.
-
-        Note this is validation, not enforcement -- save() does not call it.
-        The schedule fillers ask ScheduleitemQuerySet.overlapping() directly
-        and skip, rather than raising.
-        """
-        super().clean()
-        if self.starttime is None or not self.duration:
-            # Missing values are field-level errors, and a zero-length item
-            # occupies no airtime, so it cannot collide with anything.
-            return
-        if self.pk and not self._timing_changed():
-            return
-        conflict = (
-            Scheduleitem.objects.overlapping(
-                self.starttime, airtime_end(self.starttime, self.duration)
-            )
-            .exclude(pk=self.pk)
-            .first()
-        )
-        if conflict:
-            raise ValidationError({"duration": _("Conflict with '%s'.") % conflict})

@@ -20,18 +20,15 @@ import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from agenda.scheduling.jukebox import fill_agenda_with_jukebox
 from fk.models import (
     Category,
     Organization,
     Scheduleitem,
-    SlotSourceStrategy,
-    SlotSourceType,
     User,
     Video,
-    WeeklySlot,
-    WeeklySlotSource,
 )
+from scheduling.filling import candidates
+from scheduling.models import FillRule
 
 pytestmark = pytest.mark.django_db
 
@@ -170,12 +167,11 @@ def test_videos_stop_being_offered_to_the_jukebox(lose_editor, organization, vid
 
 
 @pytest.mark.parametrize("lose_editor", LOSS)
-def test_videos_stop_being_scheduled_by_the_agenda_filler(lose_editor, organization, video) -> None:
+def test_videos_stop_being_picked_by_the_filler_pool(lose_editor, organization, video) -> None:
     """
-    The other consumer of `Video.objects.fillers()`: the nightly filler
-    that writes jukebox entries into the schedule.  An accountable video
-    from a second organization keeps the pool non-empty, so what is
-    asserted is the choice between the two, not merely an idle run.
+    The fill rules' filler pool: an accountable video from a second
+    organization keeps the pool non-empty, so what is asserted is the
+    choice between the two, not merely an empty pool.
     """
     accountable_editor = User.objects.create(email="accountable-editor@example.test")
     accountable_org = Organization.objects.create(
@@ -190,28 +186,32 @@ def test_videos_stop_being_scheduled_by_the_agenda_filler(lose_editor, organizat
         is_filler=True,
         has_tono_records=False,
     )
+    rule = FillRule(
+        organization=accountable_org,
+        pool=FillRule.Pool.FILLER,
+        ordering=FillRule.Ordering.WEIGHTED,
+    )
 
     lose_editor(organization)
-    fill_agenda_with_jukebox(datetime(2019, 6, 30, 12, tzinfo=UTC), days=1)
 
-    assert set(Scheduleitem.objects.values_list("video_id", flat=True)) == {accountable_video.id}
+    assert candidates(rule) == [accountable_video]
 
 
 @pytest.mark.parametrize("lose_editor", LOSS)
-def test_videos_stop_being_picked_for_weekly_slots(lose_editor, organization, video) -> None:
-    source = WeeklySlotSource.objects.create(
-        name="Accountability source",
-        type=SlotSourceType.ORGANIZATION,
-        strategy=SlotSourceStrategy.RANDOM,
+def test_videos_stop_being_picked_for_their_organizations_grants(
+    lose_editor, organization, video
+) -> None:
+    rule = FillRule(
         organization=organization,
+        pool=FillRule.Pool.ORGANIZATION,
+        ordering=FillRule.Ordering.SHUFFLED,
     )
-    WeeklySlot.objects.create(day=0, start_time="12:00", duration=timedelta(hours=1), source=source)
-    assert source.single_video() == video
+    assert candidates(rule) == [video]
 
     lose_editor(organization)
 
-    assert list(source.videos_queryset()) == []
-    assert source.single_video() is None
+    assert candidates(rule) == []
+    assert list(Video.objects.listable()) == []
 
 
 @pytest.mark.parametrize("lose_editor", LOSS)

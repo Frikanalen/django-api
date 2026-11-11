@@ -139,26 +139,49 @@ The broadcast schedule is published in two machine-readable formats.
 - **XMLTV** at `/xmltv/upcoming/` (and `/xmltv/YYYY/MM/DD`), a flat list of
   programme slots, kept for the consumers already using it.
 
-## Management commands
+## Scheduling: airtime grants
 
-In addition to the HTTP API, the following command is executed nightly by one Kubernetes CronJob. It implements the broadcast-week lifecycle defined in `agenda/scheduling/policy.py`: every week is drafted two Mondays before it airs, stays open for member organizations to replace jukebox fillers with picks of their own for one week, and is frozen from the Monday before airing.
+Organizations no longer edit the broadcast schedule. Staff grant them
+windows of airtime (`scheduling.AirtimeGrant`), each organization fills in
+the list of what plays in its window, and a compiler turns locked lists into
+`Scheduleitem` rows. Unprogrammed airtime is left to playout's graphics. Only
+the compiler and staff write `Scheduleitem`. See `scheduling/services.py`,
+which owns every state change, and `scheduling/broadcast_time.py`, which owns
+every wall-clock (Europe/Oslo) conversion.
+
+Grants come from recurring slots (daily, weekly, fortnightly, monthly...),
+from staff directly, or later from approved requests. A grant locks the
+Monday before its week airs; staff can exempt it from locking. A grant with a
+fill rule fills itself (pool: an organization's uploads, a playlist or the
+filler pool; ordering: newest, least aired, shuffled or weighted; mode: one
+video or fill the window). Filling is deterministic, so the nightly run only
+rewrites a list when something real changed.
+
+The nightly CronJob (00:05 `Europe/Oslo`, overlapping runs forbidden) runs
+the pipeline: issue grants for every slot occurrence through the end of the
+week after next, refill automatic grants, lock grants past their deadline,
+and compile locked grants.
 
 ```sh
 ./manage.py draft_broadcast_schedule
 ```
 
-The command captures one timestamp, places videos defined by the WeeklySlot model through the end of the open broadcast week, and only then fills the remaining airtime with jukebox videos. If weekly-slot placement fails, the jukebox stage does not run against the incomplete draft.
+### Cut-over
 
-The CronJob runs at 00:05 in `Europe/Oslo`, immediately after the Monday scheduling boundary when a new week enters the horizon. Overlapping runs are forbidden.
-
-The individual stages remain available for maintenance:
+The first deploy of grants converts every weekly slot into a weekly
+recurring slot (with its source as a fill rule) but leaves the existing
+schedule alone. The cut-over starts the new schedule: it deletes every
+pre-cut-over schedule item (any row with a `schedulereason`) starting at or
+after the given instant, then runs the pipeline as of then, so this and next
+week's slot grants are filled and compiled at once. Rows written under the new
+rules are kept, so it is safe to re-run.
 
 ```sh
-./manage.py fill_next_weeks_agenda
-./manage.py fill_agenda_with_jukebox
+./manage.py cutover_schedule --at 2026-11-20T09:00+01:00 --yes
 ```
 
-The first places entries such as "Fill Mondays 12-13 with the latest videos from NUUG". The second draws from videos marked with `is_filler=True`, using weighted randomness that prefers fresh uploads and organizations with little airtime that week (see `agenda/scheduling/selection.py`). Production always invokes them through the orchestration command so their order is guaranteed.
+Grants of unowned slots go to the station organization,
+`STATION_ORGANIZATION_ID` (default 3).
 
 ## Test data
 

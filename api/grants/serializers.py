@@ -1,0 +1,129 @@
+from zoneinfo import ZoneInfo
+
+from drf_spectacular.utils import extend_schema_field
+from rest_framework import serializers
+
+from fk.models import Organization, Video
+from scheduling import services
+from scheduling.models import AirtimeGrant, FillRule, GrantItem
+
+OSLO = ZoneInfo("Europe/Oslo")
+
+
+class GrantOrganizationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Organization
+        fields = ("id", "name")
+        read_only_fields = fields
+
+
+class GrantItemVideoSerializer(serializers.ModelSerializer):
+    organization = GrantOrganizationSerializer(read_only=True)
+    pending_upload = serializers.BooleanField(
+        read_only=True,
+        help_text="An entry made ahead of its file; its duration was set by hand.",
+    )
+
+    class Meta:
+        model = Video
+        fields = ("id", "name", "duration", "organization", "pending_upload")
+        read_only_fields = fields
+
+
+class GrantItemLiveTransmissionSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+
+
+class GrantItemSerializer(serializers.ModelSerializer):
+    video = GrantItemVideoSerializer(read_only=True)
+    live_transmission = serializers.SerializerMethodField()
+
+    class Meta:
+        model = GrantItem
+        fields = ("position", "video", "live_transmission")
+        read_only_fields = fields
+
+    @extend_schema_field(GrantItemLiveTransmissionSerializer(allow_null=True))
+    def get_live_transmission(self, item) -> None:
+        # Reserved: grants cannot list live transmissions yet.
+        return None
+
+
+class AirtimeGrantSerializer(serializers.ModelSerializer):
+    organization = GrantOrganizationSerializer(read_only=True)
+    starttime = serializers.DateTimeField(default_timezone=OSLO, read_only=True)
+    endtime = serializers.DateTimeField(default_timezone=OSLO, read_only=True)
+    locks_at = serializers.DateTimeField(default_timezone=OSLO, read_only=True)
+    items = GrantItemSerializer(many=True, read_only=True)
+    items_duration = serializers.DurationField(read_only=True)
+    can_edit = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AirtimeGrant
+        fields = (
+            "id",
+            "organization",
+            "starttime",
+            "endtime",
+            "state",
+            "locks_at",
+            "lock_exempt",
+            "fill_rule",
+            "origin_slot",
+            "items",
+            "items_duration",
+            "can_edit",
+        )
+        read_only_fields = fields
+
+    @extend_schema_field(
+        serializers.BooleanField(
+            help_text="Whether the requesting user may replace the list right now."
+        )
+    )
+    def get_can_edit(self, grant) -> bool:
+        request = self.context.get("request")
+        return request is not None and services.can_edit(grant, request.user)
+
+
+class AirtimeGrantCreateSerializer(serializers.ModelSerializer):
+    """Staff gives an organization a window of airtime directly."""
+
+    organization = serializers.PrimaryKeyRelatedField(queryset=Organization.objects.all())
+    starttime = serializers.DateTimeField(default_timezone=OSLO)
+    endtime = serializers.DateTimeField(default_timezone=OSLO)
+    locks_at = serializers.DateTimeField(
+        default_timezone=OSLO,
+        required=False,
+        help_text="Defaults to the Monday 00:00 before the grant's week airs.",
+    )
+    fill_rule = serializers.PrimaryKeyRelatedField(
+        queryset=FillRule.objects.all(), required=False, allow_null=True
+    )
+
+    class Meta:
+        model = AirtimeGrant
+        fields = ("organization", "starttime", "endtime", "locks_at", "lock_exempt", "fill_rule")
+
+
+class AirtimeGrantUpdateSerializer(serializers.Serializer):
+    """Staff cancels a grant, moves its deadline or exempts it from locking."""
+
+    state = serializers.ChoiceField(
+        choices=[AirtimeGrant.State.CANCELLED],
+        required=False,
+        help_text="Only 'cancelled': withdraw the grant and free its window.",
+    )
+    locks_at = serializers.DateTimeField(default_timezone=OSLO, required=False)
+    lock_exempt = serializers.BooleanField(required=False)
+
+
+class GrantItemWriteSerializer(serializers.Serializer):
+    video = serializers.PrimaryKeyRelatedField(queryset=Video.objects.all())
+
+
+class GrantItemsWriteSerializer(serializers.Serializer):
+    """The whole list, in playing order. It replaces the current one."""
+
+    items = GrantItemWriteSerializer(many=True)

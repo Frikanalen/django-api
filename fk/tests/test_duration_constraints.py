@@ -3,7 +3,7 @@ Durations may not be negative, on any of the three models that carry one.
 
 A negative length is not a shorter programme, it is corrupt data, and
 every scheduler in the codebase does arithmetic on these fields: the
-jukebox filler walked its clock backwards and looped forever on one, and
+old jukebox filler walked its clock backwards and looped forever on one, and
 a Scheduleitem whose airtime ends before it starts is invisible to
 the gap search that is supposed to route around it.
 
@@ -13,6 +13,7 @@ the database constraints are what actually hold, since `objects.create`
 and `queryset.update` never run model validation.
 """
 
+import datetime
 from datetime import timedelta
 
 import pytest
@@ -20,7 +21,8 @@ from django.core.exceptions import ValidationError
 from django.db import DataError, IntegrityError, transaction
 from django.utils import timezone
 
-from fk.models import Organization, Scheduleitem, User, Video, WeeklySlot
+from fk.models import Organization, Scheduleitem, User, Video
+from scheduling.models import RecurringSlot
 
 pytestmark = pytest.mark.django_db
 
@@ -77,9 +79,11 @@ def test_scheduleitem_duration_cannot_be_negative(video: Video) -> None:
         )
 
 
-def test_weeklyslot_duration_cannot_be_negative() -> None:
+def test_recurring_slot_duration_cannot_be_negative() -> None:
     with pytest.raises(IntegrityError), transaction.atomic():
-        WeeklySlot.objects.create(day=0, start_time="12:00", duration=NEGATIVE)
+        RecurringSlot.objects.create(
+            weekdays=[0], start_time="12:00", duration=NEGATIVE, starts_on=datetime.date(2026, 1, 1)
+        )
 
 
 def test_an_existing_row_cannot_be_updated_to_a_negative_duration(video: Video) -> None:
@@ -91,8 +95,8 @@ def test_an_existing_row_cannot_be_updated_to_a_negative_duration(video: Video) 
 def test_zero_duration_is_still_allowed(editor: User, organization: Organization) -> None:
     """
     The field defaults to zero and unimported videos rely on it; only
-    negatives are rejected.  The jukebox screens zero out separately,
-    because it cannot advance a clock either.
+    negatives are rejected.  The fill rules screen zero out separately,
+    because a zero-length video cannot fill any airtime.
     """
     zero = Video.objects.create(
         name="Zero video",
@@ -108,7 +112,11 @@ def test_zero_duration_is_still_allowed(editor: User, organization: Organization
     ("model", "fields"),
     [
         pytest.param(Video, {"name": "Validated video"}, id="video"),
-        pytest.param(WeeklySlot, {"day": 0, "start_time": "12:00"}, id="weeklyslot"),
+        pytest.param(
+            RecurringSlot,
+            {"weekdays": [0], "start_time": "12:00", "starts_on": datetime.date(2026, 1, 1)},
+            id="recurringslot",
+        ),
     ],
 )
 def test_model_validation_rejects_a_negative_duration(model, fields: dict) -> None:
