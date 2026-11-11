@@ -21,14 +21,15 @@ class GrantItemFormSet(BaseInlineFormSet):
         grant = self.instance
         if not grant.starttime or not grant.endtime:
             return
-        videos = [
-            form.cleaned_data["video"]
-            for form in self.forms
-            if form.cleaned_data
-            and not form.cleaned_data.get("DELETE")
-            and form.cleaned_data.get("video")
-        ]
-        total = sum((v.duration for v in videos), timedelta(0))
+        total = timedelta(0)
+        for form in self.forms:
+            data = form.cleaned_data
+            if not data or data.get("DELETE"):
+                continue
+            if data.get("live_source"):
+                total += data.get("duration") or timedelta(0)
+            elif data.get("video"):
+                total += data["video"].duration
         if total > grant.endtime - grant.starttime:
             raise ValidationError(f"The items run {total}, longer than the window.")
 
@@ -37,7 +38,7 @@ class GrantItemInline(admin.TabularInline):
     model = GrantItem
     formset = GrantItemFormSet
     extra = 1
-    fields = ("position", "video")
+    fields = ("position", "video", "live_source", "duration", "title")
     autocomplete_fields = ("video",)
     ordering = ("position",)
 

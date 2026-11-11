@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from fk.models import Organization, User, Video
+from fk.models import LiveSource, Organization, User, Video
 from scheduling import broadcast_time
 from scheduling.models import AirtimeGrant, FillRule, GrantItem, RecurringSlot
 
@@ -131,6 +131,42 @@ def test_put_items_replaces_the_list(member, open_grant, video) -> None:
     assert body["items"][0]["video"]["pendingUpload"] is True
     assert body["items"][0]["liveTransmission"] is None
     assert body["itemsDuration"] == "00:30:00"
+
+
+def test_put_items_lists_a_live_transmission(member, open_grant, video) -> None:
+    source = LiveSource.objects.create(organization=video.organization, name="Studio")
+
+    response = client_for(member).put(
+        items_url(open_grant),
+        {
+            "items": [
+                {"liveSource": source.pk, "duration": "00:30:00", "title": "Debatt"},
+                {"video": video.pk},
+            ]
+        },
+        format="json",
+    )
+
+    assert response.status_code == 200, response.content
+    first = response.json()["items"][0]
+    assert first["video"] is None
+    assert first["liveTransmission"] == {
+        "source": {"id": source.pk, "name": "Studio"},
+        "name": "Debatt",
+        "title": "Debatt",
+        "duration": "00:30:00",
+    }
+    assert response.json()["itemsDuration"] == "00:50:00"
+
+
+def test_put_items_needs_a_length_for_live(member, open_grant, video) -> None:
+    source = LiveSource.objects.create(organization=video.organization, name="Studio")
+
+    response = client_for(member).put(
+        items_url(open_grant), {"items": [{"liveSource": source.pk}]}, format="json"
+    )
+
+    assert response.status_code == 400
 
 
 def test_put_items_refuses_an_overrun(member, open_grant, video) -> None:

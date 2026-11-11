@@ -337,7 +337,7 @@ class AirtimeGrant(models.Model):
 
     @property
     def items_duration(self) -> timedelta:
-        return sum((item.video.duration for item in self.items.all()), timedelta(0))
+        return sum((item.length for item in self.items.all()), timedelta(0))
 
     def clean(self):
         super().clean()
@@ -356,15 +356,31 @@ class AirtimeGrant(models.Model):
 
 class GrantItem(models.Model):
     """One entry in a grant's list. Items play back-to-back from the
-    grant's start; title and length come from the video.
+    grant's start.
 
-    Live transmissions are not listable yet: LiveTransmission is still
-    one-to-one with a schedule item and has no duration of its own.
+    An entry is either a video, whose title and length come from the video,
+    or a live transmission from one of the organization's live sources,
+    with a length (and optionally a title) set by whoever lists it.
     """
 
     grant = models.ForeignKey(AirtimeGrant, on_delete=models.CASCADE, related_name="items")
     position = models.PositiveIntegerField()
-    video = models.ForeignKey("fk.Video", on_delete=models.PROTECT, related_name="grant_items")
+    video = models.ForeignKey(
+        "fk.Video", on_delete=models.PROTECT, related_name="grant_items", null=True, blank=True
+    )
+    live_source = models.ForeignKey(
+        "fk.LiveSource",
+        on_delete=models.PROTECT,
+        related_name="grant_items",
+        null=True,
+        blank=True,
+    )
+    duration = models.DurationField(
+        null=True, blank=True, help_text="A live entry's length; a video's comes from the video."
+    )
+    title = models.CharField(
+        max_length=255, blank=True, help_text="A live entry's title; defaults to the source's name."
+    )
 
     class Meta:
         ordering = ("grant", "position")
@@ -374,7 +390,26 @@ class GrantItem(models.Model):
                 name="grantitem_unique_position",
                 deferrable=models.Deferrable.DEFERRED,
             ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(video__isnull=False, live_source__isnull=True, duration__isnull=True)
+                    | models.Q(
+                        video__isnull=True, live_source__isnull=False, duration__isnull=False
+                    )
+                ),
+                name="grantitem_video_or_live",
+            ),
         ]
 
+    @property
+    def length(self) -> timedelta:
+        return self.duration if self.live_source_id else self.video.duration
+
+    @property
+    def name(self) -> str:
+        if self.live_source_id:
+            return self.title or self.live_source.name
+        return self.video.name
+
     def __str__(self):
-        return f"{self.grant} #{self.position}: {self.video}"
+        return f"{self.grant} #{self.position}: {self.name}"
