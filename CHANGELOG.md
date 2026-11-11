@@ -1,5 +1,28 @@
 # Changelog
 
+## [3.0.0](https://github.com/Frikanalen/django-api/compare/v2.1.0...v3.0.0) (2026-11-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* **chart:** the chart no longer creates a database. Deployments that still relied on the chart's Kubegres must provide their own Postgres and put its URL in the database.secret Secret.
+* members can no longer write /api/scheduleitems; weekly-slot endpoints are renamed to recurring-slot ones.
+
+### Features
+
+* airtime grants replace member scheduling ([#97](https://github.com/Frikanalen/django-api/issues/97)) ([3aac60f](https://github.com/Frikanalen/django-api/commit/3aac60f4f12cf71255e408881746a4f4875ef216))
+* **chart:** two replicas of django and django-events, spread across nodes, behind PDBs ([#95](https://github.com/Frikanalen/django-api/issues/95)) ([ec061e4](https://github.com/Frikanalen/django-api/commit/ec061e4566a8aa4c21362ef1a1a671d7b33e81d2))
+
+
+### Bug Fixes
+
+* **chart:** give job pods their own label so the django PDB and Service skip them ([#98](https://github.com/Frikanalen/django-api/issues/98)) ([fe702f7](https://github.com/Frikanalen/django-api/commit/fe702f7ac3579ac8d11cf38a10760ff9103bc74a))
+
+
+### Miscellaneous Chores
+
+* **chart:** stop rendering the Kubegres database ([#103](https://github.com/Frikanalen/django-api/issues/103)) ([10541e8](https://github.com/Frikanalen/django-api/commit/10541e8a9198aa0f32e10343110c0d83fc00b055))
+
 ## [2.1.0](https://github.com/Frikanalen/django-api/compare/v2.0.0...v2.1.0) (2026-11-08)
 
 
