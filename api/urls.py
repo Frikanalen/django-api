@@ -106,11 +106,26 @@ api_patterns: list[URLPattern | URLResolver] = [
         organization_views.OrganizationDetail.as_view(),
         name="api-organization-detail",
     ),
-    # Live contribution: an organization checks its own incoming feed.
+    # Live contribution: an organization sets up and checks its own feed.
     path(
         "organization/<int:pk>/live-sources",
         live_views.OrganizationLiveSourceList.as_view(),
         name="api-organization-live-source-list",
+    ),
+    path(
+        "live-sources/<int:pk>",
+        live_views.LiveSourceDetail.as_view(),
+        name="api-live-source-detail",
+    ),
+    path(
+        "live-sources/<int:pk>/encoder-keys",
+        live_views.LiveSourceEncoderKeys.as_view(),
+        name="api-live-source-encoder-keys",
+    ),
+    path(
+        "live-sources/<int:pk>/encoder-keys/<int:key_pk>",
+        live_views.EncoderKeyRevoke.as_view(),
+        name="api-live-source-encoder-key-revoke",
     ),
     path(
         "live-sources/<int:pk>/preview-token",
