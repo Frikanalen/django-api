@@ -295,9 +295,14 @@ LOCAL_APPS = (
     "fkweb",
     "agenda",
     "fk",
+    "scheduling",
     "api",
     "news",
 )
+
+# The station's own organization: it owns the jukebox slots, and gets the
+# grants of slots that have no owner.
+STATION_ORGANIZATION_ID = env.int("STATION_ORGANIZATION_ID", default=3)
 
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

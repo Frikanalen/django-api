@@ -19,7 +19,7 @@ from rest_framework.test import APIClient
 
 from fk.models import AsRun, Category, Organization, Scheduleitem, Video, VideoFile
 
-pytestmark = [pytest.mark.django_db, pytest.mark.usefixtures("now_in_the_drafting_week")]
+pytestmark = pytest.mark.django_db
 
 DETAIL_URLS = {
     "video": "api-video-detail",
@@ -61,7 +61,7 @@ def modify_and_delete(client, target, obj, patch_status, delete_status):
     assert type(obj).objects.filter(pk=obj.pk).exists() == (delete_status != 204)
 
 
-@pytest.mark.parametrize("target", ["video", "videofile", "scheduleitem"])
+@pytest.mark.parametrize("target", ["video", "videofile"])
 @pytest.mark.parametrize(
     ("role", "patch_status", "delete_status"),
     [
@@ -78,7 +78,7 @@ def test_organization_owned_objects_are_modifiable_by_members_and_staff(
     modify_and_delete(role_client(role), target, obj, patch_status, delete_status)
 
 
-@pytest.mark.parametrize("target", ["asrun", "category"])
+@pytest.mark.parametrize("target", ["asrun", "category", "scheduleitem"])
 @pytest.mark.parametrize(
     ("role", "patch_status", "delete_status"),
     [
@@ -88,7 +88,7 @@ def test_organization_owned_objects_are_modifiable_by_members_and_staff(
         ("staff_user", 200, 204),
     ],
 )
-def test_playout_log_and_categories_are_modifiable_by_staff_only(
+def test_playout_log_categories_and_schedule_are_modifiable_by_staff_only(
     target, role, patch_status, delete_status, role_client, request
 ):
     obj = request.getfixturevalue(target)
@@ -153,9 +153,10 @@ def test_creation_on_organization_owned_endpoints_requires_membership(
     role, expected_status, role_client, organization, video
 ):
     """
-    Replaces the pinned create hole: creating a video in an organization,
-    attaching a videofile to a video, or scheduling a video for TX
-    requires belonging to the owning organization (or being staff).
+    Replaces the pinned create hole: creating a video in an organization
+    or attaching a videofile to a video requires belonging to the owning
+    organization (or being staff). Scheduling is staff-only: organizations
+    program their airtime grants instead.
     """
     client = role_client(role)
     cases = [
@@ -167,15 +168,6 @@ def test_creation_on_organization_owned_endpoints_requires_membership(
             "api-videofile-list",
             {"video": video.pk, "variant": "original", "filename": "created.mov"},
         ),
-        (
-            "api-scheduleitem-list",
-            {
-                "video": video.pk,
-                "starttime": "2015-01-02T12:00:00Z",
-                "duration": "00:01:00",
-                "schedulereason": 2,
-            },
-        ),
     ]
     for url_name, payload in cases:
         response = client.post(reverse(url_name), payload, format="json")
@@ -184,7 +176,19 @@ def test_creation_on_organization_owned_endpoints_requires_membership(
     created = expected_status == 201
     assert Video.objects.filter(name="Created video").exists() == created
     assert VideoFile.objects.filter(filename="created.mov").exists() == created
-    assert Scheduleitem.objects.exists() == created
+
+
+@pytest.mark.parametrize(
+    ("role", "expected_status"),
+    [("anonymous", 401), ("outsider", 403), ("member", 403), ("staff_user", 201)],
+)
+def test_only_staff_write_the_schedule(role, expected_status, role_client, video):
+    payload = {"video": video.pk, "starttime": "2015-01-02T12:00:00Z", "duration": "00:01:00"}
+
+    response = role_client(role).post(reverse("api-scheduleitem-list"), payload, format="json")
+
+    assert response.status_code == expected_status, response.content
+    assert Scheduleitem.objects.exists() == (expected_status == 201)
 
 
 @pytest.fixture
@@ -200,7 +204,7 @@ def foreign_video(staff_user):
     )
 
 
-@pytest.mark.parametrize("target", ["videofile", "scheduleitem"])
+@pytest.mark.parametrize("target", ["videofile"])
 def test_members_cannot_repoint_their_objects_at_a_foreign_video(
     target, member, foreign_video, client_as, request
 ):
@@ -255,8 +259,9 @@ def test_api_root_links_every_endpoint_with_expected_anonymous_access(
         # as noticing that GET is not a method it has.
         "ingest/claim": 401,
         "organization": 200,
+        "grants": 401,
+        "recurring-slots": 200,
         "scheduleitems": 200,
-        "scheduling/policy": 200,
         "series": 200,
         "videofiles": 200,
         "videos": 200,

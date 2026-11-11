@@ -33,12 +33,30 @@ class VideoManager(models.Manager):
         return self.with_responsible_editor().filter(publish_on_web=True, proper_import=True)
 
     def fillers(self):
-        return self.with_responsible_editor().filter(
-            is_filler=True,
-            has_tono_records=False,
-            organization__fkmember=True,
-            proper_import=True,
-        )
+        return self.with_responsible_editor().filter(FILLER)
+
+    def listable(self):
+        """Videos a grant may list: accountable, with a positive length.
+
+        Includes pending uploads -- entries whose file has not been
+        processed yet but whose duration was set by hand -- since the
+        list is settled at the lock and the file may follow.
+        """
+        return self.with_responsible_editor().filter(duration__gt=timedelta(0))
+
+    def airable(self):
+        """Videos that can go on air as they are: listable, file processed."""
+        return self.listable().filter(proper_import=True)
+
+
+# What may be aired as filler. Shared by Video.objects.fillers() and the
+# fill rules' filler pool, so the rule has one home.
+FILLER = models.Q(
+    is_filler=True,
+    has_tono_records=False,
+    organization__fkmember=True,
+    proper_import=True,
+)
 
 
 class Video(models.Model):
@@ -212,6 +230,11 @@ class Video(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def pending_upload(self) -> bool:
+        """An entry made ahead of its file, with its duration set by hand."""
+        return not self.proper_import and self.duration > timedelta(0)
 
     def is_public(self):
         return self.publish_on_web and self.proper_import

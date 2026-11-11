@@ -6,7 +6,18 @@ OLD_MIGRATION = ("fk", "0037_ingest_job_claiming")
 NEW_MIGRATION = ("fk", "0038_merge_video_header_into_description")
 
 
+@pytest.fixture
+def back_to_latest():
+    """Leave the database fully migrated: the teardown flush truncates
+    only the current models' tables, and a table that later migrations
+    drop (fk_weeklyslotsource) would otherwise still reference them."""
+    yield
+    executor = MigrationExecutor(connection)
+    executor.migrate(executor.loader.graph.leaf_nodes())
+
+
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.usefixtures("back_to_latest")
 def test_video_headers_are_merged_into_descriptions() -> None:
     executor = MigrationExecutor(connection)
     executor.migrate([OLD_MIGRATION])

@@ -11,7 +11,7 @@ from rest_framework.test import APIClient
 
 from fk.models import Scheduleitem, Video
 
-pytestmark = [pytest.mark.django_db, pytest.mark.usefixtures("now_in_the_drafting_week")]
+pytestmark = pytest.mark.django_db
 
 OSLO = ZoneInfo("Europe/Oslo")
 
@@ -25,20 +25,21 @@ def adjacent_schedule(
     schedule_item_factory: Callable[..., Scheduleitem],
 ) -> tuple[Scheduleitem, Scheduleitem]:
     return (
-        schedule_item_factory(starttime=oslo_datetime(10)),
-        schedule_item_factory(starttime=oslo_datetime(11)),
+        schedule_item_factory(starttime=oslo_datetime(10), schedulereason=None),
+        schedule_item_factory(starttime=oslo_datetime(11), schedulereason=None),
     )
 
 
 def assert_schedule_conflict(response: Response, conflict: Scheduleitem) -> None:
+    """The database's no-overlap constraint refuses it, reported as a 400."""
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert response.data == {
         "type": "validation_error",
         "errors": [
             {
                 "code": "invalid",
-                "detail": f"Conflict with '{conflict}'.",
-                "attr": "duration",
+                "detail": "Another programme is scheduled at that time.",
+                "attr": "starttime",
             }
         ],
     }
@@ -76,7 +77,6 @@ def test_create_schedule_item_normalizes_starttime_to_oslo(
             "video": video.pk,
             "starttime": given_starttime,
             "duration": "58.312",
-            "schedulereason": Scheduleitem.REASON_LEGACY,
         },
         format="json",
     )
@@ -118,7 +118,6 @@ def test_create_schedule_item_rejects_overlaps(
             "video": video.pk,
             "starttime": starttime.isoformat(),
             "duration": str(duration),
-            "schedulereason": Scheduleitem.REASON_LEGACY,
         },
         format="json",
     )
@@ -146,7 +145,6 @@ def test_create_schedule_item_allows_adjacent_intervals(
             "video": video.pk,
             "starttime": starttime.isoformat(),
             "duration": "01:00:00",
-            "schedulereason": Scheduleitem.REASON_LEGACY,
         },
         format="json",
     )
@@ -185,27 +183,6 @@ def test_update_schedule_item_allows_non_overlapping_changes(
     if duration := changes.get("duration"):
         assert target.duration == parse_duration(duration)
         assert parse_duration(response.data["duration"]) == parse_duration(duration)
-
-
-def test_update_schedule_item_allows_reason_only_change(
-    authenticated_client: APIClient,
-    schedule_item_factory: Callable[..., Scheduleitem],
-) -> None:
-    target = schedule_item_factory(starttime=oslo_datetime(10))
-    original_starttime = target.starttime
-    original_duration = target.duration
-
-    response = authenticated_client.patch(
-        reverse("api-scheduleitem-detail", args=[target.pk]),
-        {"schedulereason": Scheduleitem.REASON_ADMIN},
-        format="json",
-    )
-
-    assert response.status_code == status.HTTP_200_OK
-    target.refresh_from_db()
-    assert target.schedulereason == Scheduleitem.REASON_ADMIN
-    assert target.starttime == original_starttime
-    assert target.duration == original_duration
 
 
 @pytest.mark.parametrize(

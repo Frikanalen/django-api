@@ -29,7 +29,7 @@ def test_openapi_schema_documents_every_files_key() -> None:
     }
 
 
-def test_openapi_schema_is_warning_free_and_keeps_weekly_slot_shapes_distinct(capsys) -> None:
+def test_openapi_schema_is_warning_free_and_describes_grants(capsys) -> None:
     response = APIClient().get(reverse("schema"), HTTP_ACCEPT="application/vnd.oai.openapi+json")
 
     assert response.status_code == 200
@@ -48,12 +48,13 @@ def test_openapi_schema_is_warning_free_and_keeps_weekly_slot_shapes_distinct(ca
     }
 
     schemas = schema["components"]["schemas"]
-    assert schemas["WeeklySlotRequest"]["properties"].keys() == {"source"}
-    assert schemas["WeeklySlotRequestEnvelope"]["properties"].keys() == {
+    assert schemas["RecurringSlotRequestEnvelope"]["properties"].keys() == {
         "creation",
         "ownership",
     }
-    update_request = schema["paths"]["/api/weekly-slots/{id}"]["put"]["requestBody"]
-    assert update_request["content"]["application/json"]["schema"] == {
-        "$ref": "#/components/schemas/WeeklySlotRequest"
+    items_request = schema["paths"]["/api/grants/{id}/items"]["put"]["requestBody"]
+    assert items_request["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/GrantItemsWriteRequest"
     }
+    grant = schemas["AirtimeGrant"]["properties"]
+    assert {"items", "itemsDuration", "canEdit", "locksAt", "lockExempt"} <= grant.keys()

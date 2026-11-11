@@ -8,16 +8,17 @@ from rest_framework.routers import SimpleRouter
 
 import agenda.tvanytime.views as tvanytime_views
 import api.auth.views as auth_views
+import api.grants.views as grant_views
 import api.live.views as live_views
 import api.mediamtx as mediamtx_views
 import api.organization.views as organization_views
 import api.playout.views as playout_views
 import api.program_image.views as program_image_views
+import api.recurring_slot.views as recurring_slot_views
 import api.schedule.views as schedule_views
 import api.series.views as series_views
 import api.video.views as video_views
 import api.videofile.views as videofile_views
-import api.weekly_slot.views as weekly_slot_views
 from fkweb.views import CsrfView
 
 from . import views
@@ -28,6 +29,7 @@ router = SimpleRouter(trailing_slash=False)
 router.register(r"asrun", views.AsRunViewSet, "asrun")
 router.register(r"categories", views.CategoryViewSet)
 router.register(r"scheduleitems", schedule_views.ScheduleitemViewSet, "api-scheduleitem")
+router.register(r"grants", grant_views.AirtimeGrantViewSet, "api-grant")
 router.register(r"videofiles", videofile_views.VideoFileViewSet, "api-videofile")
 
 
@@ -115,47 +117,37 @@ api_patterns: list[URLPattern | URLResolver] = [
         live_views.LiveSourcePreviewToken.as_view(),
         name="api-live-source-preview-token",
     ),
-    # Recurring airtime. Members control only what fills an allocated slot;
-    # changes to its day, start, and duration go through an audited request.
+    # Recurring airtime. Each occurrence becomes an airtime grant; changes
+    # to a slot go through an audited request.
     path(
-        "weekly-slot-sources",
-        weekly_slot_views.WeeklySlotSourceList.as_view(),
-        name="api-weekly-slot-source-list",
+        "recurring-slots",
+        recurring_slot_views.RecurringSlotList.as_view(),
+        name="api-recurring-slot-list",
     ),
     path(
-        "weekly-slot-sources/<int:pk>",
-        weekly_slot_views.WeeklySlotSourceDetail.as_view(),
-        name="api-weekly-slot-source-detail",
+        "recurring-slots/<int:pk>",
+        recurring_slot_views.RecurringSlotDetail.as_view(),
+        name="api-recurring-slot-detail",
     ),
     path(
-        "weekly-slots/<int:pk>",
-        weekly_slot_views.WeeklySlotDetail.as_view(),
-        name="api-weekly-slot-detail",
+        "recurring-slot-requests",
+        recurring_slot_views.RecurringSlotRequestList.as_view(),
+        name="api-recurring-slot-request-list",
     ),
     path(
-        "weekly-slot-requests",
-        weekly_slot_views.WeeklySlotRequestList.as_view(),
-        name="api-weekly-slot-request-list",
+        "recurring-slot-requests/creation",
+        recurring_slot_views.RecurringSlotCreationRequestCreate.as_view(),
+        name="api-recurring-slot-creation-request-create",
     ),
     path(
-        "weekly-slot-requests/creation",
-        weekly_slot_views.WeeklySlotCreationRequestCreate.as_view(),
-        name="api-weekly-slot-creation-request-create",
-    ),
-    path(
-        "weekly-slot-requests/ownership",
-        weekly_slot_views.WeeklySlotOwnershipRequestCreate.as_view(),
-        name="api-weekly-slot-ownership-request-create",
+        "recurring-slot-requests/ownership",
+        recurring_slot_views.RecurringSlotOwnershipRequestCreate.as_view(),
+        name="api-recurring-slot-ownership-request-create",
     ),
 ]
 api_patterns += router.urls
 
 api_patterns += [
-    path(
-        "scheduling/policy",
-        schedule_views.SchedulingPolicyView.as_view(),
-        name="api-scheduling-policy",
-    ),
     # The root of the tvanytime path is the human-readable index rather
     # than a feed, which is the shape /xmltv/ already has and the one a
     # distributor arriving at the bare URL expects. The feeds hang below
