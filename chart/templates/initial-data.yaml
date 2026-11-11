@@ -11,7 +11,7 @@ spec:
     metadata:
       name: django-load-fixtures
       labels:
-        app: django-api
+        app: django-api-job
     spec:
       restartPolicy: OnFailure
       containers:
