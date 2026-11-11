@@ -156,3 +156,56 @@ def test_create_rejects_a_negative_duration(
         ("duration", "min_value")
     ]
     assert not Video.objects.filter(name="Negative duration video").exists()
+
+
+def test_a_video_can_be_made_a_live_programme_and_back(
+    editor_client: APIClient, organization: Organization, category: Category
+) -> None:
+    from fk.models import LiveSource, LiveTransmission
+
+    source = LiveSource.objects.create(organization=organization, name="Studio")
+    response = create_video(
+        editor_client,
+        {
+            "name": "Debatt",
+            "duration": "00:45:00",
+            "organization": organization.pk,
+            "categories": ["News"],
+            "liveSource": source.pk,
+        },
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED, response.content
+    assert response.json()["liveSource"] == source.pk
+    video = Video.objects.get(pk=response.json()["id"])
+    assert video.live_transmission.source == source
+
+    cleared = editor_client.patch(
+        reverse("api-video-detail", args=[video.pk]), {"liveSource": None}, format="json"
+    )
+    assert cleared.status_code == status.HTTP_200_OK, cleared.content
+    assert cleared.json()["liveSource"] is None
+    assert not LiveTransmission.objects.filter(video=video).exists()
+
+
+def test_a_live_programme_needs_its_organizations_own_source(
+    editor_client: APIClient, organization: Organization, category: Category
+) -> None:
+    from fk.models import LiveSource
+
+    theirs = LiveSource.objects.create(
+        organization=Organization.objects.create(name="Other"), name="Theirs"
+    )
+    response = create_video(
+        editor_client,
+        {
+            "name": "Debatt",
+            "duration": "00:45:00",
+            "organization": organization.pk,
+            "categories": ["News"],
+            "liveSource": theirs.pk,
+        },
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.json()["errors"][0]["attr"] == "live_source"

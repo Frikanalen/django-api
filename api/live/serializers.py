@@ -39,9 +39,8 @@ class LiveSourceSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(UpcomingTransmissionSerializer(many=True))
     def get_upcoming_transmissions(self, obj: LiveSource):
-        # Prefetched by the view: only bookings that have not yet ended.
-        items = [t.schedule_item for t in obj.upcoming]  # type: ignore[attr-defined]
-        return UpcomingTransmissionSerializer(items, many=True).data
+        # Attached by the view: live airings that have not yet ended.
+        return UpcomingTransmissionSerializer(obj.upcoming, many=True).data  # type: ignore[attr-defined]
 
 
 class PreviewTokenSerializer(serializers.Serializer):

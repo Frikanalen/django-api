@@ -8,7 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from fk.models import LiveSource, LiveTransmission, Organization, Scheduleitem, User
+from fk.models import LiveSource, LiveTransmission, Organization, Scheduleitem, User, Video
 
 pytestmark = pytest.mark.django_db
 
@@ -59,11 +59,18 @@ def mediamtx(token, **overrides):
 
 
 def book(source, start, duration=timedelta(hours=1), name="Valgvake"):
-    item = Scheduleitem.objects.create(
-        starttime=start, duration=duration, default_name=name, schedulereason=2, is_live=True
+    """A live programme -- a video fed by `source` -- booked live at `start`."""
+    organization = source.organization
+    video = Video.objects.create(
+        name=name,
+        organization=organization,
+        creator=User.objects.get_or_create(email="live-booker@example.test")[0],
+        duration=duration,
     )
-    LiveTransmission.objects.create(schedule_item=item, source=source)
-    return item
+    LiveTransmission.objects.create(video=video, source=source)
+    return Scheduleitem.objects.create(
+        video=video, starttime=start, duration=duration, schedulereason=2, is_live=True
+    )
 
 
 def test_member_lists_sources_with_only_unfinished_bookings(member, source):

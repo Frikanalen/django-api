@@ -26,29 +26,28 @@ class LiveTransmissionTests(TestCase):
             schedulereason=Scheduleitem.REASON_ADMIN,
         )
 
-    def test_live_booking_without_original_does_not_publish_video(self):
+    def test_a_live_video_without_a_file_is_not_published(self):
         self.assertFalse(self.video.videofile_set.exists())
         self.assertFalse(self.video.proper_import)
-        transmission = LiveTransmission.objects.create(schedule_item=self.entry, source=self.source)
+        transmission = LiveTransmission.objects.create(video=self.video, source=self.source)
 
-        self.entry.refresh_from_db()
-        self.assertEqual(self.entry.live_transmission, transmission)
-        self.assertEqual(self.entry.duration, timedelta(hours=1))
+        self.video.refresh_from_db()
+        self.assertEqual(self.video.live_transmission, transmission)
         self.assertFalse(Video.objects.public().filter(pk=self.video.pk).exists())
 
-    def test_recorded_entry_requires_no_attachment(self):
-        self.assertFalse(hasattr(self.entry, "live_transmission"))
-        self.assertEqual(self.entry.video_id, self.video.pk)
+    def test_a_recorded_video_needs_no_live_transmission(self):
+        self.assertFalse(hasattr(self.video, "live_transmission"))
 
-    def test_only_one_transmission_per_entry(self):
-        LiveTransmission.objects.create(schedule_item=self.entry, source=self.source)
+    def test_only_one_transmission_per_video(self):
+        LiveTransmission.objects.create(video=self.video, source=self.source)
         with self.assertRaises(IntegrityError), transaction.atomic():
-            LiveTransmission.objects.create(schedule_item=self.entry, source=self.source)
+            LiveTransmission.objects.create(video=self.video, source=self.source)
 
-    def test_source_protected_and_attachment_deleted_with_entry(self):
-        transmission = LiveTransmission.objects.create(schedule_item=self.entry, source=self.source)
+    def test_source_protected_and_transmission_deleted_with_video(self):
+        transmission = LiveTransmission.objects.create(video=self.video, source=self.source)
         with self.assertRaises(ProtectedError):
             self.source.delete()
         self.entry.delete()
+        self.video.delete()
         self.assertFalse(LiveTransmission.objects.filter(pk=transmission.pk).exists())
         self.assertTrue(LiveSource.objects.filter(pk=self.source.pk).exists())

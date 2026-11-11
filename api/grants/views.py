@@ -13,7 +13,6 @@ from api.grants.serializers import (
     AirtimeGrantSerializer,
     AirtimeGrantUpdateSerializer,
     GrantItemsWriteSerializer,
-    GrantItemWriteSerializer,
 )
 from api.pagination import FkDefaultPagination
 from scheduling import services
@@ -59,7 +58,9 @@ class AirtimeGrantViewSet(
         queryset = AirtimeGrant.objects.select_related("organization").prefetch_related(
             Prefetch(
                 "items",
-                queryset=GrantItem.objects.select_related("video__organization", "live_source"),
+                queryset=GrantItem.objects.select_related(
+                    "video__organization", "video__live_transmission__source"
+                ),
             )
         )
         user = self.request.user
@@ -115,10 +116,9 @@ class AirtimeGrantViewSet(
         grant = self.get_object()
         serializer = GrantItemsWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        to_entry = GrantItemWriteSerializer().to_entry
-        entries = [to_entry(item) for item in serializer.validated_data["items"]]
+        videos = [item["video"] for item in serializer.validated_data["items"]]
         try:
-            grant = services.set_items(grant, entries, user=request.user)
+            grant = services.set_items(grant, videos, user=request.user)
         except DjangoValidationError as error:
             raise _drf(error) from error
         return self._respond(grant)

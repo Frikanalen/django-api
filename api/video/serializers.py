@@ -9,6 +9,8 @@ from fk.models import (
     IngestJob,
     IngestKind,
     IngestState,
+    LiveSource,
+    LiveTransmission,
     Organization,
     Series,
     User,
@@ -61,6 +63,17 @@ class BaseVideoSerializer(serializers.ModelSerializer):
         write_only=True,
     )
 
+    live_source = serializers.PrimaryKeyRelatedField(
+        queryset=LiveSource.objects.all(),
+        source="live_transmission.source",
+        required=False,
+        allow_null=True,
+        help_text=(
+            "Makes the video a live programme: it airs from this live source, "
+            "one of the organization's own, until it has a file. Null for none."
+        ),
+    )
+
     @staticmethod
     def get_duration_sec(obj) -> float | None:
         return obj.duration.total_seconds() if obj.duration is not None else None
@@ -108,6 +121,7 @@ class BaseVideoSerializer(serializers.ModelSerializer):
             # writable here rather than staff-only in the admin.
             "spoken_language",
             "minimum_age",
+            "live_source",
             "created_time",
             "updated_time",
             "uploaded_time",
@@ -168,6 +182,18 @@ class BaseVideoSerializer(serializers.ModelSerializer):
                 {"episode_number": "Choose a series before setting an episode number."}
             )
 
+        if "live_transmission" in data:
+            source = data["live_transmission"]["source"]
+            if source is not None and organization is not None:
+                if source.organization_id != organization.pk:
+                    raise serializers.ValidationError(
+                        {"live_source": "The live source must belong to the video's organization."}
+                    )
+                if not source.enabled:
+                    raise serializers.ValidationError(
+                        {"live_source": "The live source is disabled."}
+                    )
+
         if series is not None and episode_number is not None:
             duplicate = Video.objects.filter(
                 series=series,
@@ -180,6 +206,30 @@ class BaseVideoSerializer(serializers.ModelSerializer):
                     {"episode_number": "That episode number is already used in this series."}
                 )
         return data
+
+    def create(self, validated_data):
+        live = validated_data.pop("live_transmission", None)
+        video = super().create(validated_data)
+        self._set_live_source(video, live)
+        return video
+
+    def update(self, instance, validated_data):
+        live = validated_data.pop("live_transmission", None)
+        video = super().update(instance, validated_data)
+        if live is not None:
+            self._set_live_source(video, live)
+        return video
+
+    @staticmethod
+    def _set_live_source(video: Video, live: dict | None) -> None:
+        source = live["source"] if live else None
+        if source is None:
+            LiveTransmission.objects.filter(video=video).delete()
+            if hasattr(video, "live_transmission"):
+                del video.live_transmission
+        else:
+            LiveTransmission.objects.update_or_create(video=video, defaults={"source": source})
+            video.refresh_from_db()
 
 
 class VideoSerializer(BaseVideoSerializer):

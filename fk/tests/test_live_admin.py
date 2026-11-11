@@ -2,11 +2,10 @@ from datetime import timedelta
 
 import pytest
 from django.contrib import admin
-from django.forms.models import inlineformset_factory
+from django.core.exceptions import ValidationError
 from django.urls import reverse
 from django.utils import timezone
 
-from fk.admin import LiveTransmissionFormSet
 from fk.models import LiveSource, LiveTransmission, Organization, Scheduleitem, User, Video
 
 pytestmark = pytest.mark.django_db
@@ -18,7 +17,9 @@ def booking():
     user.is_superuser = True
     user.save()
     org = Organization.objects.create(name="Studio", editor=user)
-    video = Video.objects.create(name="Live programme", creator=user, organization=org)
+    video = Video.objects.create(
+        name="Live programme", creator=user, organization=org, duration=timedelta(hours=1)
+    )
     source = LiveSource.objects.create(name="Studio input", organization=org)
     entry = Scheduleitem.objects.create(
         video=video,
@@ -29,80 +30,49 @@ def booking():
     return user, source, entry
 
 
-def inline_data(source, **extra):
-    return {
-        "live_transmission-TOTAL_FORMS": "1",
-        "live_transmission-INITIAL_FORMS": "0",
-        "live_transmission-0-source": str(source.pk),
-        **extra,
-    }
-
-
-def formset(entry, data):
-    factory = inlineformset_factory(
-        Scheduleitem,
-        LiveTransmission,
-        formset=LiveTransmissionFormSet,
-        fields=("source",),
-        extra=0,
-    )
-    return factory(data=data, instance=entry)
-
-
-@pytest.mark.parametrize("problem", ["missing_video", "disabled", "other_org"])
-def test_inline_rejects_invalid_booking(booking, problem):
+@pytest.mark.parametrize("problem", ["disabled", "other_org"])
+def test_a_live_transmission_needs_an_enabled_source_of_the_videos_own(booking, problem):
     _, source, entry = booking
-    if problem == "missing_video":
-        entry.video = None
-    elif problem == "disabled":
+    if problem == "disabled":
         source.enabled = False
-        source.save()
     else:
         source.organization = Organization.objects.create(name="Another organization")
-        source.save()
-    forms = formset(entry, inline_data(source))
-    assert not forms.is_valid()
-    assert forms.non_form_errors() or forms.errors[0].get("source")
+    source.save()
+
+    with pytest.raises(ValidationError):
+        LiveTransmission(video=entry.video, source=source).full_clean()
 
 
-def test_empty_or_deleted_inline_does_not_validate_live_policy(booking):
-    _, source, entry = booking
-    entry.video = None
-    assert formset(entry, inline_data(source, **{"live_transmission-0-source": ""})).is_valid()
-    assert formset(entry, inline_data(source, **{"live_transmission-0-DELETE": "on"})).is_valid()
+def test_video_admin_makes_a_video_live(client, booking):
+    user, _, entry = booking
+    client.force_login(user)
+    video = entry.video
+    url = reverse("admin:fk_video_change", args=[video.pk])
+    page = client.get(url)
+    assert page.status_code == 200
+    assert "live_transmission-TOTAL_FORMS" in page.content.decode()
 
 
-def test_admin_books_live_and_removes_attachment(client, booking):
+def test_schedule_admin_derives_live_from_the_video(client, booking):
     user, source, entry = booking
+    LiveTransmission.objects.create(video=entry.video, source=source)
     client.force_login(user)
     local_start = timezone.localtime(entry.starttime)
     data = {
         "video": entry.video_id,
-        "schedulereason": entry.schedulereason,
         "starttime_0": local_start.strftime("%Y-%m-%d"),
         "starttime_1": local_start.strftime("%H:%M:%S"),
         "duration": "01:00:00",
-        **inline_data(source),
     }
     url = reverse("admin:fk_scheduleitem_change", args=[entry.pk])
-    response = client.post(url, data)
-    assert response.status_code == 302
-    transmission = LiveTransmission.objects.get(schedule_item=entry)
+    assert client.post(url, data).status_code == 302
     entry.refresh_from_db()
     assert entry.is_live
-    assert not entry.video.proper_import
 
-    data.update(
-        {
-            "live_transmission-INITIAL_FORMS": "1",
-            "live_transmission-0-id": transmission.pk,
-            "live_transmission-0-DELETE": "on",
-        }
-    )
+    Video.objects.filter(pk=entry.video_id).update(proper_import=True)
     assert client.post(url, data).status_code == 302
     entry.refresh_from_db()
     assert not entry.is_live
-    assert not LiveTransmission.objects.filter(schedule_item=entry).exists()
 
 
 def test_source_admin_and_schedule_add_page_render(client, booking):

@@ -19,7 +19,6 @@ The nightly pipeline (:func:`run_nightly`) runs four steps with one
 
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 
 from django.conf import settings
@@ -28,7 +27,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from fk.models import LiveSource, LiveTransmission, Organization, Scheduleitem, Video
+from fk.models import Organization, Scheduleitem, Video
 from scheduling import broadcast_time
 from scheduling.filling import plan
 from scheduling.models import AirtimeGrant, FillRule, GrantItem, RecurringSlot
@@ -39,35 +38,13 @@ logger = logging.getLogger(__name__)
 State = AirtimeGrant.State
 
 
-@dataclass(frozen=True)
-class LiveEntry:
-    """A live transmission to list in a grant: a source, how long, a title."""
-
-    source: LiveSource
-    duration: timedelta
-    title: str = ""
-
-    @property
-    def name(self) -> str:
-        return self.title or self.source.name
-
-
-# What a grant's list holds, in playing order.
-Entry = Video | LiveEntry
-
-
-def _length(entry: Entry) -> timedelta:
-    return entry.duration
-
-
-def _entry(item: GrantItem) -> Entry:
-    if item.live_source_id:
-        return LiveEntry(item.live_source, item.duration, item.title)
-    return item.video
-
-
 def station_organization_id() -> int:
     return settings.STATION_ORGANIZATION_ID
+
+
+def airs_live(video: Video) -> bool:
+    """A live programme airs from its source until it has a file."""
+    return hasattr(video, "live_transmission") and not video.proper_import
 
 
 # -- Who may do what ---------------------------------------------------------
@@ -106,10 +83,9 @@ def can_edit(grant: AirtimeGrant, user, now: datetime | None = None) -> bool:
 # -- Editing a grant ---------------------------------------------------------
 
 
-def validate_items(grant: AirtimeGrant, entries: Sequence[Entry]) -> None:
+def validate_items(grant: AirtimeGrant, videos: Sequence[Video]) -> None:
     """Local to the grant: it owns its window, so there are no airtime
     conflicts to check -- only that everything is listable and fits."""
-    videos = [e for e in entries if isinstance(e, Video)]
     listable = set(
         Video.objects.listable().filter(pk__in=[v.pk for v in videos]).values_list("pk", flat=True)
     )
@@ -123,16 +99,7 @@ def validate_items(grant: AirtimeGrant, entries: Sequence[Entry]) -> None:
                 "that will follow)."
             }
         )
-    for live in (e for e in entries if isinstance(e, LiveEntry)):
-        if live.source.organization_id != grant.organization_id:
-            raise ValidationError(
-                {"items": f"The live source '{live.source}' belongs to another organization."}
-            )
-        if not live.source.enabled:
-            raise ValidationError({"items": f"The live source '{live.source}' is disabled."})
-        if live.duration <= timedelta(0):
-            raise ValidationError({"items": f"The live transmission '{live.name}' needs a length."})
-    total = sum((_length(e) for e in entries), timedelta(0))
+    total = sum((v.duration for v in videos), timedelta(0))
     if total > grant.duration:
         raise ValidationError(
             {"items": f"The list runs {total}, which is longer than the window ({grant.duration})."}
@@ -140,7 +107,7 @@ def validate_items(grant: AirtimeGrant, entries: Sequence[Entry]) -> None:
 
 
 def set_items(
-    grant: AirtimeGrant, entries: Sequence[Entry], *, user, now: datetime | None = None
+    grant: AirtimeGrant, videos: Sequence[Video], *, user, now: datetime | None = None
 ) -> AirtimeGrant:
     """Replace the whole list, as the organization (or staff) edits it.
 
@@ -152,8 +119,8 @@ def set_items(
         grant = AirtimeGrant.objects.select_for_update().get(pk=grant.pk)
         if not can_edit(grant, user, now):
             raise PermissionDenied("This grant can no longer be edited.")
-        validate_items(grant, entries)
-        _replace_items(grant, entries)
+        validate_items(grant, videos)
+        _replace_items(grant, videos)
         grant.fill_rule = None
         grant.save(update_fields=["fill_rule", "updated_at"])
         if grant.state == State.COMPILED:
@@ -339,16 +306,15 @@ def lock_grants(now: datetime) -> None:
     due = AirtimeGrant.objects.filter(state=State.OPEN, lock_exempt=False, locks_at__lte=now)
     for grant in due:
         with transaction.atomic():
-            items = list(grant.items.select_related("video", "live_source"))
+            items = list(grant.items.select_related("video"))
             listable = set(
                 Video.objects.listable()
-                .filter(pk__in=[i.video_id for i in items if i.video_id])
+                .filter(pk__in=[i.video_id for i in items])
                 .values_list("pk", flat=True)
             )
-            # Live entries have nothing to become unlistable.
-            dropped = [i.video_id for i in items if i.video_id and i.video_id not in listable]
-            kept = [_entry(i) for i in items if i.video_id not in dropped]
-            if dropped:
+            kept = [i.video for i in items if i.video_id in listable]
+            if len(kept) != len(items):
+                dropped = [i.video_id for i in items if i.video_id not in listable]
                 logger.warning("Dropping unlistable videos %s from %s at lock", dropped, grant)
                 _replace_items(grant, kept)
             grant.state = State.LOCKED
@@ -378,26 +344,20 @@ def compile_grant(grant: AirtimeGrant) -> bool:
             if blocking is not None:
                 raise _Blocked(blocking)
             cursor = grant.starttime
-            for item in grant.items.select_related("video", "live_source"):
-                length = item.length
+            for item in grant.items.select_related("video__live_transmission"):
+                length = item.video.duration
                 if length <= timedelta(0) or cursor + length > grant.endtime:
                     logger.warning(
-                        "Leaving %s out of %s: it no longer fits the window", item.name, grant
+                        "Leaving %s out of %s: it no longer fits the window", item.video, grant
                     )
                     continue
-                if item.live_source_id:
-                    row = Scheduleitem.objects.create(
-                        default_name=item.name,
-                        is_live=True,
-                        starttime=cursor,
-                        duration=length,
-                        grant=grant,
-                    )
-                    LiveTransmission.objects.create(schedule_item=row, source=item.live_source)
-                else:
-                    Scheduleitem.objects.create(
-                        video=item.video, starttime=cursor, duration=length, grant=grant
-                    )
+                Scheduleitem.objects.create(
+                    video=item.video,
+                    starttime=cursor,
+                    duration=length,
+                    grant=grant,
+                    is_live=airs_live(item.video),
+                )
                 cursor += length
             grant.state = State.COMPILED
             grant.save(update_fields=["state", "updated_at"])
@@ -408,17 +368,25 @@ def compile_grant(grant: AirtimeGrant) -> bool:
 
 
 def recompile_for_video(video: Video, now: datetime | None = None) -> None:
-    """A pending upload's file arrived with its real length: recompile the
-    compiled grants yet to air whose rows no longer match it. A save
-    that changes nothing about the length leaves the schedule alone."""
+    """A pending upload's file arrived with its real length, or a live
+    programme got its recording: recompile the compiled grants yet to air
+    whose rows no longer match it. A save that changes nothing about the
+    length or how it airs leaves the schedule alone."""
     now = now or timezone.now()
+    # Fresh, so a live transmission just added or removed is seen.
+    video = Video.objects.select_related("live_transmission").get(pk=video.pk)
+    live = airs_live(video)
     grants = AirtimeGrant.objects.filter(
         state=State.COMPILED, starttime__gt=now, items__video=video
     ).distinct()
+    # Staff entries have no grant to recompile; they only follow how it airs.
+    Scheduleitem.objects.filter(video=video, grant=None, starttime__gt=now).exclude(
+        is_live=live
+    ).update(is_live=live)
     for grant in grants:
-        rows = list(grant.schedule_items.filter(video=video).values_list("duration", flat=True))
+        rows = list(grant.schedule_items.filter(video=video).values_list("duration", "is_live"))
         listed = grant.items.filter(video=video).count()
-        if len(rows) != listed or any(d != video.duration for d in rows):
+        if len(rows) != listed or any(d != video.duration or l != live for d, l in rows):
             compile_grant(grant)
 
 
@@ -447,19 +415,11 @@ class _Blocked(Exception):
         self.item = item
 
 
-def _replace_items(grant: AirtimeGrant, entries: Sequence[Entry]) -> None:
+def _replace_items(grant: AirtimeGrant, videos: Sequence[Video]) -> None:
     grant.items.all().delete()
     GrantItem.objects.bulk_create(
-        GrantItem(
-            grant=grant,
-            position=position,
-            live_source=entry.source,
-            duration=entry.duration,
-            title=entry.title,
-        )
-        if isinstance(entry, LiveEntry)
-        else GrantItem(grant=grant, position=position, video=entry)
-        for position, entry in enumerate(entries)
+        GrantItem(grant=grant, position=position, video=video)
+        for position, video in enumerate(videos)
     )
 
 
@@ -483,7 +443,6 @@ def _context_for(refilling: Sequence[AirtimeGrant], now: datetime) -> ScheduleCo
         GrantItem.objects.filter(grant__starttime__lt=horizon, grant__endtime__gt=now)
         .exclude(grant__state__in=(State.CANCELLED, State.COMPILED))
         .exclude(grant__in=[g.pk for g in refilling])
-        .filter(video__isnull=False)
         .select_related("video")
     )
     for item in others:

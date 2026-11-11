@@ -7,13 +7,14 @@ from rest_framework import serializers
 from fk.models import (
     AsRun,
     Category,
-    LiveTransmission,
+    LiveSource,
     Organization,
     Scheduleitem,
     Video,
     VideoFile,
     VideoFileVariant,
 )
+from scheduling.services import airs_live
 
 OSLO = ZoneInfo("Europe/Oslo")
 
@@ -76,6 +77,12 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
         model = Scheduleitem
         fields = ("id", "video", "starttime", "endtime", "duration")
 
+    def validate(self, attrs):
+        # A live programme airs live until it has a file, here as in grants.
+        video = attrs.get("video", getattr(self.instance, "video", None))
+        attrs["is_live"] = video is not None and airs_live(video)
+        return attrs
+
     def create(self, validated_data):
         return self._saving(
             lambda: super(ScheduleitemModifySerializer, self).create(validated_data)
@@ -99,24 +106,18 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
             raise
 
 
-class LiveTransmissionReadSerializer(serializers.ModelSerializer):
-    stream_id = serializers.UUIDField(source="source.stream_id", read_only=True)
-
+class ScheduleitemLiveSourceSerializer(serializers.ModelSerializer):
     class Meta:
-        model = LiveTransmission
-        fields = ("id", "source", "stream_id")
+        model = LiveSource
+        fields = ("id", "stream_id")
         read_only_fields = fields
 
 
 class ScheduleitemReadSerializer(serializers.ModelSerializer):
-    live_transmission = LiveTransmissionReadSerializer(read_only=True, allow_null=True)
     video = ScheduleitemVideoSerializer(allow_null=True)
     starttime = serializers.DateTimeField(default_timezone=OSLO)
     endtime = serializers.DateTimeField(default_timezone=OSLO, read_only=True)
-    # Deprecated, kept for one release so clients generated from the old
-    # schema (playout's is strict about required fields) keep working.
-    displaceable = serializers.SerializerMethodField()
-    weekly_slot = serializers.SerializerMethodField()
+    live_source = serializers.SerializerMethodField()
 
     class Meta:
         model = Scheduleitem
@@ -129,23 +130,20 @@ class ScheduleitemReadSerializer(serializers.ModelSerializer):
             "endtime",
             "duration",
             "grant",
-            "displaceable",
-            "weekly_slot",
-            "live_transmission",
+            "is_live",
+            "live_source",
         )
         read_only_fields = fields
 
     @extend_schema_field(
-        serializers.BooleanField(help_text="Deprecated: always false. Nothing is displaceable.")
+        ScheduleitemLiveSourceSerializer(
+            allow_null=True,
+            help_text="Set when this airing goes out live: the video's live source.",
+        )
     )
-    def get_displaceable(self, item) -> bool:
-        return False
-
-    @extend_schema_field(
-        serializers.IntegerField(allow_null=True, help_text="Deprecated: always null. See grant.")
-    )
-    def get_weekly_slot(self, item) -> None:
-        return None
+    def get_live_source(self, item):
+        live = getattr(item.video, "live_transmission", None) if item.is_live else None
+        return ScheduleitemLiveSourceSerializer(live.source).data if live else None
 
 
 class AsRunSerializer(serializers.ModelSerializer):
