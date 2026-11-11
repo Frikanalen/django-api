@@ -1,21 +1,53 @@
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import generics, permissions
 from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.response import Response
 
 from api.auth.permissions import can_administer_organization
-from api.live.serializers import LiveSourceSerializer, PreviewTokenSerializer
+from api.live.serializers import (
+    EncoderKeySerializer,
+    IssuedEncoderKeySerializer,
+    LiveSourceSerializer,
+    PreviewTokenSerializer,
+)
 from fk import preview_tokens
-from fk.models import LiveSource, Organization, Scheduleitem
+from fk.models import LiveSource, Organization, Scheduleitem, StreamCredential
+from fk.stream_connections import blackmagic_web_presenter_config, connection_examples
+from scheduling.services import may_act_for
+
+# Setting up live transmission is held to the same rule as programming
+# airtime: a live source is only good for airing, and what goes out live
+# can't be looked at first.
+MAY_SET_UP = (
+    "Only members of an approved member organization, with a confirmed "
+    "identity, can set up live transmission."
+)
 
 
-class OrganizationLiveSourceList(generics.ListAPIView):
+def _source_for(user, pk) -> LiveSource:
+    """A source the user may see; anyone else gets the 404 a missing one would."""
+    source = get_object_or_404(LiveSource.objects.select_related("organization"), pk=pk)
+    if not can_administer_organization(user, source.organization):
+        raise NotFound()
+    return source
+
+
+def _require_may_set_up(user, organization) -> None:
+    if not may_act_for(user, organization):
+        raise PermissionDenied(MAY_SET_UP)
+
+
+class OrganizationLiveSourceList(generics.ListCreateAPIView):
     """An organization's live contribution inputs and their coming bookings.
 
     Only its own members see them: a source's stream ID is half of what an
-    encoder needs to publish to it.
+    encoder needs to publish to it. Creating one is for those who may
+    program the organization's airtime.
     """
 
     serializer_class = LiveSourceSerializer
@@ -46,6 +78,95 @@ class OrganizationLiveSourceList(generics.ListAPIView):
         for source in sources:
             source.upcoming = by_source.get(source.pk, [])
         return sources
+
+    def perform_create(self, serializer):
+        organization = get_object_or_404(Organization, pk=self.kwargs["pk"])
+        if not can_administer_organization(self.request.user, organization):
+            raise PermissionDenied("You must belong to this organization.")
+        _require_may_set_up(self.request.user, organization)
+        serializer.save(organization=organization)
+
+
+class LiveSourceDetail(generics.RetrieveUpdateAPIView):
+    """Rename a source, or switch it off: a disabled source refuses every
+    encoder and reader, and can't be given to a video."""
+
+    serializer_class = LiveSourceSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def get_object(self):
+        return _source_for(self.request.user, self.kwargs["pk"])
+
+    def perform_update(self, serializer):
+        _require_may_set_up(self.request.user, serializer.instance.organization)
+        serializer.save()
+
+
+@method_decorator(never_cache, name="dispatch")
+class LiveSourceEncoderKeys(generics.ListCreateAPIView):
+    """A source's encoder keys. Issuing one answers with its password and
+    the encoder settings built from it, once; the list never shows them.
+
+    Only publish keys: readers, preview workers and playout stay with staff.
+    """
+
+    permission_classes = (permissions.IsAuthenticated,)
+    pagination_class = None
+    filter_backends = ()
+
+    def get_serializer_class(self):
+        return IssuedEncoderKeySerializer if self.request.method == "POST" else EncoderKeySerializer
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return StreamCredential.objects.none()
+        source = _source_for(self.request.user, self.kwargs["pk"])
+        return source.credentials.filter(
+            action=StreamCredential.Action.PUBLISH, revoked_at__isnull=True
+        ).order_by("-created_at")
+
+    @extend_schema(request=EncoderKeySerializer, responses={201: IssuedEncoderKeySerializer})
+    def post(self, request, pk):
+        source = _source_for(request.user, pk)
+        _require_may_set_up(request.user, source.organization)
+        if not source.enabled:
+            raise PermissionDenied("The live source is disabled.")
+        serializer = EncoderKeySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        credential = StreamCredential(
+            source=source,
+            label=serializer.validated_data["label"],
+            action=StreamCredential.Action.PUBLISH,
+        )
+        password = credential.generate_secret()
+        with transaction.atomic():
+            credential.save()
+        credential.password = password  # type: ignore[attr-defined]
+        credential.connections = connection_examples(credential, password)  # type: ignore[attr-defined]
+        credential.blackmagic_config = blackmagic_web_presenter_config(credential, password)  # type: ignore[attr-defined]
+        response = Response(IssuedEncoderKeySerializer(credential).data, status=201)
+        response["Referrer-Policy"] = "no-referrer"
+        return response
+
+
+class EncoderKeyRevoke(generics.GenericAPIView):
+    """Revoke an encoder key: an encoder using it is refused from then on."""
+
+    permission_classes = (permissions.IsAuthenticated,)
+    serializer_class = EncoderKeySerializer
+
+    @extend_schema(request=None, responses={204: None})
+    def delete(self, request, pk, key_pk):
+        source = _source_for(request.user, pk)
+        _require_may_set_up(request.user, source.organization)
+        credential = get_object_or_404(
+            source.credentials, pk=key_pk, action=StreamCredential.Action.PUBLISH
+        )
+        if credential.revoked_at is None:
+            credential.revoked_at = timezone.now()
+            credential.save(update_fields=["revoked_at"])
+        return Response(status=204)
 
 
 class LiveSourcePreviewToken(generics.GenericAPIView):
