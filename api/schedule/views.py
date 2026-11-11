@@ -31,7 +31,7 @@ class ScheduleitemViewSet(viewsets.ModelViewSet):
     # The files themselves still need prefetching; their format does not,
     # now that it is a column on the row rather than a table to join.
     queryset = Scheduleitem.objects.select_related(
-        "video__organization", "live_transmission__source"
+        "video__organization", "video__live_transmission__source"
     ).prefetch_related(
         "video__categories",
         "video__videofile_set",

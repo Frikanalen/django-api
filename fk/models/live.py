@@ -31,18 +31,31 @@ class LiveSource(models.Model):
 
 
 class LiveTransmission(models.Model):
-    """Optional live playback configuration for one existing schedule entry.
+    """A video whose picture comes from a live source rather than a file.
 
-    Timing and editorial metadata remain on the schedule entry and its Video.
+    The video stays the programme -- title, organization, category, the
+    length set by hand -- and is scheduled like any other. It airs live
+    until it has a file; once a recording is imported, later airings play
+    the file.
     """
 
-    schedule_item = models.OneToOneField(
-        "Scheduleitem", on_delete=models.CASCADE, related_name="live_transmission"
+    video = models.OneToOneField(
+        "Video", on_delete=models.CASCADE, related_name="live_transmission"
     )
     source = models.ForeignKey(LiveSource, on_delete=models.PROTECT, related_name="transmissions")
 
+    def clean(self):
+        super().clean()
+        if self.source_id and self.video_id:
+            if not self.source.enabled:
+                raise ValidationError({"source": "The live source is disabled."})
+            if self.source.organization_id != self.video.organization_id:
+                raise ValidationError(
+                    {"source": "The live source must belong to the video's organization."}
+                )
+
     def __str__(self):
-        return f"{self.schedule_item}: {self.source}"
+        return f"{self.video}: {self.source}"
 
 
 class StreamCredential(models.Model):

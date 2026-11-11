@@ -289,9 +289,8 @@ def test_list_serializes_nested_video_details(
             "endtime": "2015-01-02T11:00:00+01:00",
             "duration": "01:00:00",
             "grant": None,
-            "displaceable": False,
-            "weekly_slot": None,
-            "live_transmission": None,
+            "is_live": False,
+            "live_source": None,
         }
     ]
 
@@ -345,8 +344,7 @@ def test_list_serializes_named_programming_without_a_video(
             "endtime": "2015-01-02T12:30:00+01:00",
             "duration": "00:30:00",
             "grant": None,
-            "displaceable": False,
-            "weekly_slot": None,
-            "live_transmission": None,
+            "is_live": False,
+            "live_source": None,
         }
     ]

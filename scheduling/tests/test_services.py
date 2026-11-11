@@ -8,7 +8,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.test import override_settings
 
-from fk.models import LiveSource, LiveTransmission, Organization, Scheduleitem, User
+from fk.models import LiveSource, LiveTransmission, Organization, Scheduleitem, User, Video
 from scheduling import broadcast_time, services
 from scheduling.models import AirtimeGrant, GrantItem, RecurringSlot
 
@@ -407,60 +407,22 @@ def test_unowned_slots_are_skipped_when_the_station_is_missing() -> None:
     assert not AirtimeGrant.objects.exists()
 
 
-# -- Live transmissions ------------------------------------------------------
+# -- Live programmes ---------------------------------------------------------
 
 
-def test_a_live_entry_compiles_to_a_live_schedule_item(
-    make_grant, make_video, organization, editor
-) -> None:
-    source = LiveSource.objects.create(organization=organization, name="Studio")
-    video = make_video(10)
-    grant = make_grant(OPEN_WEEK, locks_at=NOW - timedelta(days=1), lock_exempt=True)
-    services.set_items(
-        grant,
-        [services.LiveEntry(source, timedelta(minutes=30), "Debatt"), video],
-        user=editor,
-        now=NOW,
+def test_a_live_video_airs_live_until_it_has_a_file(make_grant, make_video, organization) -> None:
+    video = make_video(30, proper_import=False)
+    LiveTransmission.objects.create(
+        video=video, source=LiveSource.objects.create(organization=organization, name="Studio")
     )
-    assert grant.items_duration == timedelta(minutes=40)
-
-    services.run_nightly(NOW)
-
-    assert schedule(grant) == [
-        (None, OPEN_WEEK, timedelta(minutes=30)),
-        (video.pk, OPEN_WEEK + timedelta(minutes=30), timedelta(minutes=10)),
-    ]
-    live = Scheduleitem.objects.get(grant=grant, video=None)
-    assert (live.default_name, live.is_live) == ("Debatt", True)
-    assert LiveTransmission.objects.get(schedule_item=live).source == source
-
-
-def test_a_live_entry_survives_the_lock(make_grant, organization) -> None:
-    source = LiveSource.objects.create(organization=organization, name="Studio")
     grant = make_grant(OPEN_WEEK, locks_at=NOW - timedelta(days=1))
-    services._replace_items(grant, [services.LiveEntry(source, timedelta(minutes=20))])
+    services._replace_items(grant, [video])
+    services.run_nightly(NOW)
+    row = Scheduleitem.objects.get(grant=grant)
+    assert row.is_live
 
-    services.lock_grants(NOW)
+    Video.objects.filter(pk=video.pk).update(proper_import=True)
+    services.recompile_for_video(video, now=NOW)
 
-    item = grant.items.get()
-    assert (item.live_source, item.duration, item.name) == (source, timedelta(minutes=20), "Studio")
-
-
-def test_a_live_entry_must_be_the_organizations_own_and_fit(
-    make_grant, organization, editor
-) -> None:
-    other = Organization.objects.create(name="Other", fkmember=True)
-    theirs = LiveSource.objects.create(organization=other, name="Theirs")
-    ours = LiveSource.objects.create(organization=organization, name="Ours")
-    grant = make_grant(OPEN_WEEK)
-
-    with pytest.raises(ValidationError, match="another organization"):
-        services.set_items(
-            grant, [services.LiveEntry(theirs, timedelta(minutes=10))], user=editor, now=NOW
-        )
-    with pytest.raises(ValidationError, match="longer than the window"):
-        services.set_items(
-            grant, [services.LiveEntry(ours, timedelta(minutes=61))], user=editor, now=NOW
-        )
-    with pytest.raises(IntegrityError), transaction.atomic():
-        GrantItem.objects.create(grant=grant, position=0, live_source=ours)
+    row = Scheduleitem.objects.get(grant=grant)
+    assert not row.is_live

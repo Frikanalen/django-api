@@ -1,4 +1,3 @@
-from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema
@@ -9,7 +8,7 @@ from rest_framework.response import Response
 from api.auth.permissions import can_administer_organization
 from api.live.serializers import LiveSourceSerializer, PreviewTokenSerializer
 from fk import preview_tokens
-from fk.models import LiveSource, LiveTransmission, Organization
+from fk.models import LiveSource, Organization, Scheduleitem
 
 
 class OrganizationLiveSourceList(generics.ListAPIView):
@@ -30,16 +29,23 @@ class OrganizationLiveSourceList(generics.ListAPIView):
         organization = get_object_or_404(Organization, pk=self.kwargs["pk"])
         if not can_administer_organization(self.request.user, organization):
             raise PermissionDenied("You must belong to this organization.")
+        sources = list(LiveSource.objects.filter(organization=organization).order_by("name", "pk"))
+        # A source's coming bookings: live airings of the videos it feeds.
         upcoming = (
-            LiveTransmission.objects.filter(schedule_item__airtime__endswith__gt=timezone.now())
-            .select_related("schedule_item__video")
-            .order_by("schedule_item__starttime")
+            Scheduleitem.objects.filter(
+                is_live=True,
+                video__live_transmission__source__in=sources,
+                airtime__endswith__gt=timezone.now(),
+            )
+            .select_related("video__live_transmission")
+            .order_by("starttime")
         )
-        return (
-            LiveSource.objects.filter(organization=organization)
-            .prefetch_related(Prefetch("transmissions", queryset=upcoming, to_attr="upcoming"))
-            .order_by("name", "pk")
-        )
+        by_source: dict[int, list[Scheduleitem]] = {}
+        for item in upcoming:
+            by_source.setdefault(item.video.live_transmission.source_id, []).append(item)
+        for source in sources:
+            source.upcoming = by_source.get(source.pk, [])
+        return sources
 
 
 class LiveSourcePreviewToken(generics.GenericAPIView):

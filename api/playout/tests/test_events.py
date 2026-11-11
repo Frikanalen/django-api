@@ -13,10 +13,11 @@ import pytest
 from django.db import connection
 from django.test import AsyncClient, Client
 from django.urls import reverse
+from django.utils import timezone
 
 from api.playout import events
 from api.playout.events import PlayoutEventHub
-from fk.models import LiveSource, LiveTransmission, Organization, Scheduleitem
+from fk.models import LiveSource, LiveTransmission, Organization, Scheduleitem, User, Video
 
 STARTTIME = datetime(2026, 10, 31, 18, tzinfo=UTC)
 
@@ -79,22 +80,24 @@ def test_a_committed_change_is_announced_with_its_window() -> None:
 
 
 @pytest.mark.django_db(transaction=True)
-def test_booking_a_live_source_is_announced_with_its_items_window() -> None:
-    item = book()
-    source = LiveSource.objects.create(
-        organization=Organization.objects.create(name="Live org"), name="Studio"
+def test_making_a_booked_video_live_is_announced_with_its_items_window() -> None:
+    organization = Organization.objects.create(name="Live org")
+    creator = User.objects.create(email="live-events@example.test")
+    video = Video.objects.create(
+        name="Debate", organization=organization, creator=creator, duration=timedelta(minutes=30)
     )
+    start = timezone.now().replace(microsecond=0) + timedelta(days=1)
+    item = Scheduleitem.objects.create(video=video, starttime=start, duration=video.duration)
+    source = LiveSource.objects.create(organization=organization, name="Studio")
     listener = events.connect()
     try:
         with listener.cursor() as cursor:
             cursor.execute(f"LISTEN {events.CHANNEL}")
-        LiveTransmission.objects.create(schedule_item=item, source=source)
-        [booked] = notifications(listener)
-        assert (booked["table"], booked["op"]) == ("fk_livetransmission", "INSERT")
-        assert (booked["from"], booked["until"]) == (
-            "2026-10-31T18:00:00+00:00",
-            "2026-10-31T18:30:00+00:00",
-        )
+        LiveTransmission.objects.create(video=video, source=source)
+        [changed] = notifications(listener)
+        assert (changed["table"], changed["op"]) == ("fk_scheduleitem", "UPDATE")
+        item.refresh_from_db()
+        assert item.is_live
     finally:
         listener.close()
 

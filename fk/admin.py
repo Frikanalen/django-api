@@ -7,7 +7,6 @@ from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
-from django.forms.models import BaseInlineFormSet
 from django.template.response import TemplateResponse
 from django.utils import timezone
 
@@ -78,9 +77,19 @@ class ProgramImageInline(admin.StackedInline):
     extra = 0
 
 
+class LiveTransmissionInline(admin.StackedInline):
+    """Makes the video a live programme: it airs from this source until
+    it has a file. The model's clean() checks the source."""
+
+    model = LiveTransmission
+    fields = ("source",)
+    extra = 0
+    max_num = 1
+
+
 class VideoAdmin(admin.ModelAdmin):
     list_display = ("name", "creator", "organization", "series", "episode_number")
-    inlines = [VideoFileInline, ProgramImageInline]
+    inlines = [VideoFileInline, ProgramImageInline, LiveTransmissionInline]
     search_fields = ["name", "description", "organization__name", "creator__email"]
     list_filter = ("proper_import", "is_filler", "publish_on_web", "has_tono_records")
 
@@ -98,31 +107,6 @@ class SeriesAdmin(admin.ModelAdmin):
     readonly_fields = ("image_url",)
     search_fields = ("name", "synopsis", "organization__name")
     ordering = ("organization__name", "name")
-
-
-class LiveTransmissionFormSet(BaseInlineFormSet):
-    def clean(self):
-        super().clean()
-        if any(self.errors):
-            return
-        for form in self.forms:
-            source = form.cleaned_data.get("source")
-            if form.cleaned_data.get("DELETE") or source is None:
-                continue
-            if not self.instance.video_id:
-                raise ValidationError("A live transmission requires a video.")
-            if not source.enabled:
-                form.add_error("source", "The live source is disabled.")
-            elif source.organization_id != self.instance.video.organization_id:
-                form.add_error("source", "The live source must belong to the video's organization.")
-
-
-class LiveTransmissionInline(admin.StackedInline):
-    model = LiveTransmission
-    formset = LiveTransmissionFormSet
-    fields = ("source",)
-    extra = 0
-    max_num = 1
 
 
 class LiveSourceAdmin(admin.ModelAdmin):
@@ -182,7 +166,6 @@ class StreamCredentialAdmin(admin.ModelAdmin):
 
 
 class ScheduleitemAdmin(admin.ModelAdmin):
-    inlines = [LiveTransmissionInline]
     list_filter = ("starttime", "schedulereason", "video__organization", "is_live")
     list_display = ("__str__", "video", "schedulereason", "starttime", "duration", "is_live")
     # list_display_links = ('starttime', 'video',)
@@ -193,22 +176,15 @@ class ScheduleitemAdmin(admin.ModelAdmin):
     # Provenance is system-owned: the grant the compiler wrote the row
     # from, and the historical schedule reason. Staff entries leave both
     # empty, which is what holds them to the no-overlap constraint.
-    readonly_fields = ("grant", "schedulereason")
+    readonly_fields = ("grant", "schedulereason", "is_live")
 
-    def save_related(self, request, form, formsets, change):
-        super().save_related(request, form, formsets, change)
-        # Preserve legacy manually flagged live entries without an input.
-        # An attached input always denotes a live airing; removing one
-        # returns that booking to recorded playback.
-        removed = any(
-            isinstance(deleted, LiveTransmission)
-            for formset in formsets
-            for deleted in formset.deleted_objects
-        )
-        attached = LiveTransmission.objects.filter(schedule_item=form.instance).exists()
-        if attached or removed:
-            Scheduleitem.objects.filter(pk=form.instance.pk).update(is_live=attached)
-            form.instance.is_live = attached
+    def save_model(self, request, obj, form, change):
+        # Whether an airing goes out live follows from its video: a live
+        # programme airs from its source until it has a file.
+        from scheduling.services import airs_live
+
+        obj.is_live = obj.video is not None and airs_live(obj.video)
+        super().save_model(request, obj, form, change)
 
 
 class IngestJobAdmin(admin.ModelAdmin):
