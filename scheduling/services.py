@@ -63,16 +63,15 @@ def may_act_for(user, organization: Organization) -> bool:
 def can_edit(grant: AirtimeGrant, user, now: datetime | None = None) -> bool:
     """Whether `user` may replace `grant`'s list right now.
 
-    Members: while open and before the deadline. Staff: until compiled.
-    Either, on a lock-exempt grant: until air.
+    Members: while open and before the deadline, or until air on a
+    lock-exempt grant. Staff: until air, whatever the state; saving a
+    compiled grant recompiles it.
     """
     now = now or timezone.now()
     if grant.state == State.CANCELLED or not may_act_for(user, grant.organization):
         return False
-    if grant.lock_exempt:
+    if grant.lock_exempt or user.is_staff:
         return grant.starttime > now
-    if user.is_staff:
-        return grant.state in (State.OPEN, State.LOCKED)
     return grant.state == State.OPEN and grant.locks_at > now
 
 

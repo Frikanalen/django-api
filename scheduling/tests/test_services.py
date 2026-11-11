@@ -276,7 +276,7 @@ def test_cancel_takes_compiled_rows_off_the_schedule(make_grant, make_video) -> 
 # -- Editing -----------------------------------------------------------------
 
 
-def test_members_edit_while_open_and_staff_until_compiled(make_grant, editor) -> None:
+def test_members_edit_while_open_and_staff_until_air(make_grant, editor) -> None:
     staff = User.objects.create(email="staff@example.test", is_superuser=True)
     grant = make_grant(OPEN_WEEK)
     assert services.can_edit(grant, editor, NOW)
@@ -286,7 +286,24 @@ def test_members_edit_while_open_and_staff_until_compiled(make_grant, editor) ->
     grant.state = State.LOCKED
     assert services.can_edit(grant, staff, past_deadline)
     grant.state = State.COMPILED
+    assert services.can_edit(grant, staff, past_deadline)
+    assert not services.can_edit(grant, staff, grant.starttime)
+    grant.state = State.CANCELLED
     assert not services.can_edit(grant, staff, past_deadline)
+
+
+def test_staff_editing_a_compiled_grant_recompiles_it(make_grant, make_video) -> None:
+    staff = User.objects.create(email="staff@example.test", is_superuser=True)
+    grant = make_grant(OPEN_WEEK, locks_at=NOW - timedelta(days=1))
+    services._replace_items(grant, [make_video(10)])
+    services.run_nightly(NOW)
+    grant.refresh_from_db()
+    assert grant.state == State.COMPILED
+
+    other = make_video(20)
+    services.set_items(grant, [other], user=staff, now=NOW)
+
+    assert schedule(grant) == [(other.pk, OPEN_WEEK, timedelta(minutes=20))]
 
 
 def test_outsiders_and_unapproved_members_cannot_edit(make_grant, organization, editor) -> None:
