@@ -25,18 +25,11 @@ nginx:
     pullPolicy: IfNotPresent
 
 database:
-  image:
-    repository: postgres
-    tag: "16"
-    pullPolicy: IfNotPresent
-  kubegresName: django-postgres
-  databaseName: fkweb
-  configMapName: django-postgres-conf
-  user: fkweb
+  # Secret holding DATABASE_URL (and the Postgres passwords it is built
+  # from). Created outside the chart -- by infra's roles/django_db_secret --
+  # and pointing at CloudNativePG's pgcluster since 2026-11-10; the chart no
+  # longer runs a database of its own.
   secret: django-postgres-passwords
-  port: "5432"
-  size: 200Mi
-  replicas: "1"
 
 memcached:
   image:
