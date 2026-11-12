@@ -11,6 +11,8 @@ LABEL = "Playout (provisioned)"
 
 
 class Command(BaseCommand):
+    action = StreamCredential.Action.PLAYOUT
+    label = LABEL
     help = (
         "Issue playout's reader credential unless the one it holds is still valid. "
         "Prints JSON; the password appears only when a new credential is issued."
@@ -25,7 +27,7 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, keep=None, **options):
         provisioned = StreamCredential.objects.select_for_update().filter(
-            action=StreamCredential.Action.PLAYOUT, label=LABEL, revoked_at__isnull=True
+            action=self.action, label=self.label, revoked_at__isnull=True
         )
         if keep:
             try:
@@ -41,7 +43,7 @@ class Command(BaseCommand):
         # database copied from another environment). Retire the rest, so only
         # the credential in the new Secret stays usable.
         provisioned.update(revoked_at=timezone.now())
-        credential = StreamCredential(action=StreamCredential.Action.PLAYOUT, label=LABEL)
+        credential = StreamCredential(action=self.action, label=self.label)
         secret = credential.generate_secret()
         credential.save()
         self.stdout.write(

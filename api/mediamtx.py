@@ -1,5 +1,7 @@
 """MediaMTX HTTP authentication; intentionally independent of DRF sessions."""
 
+import base64
+import binascii
 import json
 from ipaddress import ip_address
 from uuid import UUID
@@ -10,7 +12,7 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.debug import sensitive_variables
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from api.auth.permissions import can_administer_organization
 from fk import preview_tokens
@@ -77,7 +79,8 @@ def authenticate(request):
     live_path = credential.source.contribution_path
     preview_path = credential.source.preview_path
     if credential.action == StreamCredential.Action.PUBLISH:
-        allowed = action == "publish" and path == live_path
+        # Nobody publishes to a pulled source: MediaMTX's relay fills it.
+        allowed = action == "publish" and path == live_path and not credential.source.is_pulled
     elif credential.action == StreamCredential.Action.READ:
         allowed = action == "read" and path in (live_path, preview_path)
     elif credential.action == StreamCredential.Action.CONVERT:
@@ -108,18 +111,22 @@ def _grant(credential, password):
     return HttpResponse(status=204)
 
 
-def _is_enabled_source_path(path, kind):
-    """Whether path is exactly an enabled source's contribution_path or preview_path."""
+def _enabled_source_at(path, kind):
+    """The enabled source whose contribution_path or preview_path is exactly path."""
     if not isinstance(path, str):
-        return False
+        return None
     try:
         stream_id = UUID(path.rsplit("/", 1)[-1])
     except ValueError:
-        return False
+        return None
     source = LiveSource.objects.filter(stream_id=stream_id, enabled=True).first()
     # Compare the whole path, so neither the other kind of path nor a
     # variant spelling of the UUID passes.
-    return source is not None and getattr(source, kind) == path
+    return source if source is not None and getattr(source, kind) == path else None
+
+
+def _is_enabled_source_path(path, kind):
+    return _enabled_source_at(path, kind) is not None
 
 
 @sensitive_variables("token")
@@ -155,10 +162,64 @@ def authenticate_local_converter(payload):
     # LoadBalancer), so the address stands in for a credential. It may read
     # an enabled source's original and publish that source's preview over
     # RTSP, and nothing else.
+    #
+    # The pull relay, an FFmpeg MediaMTX starts the same way when someone
+    # reads a pulled source, may also publish that source's original.
     action = payload.get("action")
     path = payload.get("path")
-    allowed = payload.get("protocol") == "rtsp" and (
-        (action == "read" and _is_enabled_source_path(path, "contribution_path"))
-        or (action == "publish" and _is_enabled_source_path(path, "preview_path"))
-    )
+    if payload.get("protocol") != "rtsp":
+        return HttpResponse(status=401)
+    if action == "read":
+        allowed = _is_enabled_source_path(path, "contribution_path")
+    elif action == "publish":
+        pulled = _enabled_source_at(path, "contribution_path")
+        allowed = _is_enabled_source_path(path, "preview_path") or (
+            pulled is not None and pulled.is_pulled
+        )
+    else:
+        allowed = False
     return HttpResponse(status=204 if allowed else 401)
+
+
+@never_cache
+@require_GET
+@sensitive_variables()
+def pull_url(request, stream_id):
+    """The address of an enabled pulled source, for MediaMTX's pull relay.
+
+    The relay runs when someone reads contrib/live/<UUID> and no one is
+    publishing. It authenticates with the source-less pull credential over
+    HTTP Basic, and gets the address as plain text. 404 tells it the source
+    is pushed, disabled or missing, and that it has nothing to do.
+    """
+    credential = _basic_credential(request, StreamCredential.Action.PULL)
+    if credential is None:
+        response = HttpResponse(status=401)
+        response["WWW-Authenticate"] = 'Basic realm="pull relay"'
+        return response
+    source = LiveSource.objects.filter(stream_id=stream_id, enabled=True).first()
+    url = source.get_pull_url() if source is not None else None
+    if not url:
+        return HttpResponse(status=404)
+    return HttpResponse(url, content_type="text/plain; charset=utf-8")
+
+
+@sensitive_variables()
+def _basic_credential(request, action):
+    """The valid, unexpired credential of that action named by HTTP Basic auth."""
+    scheme, _, encoded = request.headers.get("Authorization", "").partition(" ")
+    if scheme.lower() != "basic" or len(encoded) > 512:
+        return None
+    try:
+        user, _, password = base64.b64decode(encoded, validate=True).decode().partition(":")
+        key_id = UUID(user)
+    except (binascii.Error, UnicodeDecodeError, ValueError):
+        return None
+    credential = StreamCredential.objects.filter(
+        key_id=key_id, action=action, revoked_at__isnull=True
+    ).first()
+    if credential is None or not password:
+        return None
+    if credential.expires_at is not None and credential.expires_at <= timezone.now():
+        return None
+    return credential if credential.check_secret(password) else None

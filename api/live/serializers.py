@@ -1,7 +1,11 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from api.schedule.serializers import OSLO
+from fk import pull_sources
 from fk.models import LiveSource, Scheduleitem, StreamCredential
 
 
@@ -23,6 +27,21 @@ class LiveSourceSerializer(serializers.ModelSerializer):
     contribution_path = serializers.CharField(read_only=True)
     preview_path = serializers.CharField(read_only=True)
     upcoming_transmissions = serializers.SerializerMethodField()
+    pull_url = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        max_length=pull_sources.MAX_LENGTH,
+        help_text=(
+            "An address Frikanalen pulls this source from (srt://, rtmp(s)://, rtsp(s)://, "
+            "or https:// for HLS), instead of an encoder pushing to it. Empty makes it a "
+            "pushed source again. Never returned; see pull_target."
+        ),
+    )
+    is_pulled = serializers.BooleanField(read_only=True)
+    pull_target = serializers.CharField(
+        read_only=True, help_text="Scheme, host and port of the pull address."
+    )
 
     class Meta:
         model = LiveSource
@@ -30,6 +49,9 @@ class LiveSourceSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "enabled",
+            "pull_url",
+            "is_pulled",
+            "pull_target",
             "stream_id",
             "contribution_path",
             "preview_path",
@@ -44,6 +66,37 @@ class LiveSourceSerializer(serializers.ModelSerializer):
             "preview_path",
             "upcoming_transmissions",
         )
+
+    def validate_pull_url(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            return value
+        if not pull_sources.is_configured():
+            raise serializers.ValidationError("Pulling live sources is not set up here.")
+        try:
+            pull_sources.validate(value)
+        except DjangoValidationError as error:
+            raise serializers.ValidationError(error.messages) from error
+        return value
+
+    def create(self, validated_data):
+        pull_url = validated_data.pop("pull_url", "")
+        source = LiveSource(**validated_data)
+        source.set_pull_url(pull_url)
+        source.save()
+        return source
+
+    def update(self, instance, validated_data):
+        pull_url = validated_data.pop("pull_url", None)
+        with transaction.atomic():
+            if pull_url is not None:
+                instance.set_pull_url(pull_url)
+                if pull_url:
+                    # Nothing publishes to a pulled source; retire its encoder keys.
+                    instance.credentials.filter(
+                        action=StreamCredential.Action.PUBLISH, revoked_at__isnull=True
+                    ).update(revoked_at=timezone.now())
+            return super().update(instance, validated_data)
 
     @extend_schema_field(UpcomingTransmissionSerializer(many=True))
     def get_upcoming_transmissions(self, obj: LiveSource):
