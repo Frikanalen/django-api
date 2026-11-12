@@ -8,6 +8,7 @@ from rest_framework.routers import SimpleRouter
 
 import agenda.tvanytime.views as tvanytime_views
 import api.auth.views as auth_views
+import api.grant_request.views as grant_request_views
 import api.grants.views as grant_views
 import api.live.views as live_views
 import api.mediamtx as mediamtx_views
@@ -144,6 +145,41 @@ api_patterns: list[URLPattern | URLResolver] = [
         "recurring-slots/<int:pk>",
         recurring_slot_views.RecurringSlotDetail.as_view(),
         name="api-recurring-slot-detail",
+    ),
+    path(
+        "recurring-slot-requests/creation/<int:pk>/decision",
+        grant_request_views.RecurringSlotCreationRequestDecision.as_view(),
+        name="api-recurring-slot-creation-request-decision",
+    ),
+    path(
+        "recurring-slot-requests/ownership/<int:pk>/decision",
+        grant_request_views.RecurringSlotOwnershipRequestDecision.as_view(),
+        name="api-recurring-slot-ownership-request-decision",
+    ),
+    path(
+        "grant-requests",
+        grant_request_views.GrantRequestList.as_view(),
+        name="api-grant-request-list",
+    ),
+    path(
+        "grant-requests/airtime",
+        grant_request_views.AirtimeGrantRequestCreate.as_view(),
+        name="api-airtime-request-create",
+    ),
+    path(
+        "grant-requests/airtime/<int:pk>/decision",
+        grant_request_views.AirtimeGrantRequestDecision.as_view(),
+        name="api-airtime-request-decision",
+    ),
+    path(
+        "grant-requests/exemption",
+        grant_request_views.GrantExemptionRequestCreate.as_view(),
+        name="api-exemption-request-create",
+    ),
+    path(
+        "grant-requests/exemption/<int:pk>/decision",
+        grant_request_views.GrantExemptionRequestDecision.as_view(),
+        name="api-exemption-request-decision",
     ),
     path(
         "fill-rules",

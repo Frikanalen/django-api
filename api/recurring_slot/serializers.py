@@ -7,13 +7,14 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
 from api.auth.permissions import can_administer_organization
-from fk.models import (
+from scheduling import broadcast_time, services
+from scheduling.models import (
+    FillRule,
+    RecurringSlot,
     RecurringSlotCreationRequest,
     RecurringSlotOwnershipRequest,
     ReviewStatus,
 )
-from scheduling import broadcast_time, services
-from scheduling.models import FillRule, RecurringSlot
 
 
 class FillRuleSummarySerializer(serializers.ModelSerializer):
@@ -130,16 +131,32 @@ def require_administered_organization(serializer, attrs):
     organization = attrs["organization"]
     if not can_administer_organization(serializer.context["request"].user, organization):
         raise PermissionDenied("You must administer the requested organization.")
+    if organization.is_rogue:
+        raise PermissionDenied("This organization is suspended.")
     return organization
 
 
-class RecurringSlotCreationRequestSerializer(serializers.ModelSerializer):
+class RequestPartiesMixin(serializers.Serializer):
+    """Names for the organization and requester, so lists need no lookups."""
+
+    organization_name = serializers.CharField(source="organization.name", read_only=True)
+    requested_by_name = serializers.SerializerMethodField()
+
+    def get_requested_by_name(self, obj) -> str:
+        user = obj.requested_by
+        return f"{user.first_name} {user.last_name}".strip() or user.email
+
+
+class RecurringSlotCreationRequestSerializer(RequestPartiesMixin, serializers.ModelSerializer):
     class Meta:
         model = RecurringSlotCreationRequest
         fields = (
             "id",
             "organization",
+            "organization_name",
             "requested_by",
+            "requested_by_name",
+            "message",
             "day",
             "start_time",
             "duration",
@@ -166,14 +183,23 @@ class RecurringSlotCreationRequestSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class RecurringSlotOwnershipRequestSerializer(serializers.ModelSerializer):
+class RecurringSlotOwnershipRequestSerializer(RequestPartiesMixin, serializers.ModelSerializer):
+    slot_description = serializers.SerializerMethodField()
+
+    def get_slot_description(self, obj) -> str:
+        return f"{obj.slot.describe()} {obj.slot.start_time:%H:%M}"
+
     class Meta:
         model = RecurringSlotOwnershipRequest
         fields = (
             "id",
             "organization",
+            "organization_name",
             "requested_by",
+            "requested_by_name",
+            "message",
             "slot",
+            "slot_description",
             "previous_organization",
             "status",
             "reviewed_by",

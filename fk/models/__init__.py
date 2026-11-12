@@ -21,12 +21,6 @@ from .schedule import (  # noqa: F401
     airtime_end,
 )
 from .series import Series  # noqa: F401
-from .slot_requests import (  # noqa: F401
-    RecurringSlotCreationRequest,
-    RecurringSlotOwnershipRequest,
-    ReviewedRequest,
-    ReviewStatus,
-)
 from .user import User, UserManager  # noqa: F401
 from .video import Video  # noqa: F401
 from .video_file import VideoFile, VideoFileVariant  # noqa: F401

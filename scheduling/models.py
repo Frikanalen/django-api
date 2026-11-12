@@ -376,3 +376,8 @@ class GrantItem(models.Model):
 
     def __str__(self):
         return f"{self.grant} #{self.position}: {self.video}"
+
+
+# The request models live in their own module; importing them here
+# registers them with the app.
+from scheduling.requests import *

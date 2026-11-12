@@ -171,6 +171,40 @@ def create_grant(
     return grant
 
 
+def approve_airtime(airtime_request) -> AirtimeGrant:
+    """The grant an approved airtime request becomes. It fills itself from
+    the organization's newest uploads until they set up a list. Approved
+    after the usual deadline, it is lock-exempt, so they still can."""
+    now = timezone.now()
+    organization = airtime_request.organization
+    if organization.is_rogue:
+        raise ValidationError({"organization": "This organization is suspended."})
+    if airtime_request.starttime <= now:
+        raise ValidationError({"starttime": "The requested time has already started."})
+    taken = AirtimeGrant.objects.active().filter(
+        starttime__lt=airtime_request.endtime, endtime__gt=airtime_request.starttime
+    )
+    if taken.exists():
+        holder = taken.select_related("organization").first()
+        raise ValidationError(
+            {
+                "starttime": f"{holder.organization} already has airtime then ({holder.starttime:%Y-%m-%d %H:%M})."
+            }
+        )
+    locks_at = broadcast_time.default_locks_at(airtime_request.starttime)
+    try:
+        return create_grant(
+            organization=organization,
+            starttime=airtime_request.starttime,
+            endtime=airtime_request.endtime,
+            locks_at=locks_at,
+            lock_exempt=locks_at <= now,
+            fill_rule=standard_fill_rule(organization),
+        )
+    except IntegrityError as error:  # lost a race for the window
+        raise ValidationError({"starttime": "Someone else got this airtime first."}) from error
+
+
 def update_grant(grant: AirtimeGrant, **changes) -> AirtimeGrant:
     """Staff changes a grant's deadline or lock exemption."""
     allowed = {"locks_at", "lock_exempt"}

@@ -6,14 +6,14 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from fk.models import (
-    Organization,
+from fk.models import Organization, User
+from scheduling.models import (
+    FillRule,
+    RecurringSlot,
     RecurringSlotCreationRequest,
     RecurringSlotOwnershipRequest,
     ReviewStatus,
-    User,
 )
-from scheduling.models import FillRule, RecurringSlot
 
 pytestmark = pytest.mark.django_db
 
