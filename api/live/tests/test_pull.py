@@ -240,13 +240,14 @@ def test_the_relay_gets_the_address_as_plain_text(pulled, relay):
 
 def test_the_relay_is_told_there_is_nothing_to_pull_for_a_pushed_source(organization, relay):
     pushed = LiveSource.objects.create(name="Studio", organization=organization)
-    assert fetch(pushed, basic(*relay)).status_code == 404
+    response = fetch(pushed, basic(*relay))
+    assert (response.status_code, response.content) == (204, b"")
 
 
 def test_a_disabled_pulled_source_is_not_pulled(pulled, relay):
     pulled.enabled = False
     pulled.save()
-    assert fetch(pulled, basic(*relay)).status_code == 404
+    assert fetch(pulled, basic(*relay)).status_code == 204
 
 
 @pytest.mark.parametrize("case", ["none", "wrong", "revoked", "playout", "garbage"])
@@ -343,4 +344,4 @@ def test_ensure_pull_credential_issues_once_and_keeps_it():
 
 def test_unknown_stream_ids_look_like_pushed_ones(relay):
     response = Client().get(reverse("api-mediamtx-pull", args=[uuid4()]), **basic(*relay))
-    assert response.status_code == 404
+    assert response.status_code == 204

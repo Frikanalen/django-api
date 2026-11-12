@@ -189,8 +189,9 @@ def pull_url(request, stream_id):
 
     The relay runs when someone reads contrib/live/<UUID> and no one is
     publishing. It authenticates with the source-less pull credential over
-    HTTP Basic, and gets the address as plain text. 404 tells it the source
-    is pushed, disabled or missing, and that it has nothing to do.
+    HTTP Basic, and gets the address as plain text. An empty 204 tells it
+    the source is pushed, disabled or missing, and that it has nothing to
+    do; any error status means try again.
     """
     credential = _basic_credential(request, StreamCredential.Action.PULL)
     if credential is None:
@@ -200,7 +201,7 @@ def pull_url(request, stream_id):
     source = LiveSource.objects.filter(stream_id=stream_id, enabled=True).first()
     url = source.get_pull_url() if source is not None else None
     if not url:
-        return HttpResponse(status=404)
+        return HttpResponse(status=204)
     return HttpResponse(url, content_type="text/plain; charset=utf-8")
 
 
