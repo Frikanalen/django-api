@@ -6,28 +6,27 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "cryptography>=44",
-    "django==5.2.17",
+    "django==5.2.19",
     "django-cors-headers==4.9.0",
     "django-durationfield==0.5.5",
     "django-environ>=0.12.0",
-    "django-filter==26.1",
+    "django-filter==26.2",
     "django-model-utils==5.0.0",
-    "django-phonenumber-field[phonenumbers]==8.5.0",
+    "django-phonenumber-field[phonenumbers]==9.0.0",
     "django-prometheus>=2.5.0",
-    "djangorestframework==3.18.0",
+    "djangorestframework==3.18.3",
     "djangorestframework-camel-case>=1.4.2",
     "drf-spectacular==0.30.0",
     "drf-standardized-errors[openapi]>=0.16.0",
-    "gunicorn==26.0.0",
+    "gunicorn==27.0.0",
     # Nothing imports this, but DRF picks it up if it is installed and uses it
     # to render view docstrings in the browsable API. VideoList documents every
     # filter in backtick code spans, so without it that page shows the literal
     # backticks instead of formatted markup.
-    "markdown==3.10.3",
+    "markdown==3.11.3",
     "mypy>=1.11",
     "psycopg2-binary>=2.9.10",
     "pymemcache>=4.0.0",
-    "python-dateutil==2.9.0.post0",
     "uvicorn>=0.30",
 ]
 
