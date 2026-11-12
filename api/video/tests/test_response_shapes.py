@@ -103,6 +103,7 @@ def expected_video_json(video: Video) -> dict:
             "editorEmail": editor.email,
             "editorMsisdn": None,
             "fkmember": False,
+            "isRogue": False,
         },
         "series": None,
         "episodeNumber": None,

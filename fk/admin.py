@@ -95,9 +95,9 @@ class VideoAdmin(admin.ModelAdmin):
 
 
 class OrganizationAdmin(admin.ModelAdmin):
-    list_display = ("name", "fkmember", "orgnr")
+    list_display = ("name", "fkmember", "is_rogue", "orgnr")
     filter_horizontal = ("members",)
-    list_filter = ("fkmember",)
+    list_filter = ("fkmember", "is_rogue")
     ordering = ("name",)
 
 

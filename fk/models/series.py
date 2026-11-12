@@ -1,16 +1,15 @@
 from django.core.validators import URLValidator
 from django.db import models
 
+from .organization import Organization
+
 
 class SeriesQuerySet(models.QuerySet):
     def visible_to(self, user):
         """Everything for staff, series from accountable organizations otherwise."""
         if getattr(user, "is_staff", False):
             return self
-        return self.filter(
-            organization__editor__isnull=False,
-            organization__editor__is_active=True,
-        )
+        return self.filter(organization__in=Organization.objects.with_responsible_editor())
 
 
 class Series(models.Model):

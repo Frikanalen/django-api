@@ -23,7 +23,9 @@ class OrganizationList(generics.ListCreateAPIView):
 
 class OrganizationDetail(generics.RetrieveUpdateDestroyAPIView):
     """
-    Video file details
+    Organization details. A suspended organization (`is_rogue`) can still
+    be fetched, so its page can show the suspension notice, but only its
+    id, name and flag are returned to anyone but staff.
     """
 
     queryset = Organization.objects.all()
@@ -31,4 +33,6 @@ class OrganizationDetail(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = (IsOrganizationEditorOrReadOnly,)
 
     def get_queryset(self):
+        if self.request.method in ("GET", "HEAD", "OPTIONS"):
+            return Organization.objects.presentable_to(self.request.user)
         return Organization.objects.visible_to(self.request.user)

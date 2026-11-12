@@ -10,6 +10,22 @@ class OrganizationSerializer(serializers.ModelSerializer):
     editor_email = serializers.SerializerMethodField()
     editor_msisdn = serializers.SerializerMethodField()
     fkmember = serializers.BooleanField(read_only=True)
+    is_rogue = serializers.BooleanField(read_only=True)
+
+    # Shown for a suspended organization to anyone but staff: enough to
+    # name it on the suspension notice, nothing to promote it with.
+    SUSPENDED_FIELDS = ("id", "name", "fkmember", "is_rogue")
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if instance.is_rogue and not getattr(user, "is_staff", False):
+            for field in data:
+                if field not in self.SUSPENDED_FIELDS:
+                    # Blank rather than drop, so the response keeps its shape.
+                    data[field] = "" if isinstance(data[field], str) else None
+        return data
 
     def get_editor_email(self, obj: Organization) -> str | None:
         if obj.editor:
@@ -47,4 +63,5 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "editor_email",
             "editor_msisdn",
             "fkmember",
+            "is_rogue",
         )

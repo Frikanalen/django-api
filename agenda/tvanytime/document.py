@@ -188,8 +188,10 @@ class _FirstBroadcasts:
 
 
 def _has_responsible_editor(video: Video) -> bool:
-    editor = video.organization.editor
-    return editor is not None and editor.is_active
+    """Restates OrganizationQuerySet.with_responsible_editor for one row."""
+    organization = video.organization
+    editor = organization.editor
+    return editor is not None and editor.is_active and not organization.is_rogue
 
 
 def _offered_on_demand(video: Video) -> bool:
