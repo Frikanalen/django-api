@@ -24,6 +24,7 @@ def test_serializer_includes_organization_and_editor_details(
         "editor_email": "organization-editor@example.test",
         "editor_msisdn": "+47 41 23 45 67",
         "fkmember": True,
+        "is_rogue": False,
     }
 
 

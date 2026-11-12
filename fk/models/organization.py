@@ -17,14 +17,29 @@ class OrganizationQuerySet(models.QuerySet):
         A disabled editor account counts as none: deactivating is the
         documented alternative to deleting a user, and deleting one
         vacates the editor field outright.
+
+        A suspended (is_rogue) organization counts as having none
+        either: its content is withdrawn exactly as if nobody answered
+        for it.
         """
-        return self.filter(editor__isnull=False, editor__is_active=True)
+        return self.filter(editor__isnull=False, editor__is_active=True, is_rogue=False)
 
     def visible_to(self, user):
         """Everything for staff, only accountable organizations otherwise."""
         if getattr(user, "is_staff", False):
             return self
         return self.with_responsible_editor()
+
+    def presentable_to(self, user):
+        """What an organization page may be fetched for.
+
+        Accountable organizations, plus suspended ones: those stay
+        reachable so their page can say why they are gone, while their
+        videos and listings do not.
+        """
+        if getattr(user, "is_staff", False):
+            return self
+        return self.with_responsible_editor() | self.filter(is_rogue=True)
 
 
 class Organization(models.Model):
@@ -41,6 +56,14 @@ class Organization(models.Model):
         settings.AUTH_USER_MODEL, blank=True
     )  # User ownership of an organization
     fkmember = models.BooleanField(default=False)
+    # Suspended for trying to subvert the general assembly: the
+    # organization's content is withdrawn from the website, listings and
+    # scheduling, and its page shows a suspension notice instead.
+    is_rogue = models.BooleanField(
+        "Suspended",
+        default=False,
+        help_text="Suspended member: content is hidden and the page shows a suspension notice.",
+    )
     orgnr = models.CharField(blank=True, max_length=255)
     homepage = models.CharField(
         "Link back to the organisation home page.", blank=True, null=True, max_length=255

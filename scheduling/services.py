@@ -54,9 +54,10 @@ def may_act_for(user, organization: Organization) -> bool:
     """Whether `user` may program airtime on `organization`'s behalf.
 
     Staff always; otherwise a member or the editor of an approved
-    Frikanalen member organization, with a confirmed identity.
+    Frikanalen member organization, with a confirmed identity. Nobody,
+    staff included, programs for a suspended organization.
     """
-    if not user.is_authenticated:
+    if not user.is_authenticated or organization.is_rogue:
         return False
     if user.is_staff:
         return True

@@ -3,6 +3,7 @@ from hmac import compare_digest
 from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.db.models import F
 from django.db.models.functions import Greatest
+from django.http import Http404
 from django_filters import rest_framework as djfilters
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_field
@@ -25,7 +26,7 @@ from api.video.serializers import (
     VideoSerializer,
     VideoUploadTokenSerializer,
 )
-from fk.models import Category, IngestJob, Video
+from fk.models import Category, IngestJob, Organization, Video
 
 
 class VideoDetail(generics.RetrieveUpdateDestroyAPIView):
@@ -41,6 +42,39 @@ class VideoDetail(generics.RetrieveUpdateDestroyAPIView):
         # Videos of an organization without an ansvarlig redaktor are
         # staff-only until one is appointed; see OrganizationQuerySet.
         return Video.objects.visible_to(self.request.user)
+
+    @extend_schema(
+        responses={
+            200: VideoSerializer,
+            403: OpenApiResponse(
+                description=(
+                    "The video belongs to a suspended organization. The body names it: "
+                    '`{"detail", "code": "organization_suspended", "organization": {"id", "name"}}`.'
+                )
+            ),
+        }
+    )
+    def retrieve(self, request, *args, **kwargs):
+        try:
+            return super().retrieve(request, *args, **kwargs)
+        except Http404:
+            # A suspended organization's video is withheld, not missing:
+            # say whose it was, so the page can show the suspension notice.
+            organization = (
+                Organization.objects.filter(is_rogue=True, video__pk=self.kwargs.get("pk"))
+                .values("id", "name")
+                .first()
+            )
+            if organization is None:
+                raise
+            return Response(
+                {
+                    "detail": "Organisasjonen er suspendert.",
+                    "code": "organization_suspended",
+                    "organization": organization,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
 
 class VideoUploadTokenDetail(generics.RetrieveAPIView):
