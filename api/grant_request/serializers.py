@@ -6,8 +6,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
 from api.recurring_slot.serializers import RequestPartiesMixin
-from fk.models import AirtimeGrantRequest, GrantExemptionRequest, ReviewStatus
-from scheduling.models import AirtimeGrant
+from scheduling.models import AirtimeGrant, AirtimeGrantRequest, GrantExemptionRequest, ReviewStatus
 from scheduling.services import may_act_for
 
 # Longer than a day is a recurring slot or a conversation, not a request.

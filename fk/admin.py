@@ -1,28 +1,21 @@
 # Copyright (c) 2012-2013 Benjamin Bruheim <grolgh@gmail.com>
 # This file is covered by the LGPLv3 or later, read COPYING for details.
 from base64 import b64encode
-from typing import ClassVar
 
-from django.contrib import admin, messages
+from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group
-from django.core.exceptions import ValidationError
 from django.template.response import TemplateResponse
 from django.utils import timezone
 
 from fk.forms import UserChangeForm, UserCreationForm
 from fk.models import (
-    AirtimeGrantRequest,
     Category,
-    GrantExemptionRequest,
     IngestJob,
     LiveSource,
     LiveTransmission,
     Organization,
     ProgramImage,
-    RecurringSlotCreationRequest,
-    RecurringSlotOwnershipRequest,
-    ReviewStatus,
     Scheduleitem,
     Series,
     StreamCredential,
@@ -229,137 +222,9 @@ class CategoryAdmin(admin.ModelAdmin):
     ordering = ("name",)
 
 
-class ReviewedRequestAdmin(admin.ModelAdmin):
-    """Shared audited decision controls for the two request types."""
-
-    list_filter: ClassVar[tuple[str, ...]] = ("status", "organization")
-    actions = ("approve_requests", "deny_requests")
-    readonly_fields: ClassVar[tuple[str, ...]] = (
-        "organization",
-        "requested_by",
-        "status",
-        "reviewed_by",
-        "created_at",
-        "reviewed_at",
-    )
-
-    def has_add_permission(self, request):
-        return False
-
-    def has_delete_permission(self, request, obj=None):
-        return False
-
-    def get_readonly_fields(self, request, obj=None):
-        fields = list(super().get_readonly_fields(request, obj))
-        if obj is not None and obj.status != ReviewStatus.PENDING:
-            fields.append("admin_comment")
-        return fields
-
-    def _decide(self, request, queryset, status):
-        decided = 0
-        for slot_request in queryset.filter(status=ReviewStatus.PENDING):
-            comment = slot_request.admin_comment.strip() or (
-                f"{ReviewStatus(status).label} in Django admin."
-            )
-            try:
-                slot_request.decide(admin=request.user, status=status, comment=comment)
-            except ValidationError as error:
-                self.message_user(
-                    request,
-                    f"{slot_request}: {'; '.join(error.messages)}",
-                    level=messages.ERROR,
-                )
-                continue
-            decided += 1
-        self.message_user(request, f"{decided} request(s) {status}.")
-
-    @admin.action(description="Approve selected pending requests")
-    def approve_requests(self, request, queryset):
-        self._decide(request, queryset, ReviewStatus.APPROVED)
-
-    @admin.action(description="Deny selected pending requests")
-    def deny_requests(self, request, queryset):
-        self._decide(request, queryset, ReviewStatus.DENIED)
-
-
-class RecurringSlotCreationRequestAdmin(ReviewedRequestAdmin):
-    list_display = (
-        "__str__",
-        "organization",
-        "day",
-        "start_time",
-        "duration",
-        "requested_by",
-        "status",
-        "reviewed_by",
-        "created_at",
-    )
-    list_filter = ("status", "organization", "day")
-    list_select_related = ("organization", "requested_by", "reviewed_by", "slot")
-    readonly_fields = ReviewedRequestAdmin.readonly_fields + (
-        "day",
-        "start_time",
-        "duration",
-        "slot",
-    )
-
-
-class RecurringSlotOwnershipRequestAdmin(ReviewedRequestAdmin):
-    list_display = (
-        "__str__",
-        "organization",
-        "slot",
-        "previous_organization",
-        "requested_by",
-        "status",
-        "reviewed_by",
-        "created_at",
-    )
-    list_select_related = (
-        "organization",
-        "slot",
-        "previous_organization",
-        "requested_by",
-        "reviewed_by",
-    )
-    readonly_fields = ReviewedRequestAdmin.readonly_fields + (
-        "slot",
-        "previous_organization",
-    )
-
-
-class AirtimeGrantRequestAdmin(ReviewedRequestAdmin):
-    list_display = (
-        "__str__",
-        "organization",
-        "starttime",
-        "endtime",
-        "requested_by",
-        "status",
-        "created_at",
-    )
-    list_select_related = ("organization", "requested_by", "reviewed_by", "grant")
-    readonly_fields = ReviewedRequestAdmin.readonly_fields + (
-        "starttime",
-        "endtime",
-        "message",
-        "grant",
-    )
-
-
-class GrantExemptionRequestAdmin(ReviewedRequestAdmin):
-    list_display = ("__str__", "organization", "grant", "requested_by", "status", "created_at")
-    list_select_related = ("organization", "requested_by", "reviewed_by", "grant")
-    readonly_fields = ReviewedRequestAdmin.readonly_fields + ("grant", "message")
-
-
-admin.site.register(AirtimeGrantRequest, AirtimeGrantRequestAdmin)
-admin.site.register(GrantExemptionRequest, GrantExemptionRequestAdmin)
 admin.site.register(Category, CategoryAdmin)
 admin.site.register(IngestJob, IngestJobAdmin)
 admin.site.register(Organization, OrganizationAdmin)
-admin.site.register(RecurringSlotCreationRequest, RecurringSlotCreationRequestAdmin)
-admin.site.register(RecurringSlotOwnershipRequest, RecurringSlotOwnershipRequestAdmin)
 admin.site.register(Scheduleitem, ScheduleitemAdmin)
 admin.site.register(LiveSource, LiveSourceAdmin)
 admin.site.register(StreamCredential, StreamCredentialAdmin)

@@ -14,8 +14,12 @@ from api.recurring_slot.serializers import (
     RecurringSlotRequestSerializer,
     RecurringSlotSerializer,
 )
-from fk.models import RecurringSlotCreationRequest, RecurringSlotOwnershipRequest
-from scheduling.models import FillRule, RecurringSlot
+from scheduling.models import (
+    FillRule,
+    RecurringSlot,
+    RecurringSlotCreationRequest,
+    RecurringSlotOwnershipRequest,
+)
 
 
 def administered_organizations(user):

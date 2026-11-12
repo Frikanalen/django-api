@@ -16,7 +16,7 @@ from api.recurring_slot.serializers import (
     RecurringSlotCreationRequestSerializer,
     RecurringSlotOwnershipRequestSerializer,
 )
-from fk.models import (
+from scheduling.models import (
     AirtimeGrantRequest,
     GrantExemptionRequest,
     RecurringSlotCreationRequest,

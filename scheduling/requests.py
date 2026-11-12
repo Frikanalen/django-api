@@ -4,8 +4,8 @@ Four kinds share one workflow: a new recurring slot, an existing slot
 changing hands, a one-off window of airtime, and a late-change exemption
 for a grant past its deadline.
 
-The slots themselves are scheduling.RecurringSlot. These models stay in
-fk until scheduling owns them (see the airtime grants ADR).
+They moved here from fk, where the slot requests began (see the airtime
+grants ADR).
 """
 
 from datetime import timedelta
@@ -17,7 +17,15 @@ from django.db import models, transaction
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
-from .organization import Organization
+__all__ = [
+    "AirtimeGrantRequest",
+    "GrantExemptionRequest",
+    "RecurringSlotCreationRequest",
+    "RecurringSlotOwnershipRequest",
+    "ReviewStatus",
+    "ReviewedRequest",
+]
+
 
 DAY_OF_THE_WEEK = (
     (0, _("Monday")),
@@ -61,7 +69,7 @@ class ReviewedRequest(models.Model):
     """Shared audit state and one-way decision workflow: a staff decision
     with a required comment, recorded once."""
 
-    organization = models.ForeignKey(Organization, on_delete=models.PROTECT)
+    organization = models.ForeignKey("fk.Organization", on_delete=models.PROTECT)
     requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     status = models.CharField(
         max_length=16,
@@ -224,7 +232,7 @@ class RecurringSlotOwnershipRequest(ReviewedRequest):
         related_name="ownership_requests",
     )
     previous_organization = models.ForeignKey(
-        "Organization",
+        "fk.Organization",
         null=True,
         blank=True,
         on_delete=models.PROTECT,

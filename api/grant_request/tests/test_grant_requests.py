@@ -5,16 +5,16 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from fk.models import (
+from fk.models import Organization, User
+from scheduling import broadcast_time
+from scheduling.models import (
+    AirtimeGrant,
     AirtimeGrantRequest,
     GrantExemptionRequest,
-    Organization,
+    RecurringSlot,
     RecurringSlotCreationRequest,
     ReviewStatus,
-    User,
 )
-from scheduling import broadcast_time
-from scheduling.models import AirtimeGrant, RecurringSlot
 
 pytestmark = pytest.mark.django_db
 

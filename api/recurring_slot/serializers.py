@@ -7,13 +7,14 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
 from api.auth.permissions import can_administer_organization
-from fk.models import (
+from scheduling import broadcast_time, services
+from scheduling.models import (
+    FillRule,
+    RecurringSlot,
     RecurringSlotCreationRequest,
     RecurringSlotOwnershipRequest,
     ReviewStatus,
 )
-from scheduling import broadcast_time, services
-from scheduling.models import FillRule, RecurringSlot
 
 
 class FillRuleSummarySerializer(serializers.ModelSerializer):
