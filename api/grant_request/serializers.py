@@ -81,6 +81,9 @@ class AirtimeGrantRequestSerializer(RequestPartiesMixin, serializers.ModelSerial
 class GrantExemptionRequestSerializer(RequestPartiesMixin, serializers.ModelSerializer):
     """A request to keep changing a grant after its deadline."""
 
+    grant_starttime = serializers.DateTimeField(source="grant.starttime", read_only=True)
+    grant_endtime = serializers.DateTimeField(source="grant.endtime", read_only=True)
+
     class Meta:
         model = GrantExemptionRequest
         fields = (
@@ -90,6 +93,8 @@ class GrantExemptionRequestSerializer(RequestPartiesMixin, serializers.ModelSeri
             "requested_by",
             "requested_by_name",
             "grant",
+            "grant_starttime",
+            "grant_endtime",
             "message",
             *REVIEW_FIELDS,
         )

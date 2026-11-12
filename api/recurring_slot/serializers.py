@@ -183,6 +183,11 @@ class RecurringSlotCreationRequestSerializer(RequestPartiesMixin, serializers.Mo
 
 
 class RecurringSlotOwnershipRequestSerializer(RequestPartiesMixin, serializers.ModelSerializer):
+    slot_description = serializers.SerializerMethodField()
+
+    def get_slot_description(self, obj) -> str:
+        return f"{obj.slot.describe()} {obj.slot.start_time:%H:%M}"
+
     class Meta:
         model = RecurringSlotOwnershipRequest
         fields = (
@@ -193,6 +198,7 @@ class RecurringSlotOwnershipRequestSerializer(RequestPartiesMixin, serializers.M
             "requested_by_name",
             "message",
             "slot",
+            "slot_description",
             "previous_organization",
             "status",
             "reviewed_by",
