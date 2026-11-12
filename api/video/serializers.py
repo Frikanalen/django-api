@@ -319,6 +319,12 @@ class IngestJobSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"error_code": "Only a failed ingest may carry an error code."}
             )
+        # error_code has a model default, so a report that leaves it out
+        # keeps the stored one. A failed job being re-queued as pending
+        # would then keep its old code and break the constraint. A job
+        # that is not failed has no error, so clear what it left behind.
+        if data.get("state") != IngestState.FAILED:
+            data.setdefault("error_code", "")
         return data
 
 
