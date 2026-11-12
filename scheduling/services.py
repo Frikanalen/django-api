@@ -209,6 +209,74 @@ def default_fill_rule(organization: Organization) -> FillRule:
     )
 
 
+def standard_fill_rule(organization: Organization) -> FillRule:
+    """The owner's newest uploads, filling the window: an existing rule
+    like that if the organization has one, otherwise a new one."""
+    existing = FillRule.objects.filter(
+        organization=organization,
+        pool=FillRule.Pool.ORGANIZATION,
+        ordering=FillRule.Ordering.LATEST,
+        mode=FillRule.Mode.FILL,
+    ).first()
+    return existing or default_fill_rule(organization)
+
+
+# How far ahead slot_conflicts looks. Long enough to catch slots that
+# meet only every few weeks or months; short enough to stay cheap.
+CONFLICT_HORIZON = timedelta(weeks=26)
+
+
+def slot_conflicts(
+    slot: RecurringSlot, now: datetime | None = None
+) -> list[tuple[RecurringSlot, datetime]]:
+    """Other slots whose occurrences overlap `slot`'s in the coming
+    half-year, with the first instant `slot` would collide with each.
+
+    Slots of suspended organizations don't count: they issue no grants.
+    A collision means issue_grants would skip one of the two occurrences,
+    so the editor refuses it rather than let a slot silently go empty.
+    """
+    now = now or timezone.now()
+    start = max(now, broadcast_time.local_midnight(slot.starts_on))
+    end = start + CONFLICT_HORIZON
+    mine = [(t, t + slot.duration) for t in slot.occurrences(start, end)]
+    if not mine:
+        return []
+    others = RecurringSlot.objects.exclude(organization__is_rogue=True).exclude(
+        ends_on__lt=broadcast_time.local_date(start)
+    )
+    if slot.pk:
+        others = others.exclude(pk=slot.pk)
+    conflicts = []
+    for other in others.select_related("organization"):
+        # Start a day early so an occurrence that began before `start`
+        # but is still running counts too.
+        theirs = [
+            (t, t + other.duration) for t in other.occurrences(start - timedelta(days=1), end)
+        ]
+        hit = _first_overlap(mine, theirs)
+        if hit is not None:
+            conflicts.append((other, hit))
+    return conflicts
+
+
+def _first_overlap(
+    mine: list[tuple[datetime, datetime]], theirs: list[tuple[datetime, datetime]]
+) -> datetime | None:
+    """The start of the first window in `mine` that overlaps one in
+    `theirs`. Both lists are in order and hold no overlaps of their own."""
+    i = j = 0
+    while i < len(mine) and j < len(theirs):
+        (a, b), (c, d) = mine[i], theirs[j]
+        if a < d and c < b:
+            return a
+        if b <= d:
+            i += 1
+        else:
+            j += 1
+    return None
+
+
 def create_weekly_slot(
     *, organization: Organization, day: int, start_time: time, duration: timedelta
 ) -> RecurringSlot:

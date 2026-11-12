@@ -1,35 +1,70 @@
 from django.db.models import Q
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import generics, permissions
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
+from api.auth.permissions import IsStaffOrReadOnly
 from api.pagination import FkDefaultPagination
 from api.recurring_slot.serializers import (
+    FillRuleSummarySerializer,
     RecurringSlotCreationRequestSerializer,
     RecurringSlotOwnershipRequestSerializer,
     RecurringSlotRequestSerializer,
     RecurringSlotSerializer,
 )
 from fk.models import RecurringSlotCreationRequest, RecurringSlotOwnershipRequest
-from scheduling.models import RecurringSlot
+from scheduling.models import FillRule, RecurringSlot
 
 
 def administered_organizations(user):
     return Q(organization__editor=user) | Q(organization__members=user)
 
 
-class RecurringSlotList(generics.ListAPIView):
-    """Every recurring slot. Public, like the schedule it produces."""
+class RecurringSlotList(generics.ListCreateAPIView):
+    """Every recurring slot. Public, like the schedule it produces;
+    staff create them."""
 
-    queryset = RecurringSlot.objects.select_related("default_fill_rule")
+    queryset = RecurringSlot.objects.select_related("default_fill_rule", "organization")
     serializer_class = RecurringSlotSerializer
     pagination_class = FkDefaultPagination
-    permission_classes = (permissions.AllowAny,)
+    permission_classes = (IsStaffOrReadOnly,)
 
 
-class RecurringSlotDetail(generics.RetrieveAPIView):
-    queryset = RecurringSlot.objects.select_related("default_fill_rule")
+class RecurringSlotDetail(generics.RetrieveUpdateDestroyAPIView):
+    """Staff change or delete a slot. Grants it already issued stay as
+    they are, without their origin once the slot is deleted."""
+
+    queryset = RecurringSlot.objects.select_related("default_fill_rule", "organization")
     serializer_class = RecurringSlotSerializer
-    permission_classes = (permissions.AllowAny,)
+    permission_classes = (IsStaffOrReadOnly,)
+
+
+class FillRuleList(generics.ListAPIView):
+    """Fill rules, for choosing a slot's default. Staff see every rule,
+    members their own organizations'."""
+
+    serializer_class = FillRuleSummarySerializer
+    pagination_class = FkDefaultPagination
+    permission_classes = (permissions.IsAuthenticated,)
+    filter_backends = ()
+
+    @extend_schema(
+        parameters=[OpenApiParameter("organization", int, description="Only this organization's")]
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    def get_queryset(self):
+        queryset = FillRule.objects.all()
+        if not self.request.user.is_staff:
+            queryset = queryset.filter(administered_organizations(self.request.user)).distinct()
+        organization = self.request.query_params.get("organization")
+        if organization:
+            if not organization.isdigit():
+                raise ValidationError({"organization": "Must be an organization id."})
+            queryset = queryset.filter(organization_id=int(organization))
+        return queryset
 
 
 class RecurringSlotRequestList(generics.ListAPIView):

@@ -1,3 +1,7 @@
+from copy import copy
+
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
@@ -8,6 +12,7 @@ from fk.models import (
     RecurringSlotOwnershipRequest,
     ReviewStatus,
 )
+from scheduling import broadcast_time, services
 from scheduling.models import FillRule, RecurringSlot
 
 
@@ -20,9 +25,25 @@ class FillRuleSummarySerializer(serializers.ModelSerializer):
 
 class RecurringSlotSerializer(serializers.ModelSerializer):
     """Recurring airtime. Each occurrence becomes an airtime grant two
-    Mondays before it airs; the grant copies the slot's time."""
+    Mondays before it airs; the grant copies the slot's time.
+
+    Staff create, change and delete slots. A change only affects grants
+    issued after it: grants already issued keep their time and owner.
+    """
 
     default_fill_rule = FillRuleSummarySerializer(read_only=True, allow_null=True)
+    default_fill_rule_id = serializers.PrimaryKeyRelatedField(
+        source="default_fill_rule",
+        queryset=FillRule.objects.all(),
+        write_only=True,
+        required=False,
+        allow_null=True,
+        help_text="Leave out to use the owner's 'newest uploads, fill the window' "
+        "rule, created if needed. Null means grants don't fill themselves.",
+    )
+    organization_name = serializers.CharField(
+        source="organization.name", read_only=True, allow_null=True, default=None
+    )
     description = serializers.CharField(source="describe", read_only=True)
 
     class Meta:
@@ -30,6 +51,7 @@ class RecurringSlotSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "organization",
+            "organization_name",
             "frequency",
             "interval",
             "weekdays",
@@ -39,9 +61,69 @@ class RecurringSlotSerializer(serializers.ModelSerializer):
             "starts_on",
             "ends_on",
             "default_fill_rule",
+            "default_fill_rule_id",
             "description",
         )
-        read_only_fields = fields
+        read_only_fields = ("id", "organization_name", "default_fill_rule", "description")
+        extra_kwargs = {"organization": {"required": True, "allow_null": True}}
+
+    def validate(self, attrs):
+        slot = copy(self.instance) if self.instance else RecurringSlot()
+        for field, value in attrs.items():
+            setattr(slot, field, value)
+
+        organization = slot.organization
+        owner_changed = self.instance is None or (
+            "organization" in attrs and attrs["organization"] != self.instance.organization
+        )
+        if owner_changed and organization is not None and organization.is_rogue:
+            raise serializers.ValidationError(
+                {"organization": "This organization is suspended and can't be given airtime."}
+            )
+        # Leaving the rule out on a new owner means the owner's standard
+        # rule (the old owner's can't follow the slot). It is looked up or
+        # created in save(), so validation writes nothing.
+        self._wants_standard_rule = (
+            "default_fill_rule" not in attrs and owner_changed and organization is not None
+        )
+        if "default_fill_rule" not in attrs and owner_changed:
+            attrs["default_fill_rule"] = slot.default_fill_rule = None
+
+        try:
+            slot.clean()
+        except DjangoValidationError as error:
+            errors = error.message_dict
+            if "default_fill_rule" in errors:  # the field it is written through
+                errors["default_fill_rule_id"] = errors.pop("default_fill_rule")
+            raise serializers.ValidationError(errors) from error
+
+        conflicts = services.slot_conflicts(slot)
+        if conflicts:
+            raise serializers.ValidationError(
+                {
+                    "non_field_errors": [
+                        f"Overlaps {other.organization or 'the station'}: {other.describe()} "
+                        f"{other.start_time:%H:%M}, first on {hit.astimezone(broadcast_time.TZ):%Y-%m-%d %H:%M}."
+                        for other, hit in conflicts
+                    ]
+                }
+            )
+        return attrs
+
+    def _with_rule(self, validated_data):
+        if self._wants_standard_rule:
+            validated_data["default_fill_rule"] = services.standard_fill_rule(
+                validated_data.get("organization") or self.instance.organization
+            )
+        return validated_data
+
+    def create(self, validated_data):
+        with transaction.atomic():
+            return super().create(self._with_rule(validated_data))
+
+    def update(self, instance, validated_data):
+        with transaction.atomic():
+            return super().update(instance, self._with_rule(validated_data))
 
 
 def require_administered_organization(serializer, attrs):

@@ -146,6 +146,11 @@ api_patterns: list[URLPattern | URLResolver] = [
         name="api-recurring-slot-detail",
     ),
     path(
+        "fill-rules",
+        recurring_slot_views.FillRuleList.as_view(),
+        name="api-fill-rule-list",
+    ),
+    path(
         "recurring-slot-requests",
         recurring_slot_views.RecurringSlotRequestList.as_view(),
         name="api-recurring-slot-request-list",
