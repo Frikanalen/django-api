@@ -12,7 +12,9 @@ from django.utils import timezone
 
 from fk.forms import UserChangeForm, UserCreationForm
 from fk.models import (
+    AirtimeGrantRequest,
     Category,
+    GrantExemptionRequest,
     IngestJob,
     LiveSource,
     LiveTransmission,
@@ -326,6 +328,33 @@ class RecurringSlotOwnershipRequestAdmin(ReviewedRequestAdmin):
     )
 
 
+class AirtimeGrantRequestAdmin(ReviewedRequestAdmin):
+    list_display = (
+        "__str__",
+        "organization",
+        "starttime",
+        "endtime",
+        "requested_by",
+        "status",
+        "created_at",
+    )
+    list_select_related = ("organization", "requested_by", "reviewed_by", "grant")
+    readonly_fields = ReviewedRequestAdmin.readonly_fields + (
+        "starttime",
+        "endtime",
+        "message",
+        "grant",
+    )
+
+
+class GrantExemptionRequestAdmin(ReviewedRequestAdmin):
+    list_display = ("__str__", "organization", "grant", "requested_by", "status", "created_at")
+    list_select_related = ("organization", "requested_by", "reviewed_by", "grant")
+    readonly_fields = ReviewedRequestAdmin.readonly_fields + ("grant", "message")
+
+
+admin.site.register(AirtimeGrantRequest, AirtimeGrantRequestAdmin)
+admin.site.register(GrantExemptionRequest, GrantExemptionRequestAdmin)
 admin.site.register(Category, CategoryAdmin)
 admin.site.register(IngestJob, IngestJobAdmin)
 admin.site.register(Organization, OrganizationAdmin)

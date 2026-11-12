@@ -22,6 +22,8 @@ from .schedule import (  # noqa: F401
 )
 from .series import Series  # noqa: F401
 from .slot_requests import (  # noqa: F401
+    AirtimeGrantRequest,
+    GrantExemptionRequest,
     RecurringSlotCreationRequest,
     RecurringSlotOwnershipRequest,
     ReviewedRequest,

@@ -5,6 +5,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from api.auth.permissions import IsStaffOrReadOnly
+from api.grant_request.views import REQUEST_FILTERS, filter_requests
 from api.pagination import FkDefaultPagination
 from api.recurring_slot.serializers import (
     FillRuleSummarySerializer,
@@ -70,6 +71,7 @@ class FillRuleList(generics.ListAPIView):
 class RecurringSlotRequestList(generics.ListAPIView):
     """One chronological read view over both request models."""
 
+    filter_backends = ()
     # list() deliberately combines two model types instead of using DRF's
     # queryset machinery. This inert queryset only gives schema introspection
     # a model without changing the endpoint's runtime behavior.
@@ -82,9 +84,7 @@ class RecurringSlotRequestList(generics.ListAPIView):
         queryset = RecurringSlotCreationRequest.objects.select_related(
             "organization", "requested_by", "reviewed_by", "slot"
         )
-        if self.request.user.is_staff:
-            return queryset
-        return queryset.filter(administered_organizations(self.request.user)).distinct()
+        return filter_requests(queryset, self.request)
 
     def _ownership_requests(self):
         queryset = RecurringSlotOwnershipRequest.objects.select_related(
@@ -94,9 +94,11 @@ class RecurringSlotRequestList(generics.ListAPIView):
             "previous_organization",
             "reviewed_by",
         )
-        if self.request.user.is_staff:
-            return queryset
-        return queryset.filter(administered_organizations(self.request.user)).distinct()
+        return filter_requests(queryset, self.request)
+
+    @extend_schema(parameters=REQUEST_FILTERS)
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
 
     def list(self, request, *args, **kwargs):
         requests = sorted(

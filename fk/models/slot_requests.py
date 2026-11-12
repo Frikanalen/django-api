@@ -1,4 +1,8 @@
-"""Organizations' requests for recurring airtime, and the staff decision.
+"""Organizations' requests for airtime, and the staff decision.
+
+Four kinds share one workflow: a new recurring slot, an existing slot
+changing hands, a one-off window of airtime, and a late-change exemption
+for a grant past its deadline.
 
 The slots themselves are scheduling.RecurringSlot. These models stay in
 fk until scheduling owns them (see the airtime grants ADR).
@@ -70,6 +74,9 @@ class ReviewedRequest(models.Model):
         blank=True,
         on_delete=models.PROTECT,
         related_name="+",
+    )
+    message = models.TextField(
+        blank=True, help_text="What the organization wants Frikanalen to know."
     )
     admin_comment = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -166,8 +173,24 @@ class RecurringSlotCreationRequest(ReviewedRequest):
         ]
 
     def _approve(self):
-        from scheduling.services import create_weekly_slot
+        from scheduling.models import RecurringSlot
+        from scheduling.services import create_weekly_slot, slot_conflicts
 
+        if self.organization.is_rogue:
+            raise ValidationError({"organization": "This organization is suspended."})
+        candidate = RecurringSlot(
+            organization=self.organization,
+            weekdays=[self.day],
+            start_time=self.start_time,
+            duration=self.duration,
+            starts_on=timezone.localdate(),
+        )
+        conflicts = slot_conflicts(candidate)
+        if conflicts:
+            other = conflicts[0][0]
+            raise ValidationError(
+                {"slot": f"The time overlaps {other.organization or 'the station'}'s slot {other}."}
+            )
         self.slot = create_weekly_slot(
             organization=self.organization,
             day=self.day,
@@ -234,3 +257,94 @@ class RecurringSlotOwnershipRequest(ReviewedRequest):
 
     def __str__(self):
         return f"{self.organization} requests {self.slot} ({self.status})"
+
+
+class AirtimeGrantRequest(ReviewedRequest):
+    """An organization's request for one window of airtime. Approval
+    creates the grant, unless someone already has the time."""
+
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="airtime_requests",
+    )
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="reviewed_airtime_requests",
+    )
+    starttime = models.DateTimeField()
+    endtime = models.DateTimeField()
+    grant = models.OneToOneField(
+        "scheduling.AirtimeGrant",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="request",
+    )
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(endtime__gt=models.F("starttime")),
+                name="airtimegrantrequest_ends_after_start",
+            ),
+            decision_audit_constraint("airtimegrantrequest_decision_audit_consistent"),
+        ]
+
+    def _approve(self):
+        from scheduling.services import approve_airtime
+
+        self.grant = approve_airtime(self)
+        return ("grant",)
+
+    def __str__(self):
+        return f"{self.organization}: airtime {self.starttime:%Y-%m-%d %H:%M} ({self.status})"
+
+
+class GrantExemptionRequest(ReviewedRequest):
+    """An organization's request to change a grant after its deadline.
+    Approval exempts the grant from locking: it stays editable until air."""
+
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="exemption_requests",
+    )
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="reviewed_exemption_requests",
+    )
+    grant = models.ForeignKey(
+        "scheduling.AirtimeGrant",
+        on_delete=models.CASCADE,
+        related_name="exemption_requests",
+    )
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        constraints = [
+            decision_audit_constraint("grantexemptionrequest_decision_audit_consistent"),
+            models.UniqueConstraint(
+                fields=("grant",),
+                condition=models.Q(status=ReviewStatus.PENDING),
+                name="one_pending_exemption_request_per_grant",
+            ),
+        ]
+
+    def _approve(self):
+        from scheduling.services import update_grant
+
+        if self.grant.starttime <= timezone.now():
+            raise ValidationError({"grant": "This grant has already started."})
+        update_grant(self.grant, lock_exempt=True)
+        return ()
+
+    def __str__(self):
+        return f"{self.organization}: exemption for {self.grant} ({self.status})"

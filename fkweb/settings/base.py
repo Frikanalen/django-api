@@ -426,6 +426,9 @@ SPECTACULAR_SETTINGS = {
         # be `KindEnum`, which says nothing and collides with the next
         # model to have a `kind`.
         "IngestKindEnum": "fk.models.ingest.IngestKind.choices",
+        # A request's state, and the two a staff decision can set it to.
+        "ReviewStatusEnum": "fk.models.slot_requests.ReviewStatus.choices",
+        "DecisionStatusEnum": "api.grant_request.serializers.DECISION_CHOICES",
         # Same reasoning, and the two serializers that expose a variant
         # must share one component rather than generate one apiece.
         "VideoFileVariantEnum": "fk.models.video_file.VideoFileVariant.choices",
