@@ -240,6 +240,21 @@ def test_nothing_forbids_returning_to_pending_from_a_finished_state(
     assert IngestJob.objects.get(pk=video.pk).state == IngestState.PENDING
 
 
+def test_a_failed_video_can_be_put_back_on_the_queue(
+    ingest_client: APIClient, video: Video
+) -> None:
+    """Re-queueing after a failed transcode is what `fk archive backfill`
+    does; the old error must not survive into the pending job."""
+    report(ingest_client, video, state="failed", errorCode="transcode_failed")
+
+    response = report(ingest_client, video, state="pending", kind="backfill")
+
+    assert response.status_code == status.HTTP_200_OK
+    job = IngestJob.objects.get(pk=video.pk)
+    assert job.state == IngestState.PENDING
+    assert job.error_code == ""
+
+
 def test_a_progress_report_does_not_demote_a_backfill_to_an_upload(
     ingest_client: APIClient, video: Video
 ) -> None:
