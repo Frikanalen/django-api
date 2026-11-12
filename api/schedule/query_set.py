@@ -28,7 +28,7 @@ class ScheduleitemQuerySet(models.QuerySet):
             try:
                 # Date-only input, and only the date survives the call, so an
                 # absent zone cannot affect the result.
-                return datetime.strptime(value, "%Y-%m-%d").date()  # noqa: DTZ007
+                return datetime.strptime(value, "%Y-%m-%d").date()
             except ValueError:
                 return None
         return None
