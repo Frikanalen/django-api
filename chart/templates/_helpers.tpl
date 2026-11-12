@@ -13,4 +13,13 @@
     secretKeyRef:
       name: {{ .Values.database.secret }}
       key: DATABASE_URL
+{{- with .Values.pullUrlKeys.secret }}
+- name: FK_PULL_URL_KEYS
+  valueFrom:
+    secretKeyRef:
+      name: {{ . }}
+      key: FK_PULL_URL_KEYS
+      # Until OpenBao has the key, Django runs without pulled sources.
+      optional: true
+{{- end }}
 {{- end -}}

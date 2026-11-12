@@ -39,6 +39,10 @@ FK_MEDIAMTX_RTMP_URL = env.str("FK_MEDIAMTX_RTMP_URL", default="")
 FK_MEDIAMTX_RTSP_URL = env.str("FK_MEDIAMTX_RTSP_URL", default="")
 FK_MEDIAMTX_WEBRTC_URL = env.str("FK_MEDIAMTX_WEBRTC_URL", default="")
 FK_MEDIAMTX_HLS_URL = env.str("FK_MEDIAMTX_HLS_URL", default="")
+# Fernet keys for pulled sources' addresses, comma-separated: the first
+# encrypts, the rest still decrypt (rotation). Per environment, from OpenBao.
+# Unset, no source can be made a pulled one.
+FK_PULL_URL_KEYS = [k for k in env.str("FK_PULL_URL_KEYS", default="").split(",") if k]
 
 # How long a claimed ingest job may stay silent before another worker is
 # allowed to take it over. Generous on purpose: two phases of an ingest

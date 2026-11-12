@@ -15,6 +15,31 @@ class LiveSource(models.Model):
     name = models.CharField(max_length=100)
     stream_id = models.UUIDField(default=uuid4, unique=True, editable=False)
     enabled = models.BooleanField(default=True)
+    # Set for a source MediaMTX pulls from an address, rather than one an
+    # encoder pushes to. Encrypted (fk.pull_sources); never shown again.
+    pull_url_encrypted = models.TextField(blank=True, default="", editable=False)
+    # Scheme, host and port of that address, for showing.
+    pull_target = models.CharField(max_length=300, blank=True, default="", editable=False)
+
+    @property
+    def is_pulled(self) -> bool:
+        return bool(self.pull_url_encrypted)
+
+    def set_pull_url(self, url: str) -> None:
+        """Make this a pulled source (or, with "", a pushed one). Not saved."""
+        from fk import pull_sources
+
+        if url:
+            self.pull_url_encrypted = pull_sources.encrypt(url)
+            self.pull_target = pull_sources.redact(url)
+        else:
+            self.pull_url_encrypted = ""
+            self.pull_target = ""
+
+    def get_pull_url(self) -> str | None:
+        from fk import pull_sources
+
+        return pull_sources.decrypt(self.pull_url_encrypted) if self.is_pulled else None
 
     # MediaMTX path names (no leading slash). Everything lives under contrib/
     # so its WebRTC endpoints claim one prefix on the site's hostname.
@@ -61,7 +86,7 @@ class LiveTransmission(models.Model):
 class StreamCredential(models.Model):
     """A revocable encoder or reader credential.
 
-    All but the playout reader are scoped to one source. The key ID is the
+    All but the playout reader and the pull relay are scoped to one source. The key ID is the
     MediaMTX username. Only the issuing caller sees the generated password;
     the database stores its Django password hash.
     """
@@ -73,6 +98,9 @@ class StreamCredential(models.Model):
         # Playout reads whichever source the schedule books, so it cannot
         # hold one credential per source without restarting for each new one.
         PLAYOUT = "playout", "Playout reader (all enabled sources)"
+        # MediaMTX's relay fetches the address of whichever pulled source is
+        # being read. Never accepted by MediaMTX itself.
+        PULL = "pull", "Pull relay (addresses of all enabled pulled sources)"
 
     source = models.ForeignKey(
         LiveSource,
@@ -80,7 +108,7 @@ class StreamCredential(models.Model):
         related_name="credentials",
         null=True,
         blank=True,
-        help_text="Required, except for the playout reader, which has no source.",
+        help_text="Required, except for the playout reader and the pull relay.",
     )
     label = models.CharField(max_length=100)
     key_id = models.UUIDField(default=uuid4, unique=True, editable=False)
@@ -93,17 +121,18 @@ class StreamCredential(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(action="playout", source__isnull=True)
-                | (~models.Q(action="playout") & models.Q(source__isnull=False)),
-                name="streamcredential_source_unless_playout",
+                condition=models.Q(action__in=("playout", "pull"), source__isnull=True)
+                | (~models.Q(action__in=("playout", "pull")) & models.Q(source__isnull=False)),
+                name="streamcredential_source_unless_global",
             ),
         ]
 
     def clean(self):
         super().clean()
-        if self.action == self.Action.PLAYOUT and self.source_id is not None:
-            raise ValidationError({"source": "The playout reader is not tied to a source."})
-        if self.action != self.Action.PLAYOUT and self.source_id is None:
+        is_global = self.action in (self.Action.PLAYOUT, self.Action.PULL)
+        if is_global and self.source_id is not None:
+            raise ValidationError({"source": "This credential is not tied to a source."})
+        if not is_global and self.source_id is None:
             raise ValidationError({"source": "This credential needs a source."})
 
     def generate_secret(self):
@@ -116,4 +145,4 @@ class StreamCredential(models.Model):
         return check_password(secret, self.secret_hash)
 
     def __str__(self):
-        return f"{self.source or 'Playout'}: {self.label}"
+        return f"{self.source or self.get_action_display()}: {self.label}"

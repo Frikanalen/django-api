@@ -45,6 +45,7 @@ class ObtainAuthTokenJsonOnly(ObtainAuthToken):
 # contribute resolvers further down.
 api_patterns: list[URLPattern | URLResolver] = [
     path("mediamtx/auth", mediamtx_views.authenticate, name="api-mediamtx-auth"),
+    path("mediamtx/pull/<uuid:stream_id>", mediamtx_views.pull_url, name="api-mediamtx-pull"),
     path("playout/events", playout_views.events, name="api-playout-events"),
     path("csrf", CsrfView.as_view(), name="api-csrf-detail"),
     # Auth

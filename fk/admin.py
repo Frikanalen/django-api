@@ -110,10 +110,12 @@ class SeriesAdmin(admin.ModelAdmin):
 
 
 class LiveSourceAdmin(admin.ModelAdmin):
-    list_display = ("name", "organization", "enabled")
+    list_display = ("name", "organization", "enabled", "pull_target")
     list_filter = ("enabled", "organization")
     search_fields = ("name", "organization__name")
-    readonly_fields = ("stream_id",)
+    # The pull address is set through the API, which validates it; here
+    # only its redacted target shows.
+    readonly_fields = ("stream_id", "pull_target")
 
 
 class StreamCredentialAdmin(admin.ModelAdmin):

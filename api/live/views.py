@@ -88,8 +88,11 @@ class OrganizationLiveSourceList(generics.ListCreateAPIView):
 
 
 class LiveSourceDetail(generics.RetrieveUpdateAPIView):
-    """Rename a source, or switch it off: a disabled source refuses every
-    encoder and reader, and can't be given to a video."""
+    """Rename a source, switch it off, or change where it is pulled from.
+
+    A disabled source refuses every encoder and reader, and can't be given
+    to a video. Setting a pull address revokes the source's encoder keys.
+    """
 
     serializer_class = LiveSourceSerializer
     permission_classes = (permissions.IsAuthenticated,)
@@ -132,6 +135,8 @@ class LiveSourceEncoderKeys(generics.ListCreateAPIView):
         _require_may_set_up(request.user, source.organization)
         if not source.enabled:
             raise PermissionDenied("The live source is disabled.")
+        if source.is_pulled:
+            raise PermissionDenied("Frikanalen pulls this source; it takes no encoder keys.")
         serializer = EncoderKeySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         credential = StreamCredential(

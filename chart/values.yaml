@@ -31,6 +31,12 @@ database:
   # longer runs a database of its own.
   secret: django-postgres-passwords
 
+# Fernet keys that encrypt pulled live sources' addresses (FK_PULL_URL_KEYS,
+# comma-separated, newest first), one set per environment, from OpenBao via
+# an ExternalSecret. Unset, members cannot make a source a pulled one.
+pullUrlKeys:
+  secret: ""
+
 memcached:
   image:
     repository: memcached

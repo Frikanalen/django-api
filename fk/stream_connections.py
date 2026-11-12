@@ -74,6 +74,17 @@ def connection_examples(credential, secret):
             )
         return examples
 
+    if credential.action == StreamCredential.Action.PULL:
+        # Not a MediaMTX credential: the relay sends it to Django over HTTP
+        # Basic to fetch a pulled source's address.
+        return [
+            {
+                "label": "Pull relay",
+                "url": "/api/mediamtx/pull/<source stream UUID>",
+                "note": "Give MediaMTX FK_PULL_CREDENTIAL=<username>:<password>.",
+            }
+        ]
+
     path = credential.source.contribution_path
 
     if credential.action == StreamCredential.Action.CONVERT:

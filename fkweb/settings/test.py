@@ -14,3 +14,7 @@ from .local import *
 # request.user share a single cache key. DummyCache keeps the middleware
 # in the request path but never stores anything.
 CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+
+########## PULLED LIVE SOURCES
+# A fixed key, so tests can encrypt and decrypt pull addresses.
+FK_PULL_URL_KEYS = ["B1cZlYWheJ9arZPzeGg6OKYslOAAvLpdGloBMnOW0aY="]
