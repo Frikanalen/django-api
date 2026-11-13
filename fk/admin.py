@@ -114,7 +114,15 @@ class LiveSourceAdmin(admin.ModelAdmin):
 
 
 class StreamCredentialAdmin(admin.ModelAdmin):
-    list_display = ("label", "source", "action", "created_at", "expires_at", "revoked_at")
+    list_display = (
+        "label",
+        "source",
+        "action",
+        "created_at",
+        "last_used_at",
+        "expires_at",
+        "revoked_at",
+    )
     list_filter = ("action", "revoked_at", "source__organization")
     search_fields = ("label", "source__name", "source__organization__name")
     fields = ("source", "label", "action", "key_id", "created_at", "expires_at", "revoked_at")

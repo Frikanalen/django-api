@@ -1,4 +1,5 @@
 import secrets
+from datetime import timedelta
 from uuid import uuid4
 
 from django.contrib.auth.hashers import check_password, make_password
@@ -50,6 +51,31 @@ class LiveSource(models.Model):
     @property
     def preview_path(self):
         return f"contrib/preview/{self.stream_id}"
+
+    @property
+    def active_encoder_keys(self):
+        return self.credentials.filter(
+            action=StreamCredential.Action.PUBLISH, revoked_at__isnull=True
+        )
+
+    def coming_booking(self, now):
+        """The next live airing of this source that has not ended, if any.
+
+        While there is one the source is spoken for: switching it off or
+        changing how its signal comes in would leave that airing black.
+        """
+        from fk.models import Scheduleitem
+
+        return (
+            Scheduleitem.objects.filter(
+                is_live=True,
+                video__live_transmission__source=self,
+                airtime__endswith__gt=now,
+            )
+            .select_related("video")
+            .order_by("starttime")
+            .first()
+        )
 
     def __str__(self):
         return self.name
@@ -117,6 +143,9 @@ class StreamCredential(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField(null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True, editable=False)
+    # When MediaMTX last accepted this credential: which encoder is the one
+    # in use. Kept to the minute, so a reconnecting encoder costs no writes.
+    last_used_at = models.DateTimeField(null=True, blank=True, editable=False)
 
     class Meta:
         constraints = [
@@ -134,6 +163,12 @@ class StreamCredential(models.Model):
             raise ValidationError({"source": "This credential is not tied to a source."})
         if not is_global and self.source_id is None:
             raise ValidationError({"source": "This credential needs a source."})
+
+    def note_used(self, now):
+        """Record that MediaMTX accepted this credential just now."""
+        if self.last_used_at is None or now - self.last_used_at >= timedelta(minutes=1):
+            self.last_used_at = now
+            type(self).objects.filter(pk=self.pk).update(last_used_at=now)
 
     def generate_secret(self):
         """Set a fresh password hash and return the secret without saving."""

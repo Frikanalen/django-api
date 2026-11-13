@@ -6,7 +6,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import generics, permissions
-from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from api.auth.permissions import can_administer_organization
@@ -94,16 +94,20 @@ class OrganizationLiveSourceList(generics.ListCreateAPIView):
         serializer.save(organization=organization)
 
 
-class LiveSourceDetail(generics.RetrieveUpdateAPIView):
-    """Rename a source, switch it off, or change where it is pulled from.
+class LiveSourceDetail(generics.RetrieveUpdateDestroyAPIView):
+    """Rename a source, switch it off, change where it is pulled from, or
+    delete it.
 
     A disabled source refuses every encoder and reader, and can't be given
     to a video. Setting a pull address revokes the source's encoder keys.
+    Neither switching off nor changing how the signal comes in is allowed
+    while a live airing of the source is coming. Only a source no programme
+    has ever used can be deleted (see `canDelete`); its keys go with it.
     """
 
     serializer_class = LiveSourceSerializer
     permission_classes = (permissions.IsAuthenticated,)
-    http_method_names = ["get", "patch", "head", "options"]
+    http_method_names = ["get", "patch", "delete", "head", "options"]
 
     def get_object(self):
         source = _source_for(self.request.user, self.kwargs["pk"])
@@ -113,6 +117,14 @@ class LiveSourceDetail(generics.RetrieveUpdateAPIView):
     def perform_update(self, serializer):
         _require_may_set_up(self.request.user, serializer.instance.organization)
         serializer.save()
+
+    def perform_destroy(self, instance):
+        _require_may_set_up(self.request.user, instance.organization)
+        if instance.transmissions.exists():
+            raise ValidationError(
+                "Kilden er brukt av et program og kan ikke slettes. Slå den av i stedet."
+            )
+        instance.delete()
 
 
 @method_decorator(never_cache, name="dispatch")
@@ -142,26 +154,37 @@ class LiveSourceEncoderKeys(generics.ListCreateAPIView):
     def post(self, request, pk):
         source = _source_for(request.user, pk)
         _require_may_set_up(request.user, source.organization)
-        if not source.enabled:
-            raise PermissionDenied("The live source is disabled.")
-        if source.is_pulled:
-            raise PermissionDenied("Frikanalen pulls this source; it takes no encoder keys.")
+        _require_takes_keys(source)
         serializer = EncoderKeySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        credential = StreamCredential(
-            source=source,
-            label=serializer.validated_data["label"],
-            action=StreamCredential.Action.PUBLISH,
-        )
-        password = credential.generate_secret()
-        with transaction.atomic():
-            credential.save()
-        credential.password = password  # type: ignore[attr-defined]
-        credential.connections = connection_examples(credential, password)  # type: ignore[attr-defined]
-        credential.blackmagic_config = blackmagic_web_presenter_config(credential, password)  # type: ignore[attr-defined]
-        response = Response(IssuedEncoderKeySerializer(credential).data, status=201)
-        response["Referrer-Policy"] = "no-referrer"
-        return response
+        return _issued(_new_key(source, serializer.validated_data["label"]))
+
+
+def _require_takes_keys(source) -> None:
+    if not source.enabled:
+        raise PermissionDenied("The live source is disabled.")
+    if source.is_pulled:
+        raise PermissionDenied("Frikanalen pulls this source; it takes no encoder keys.")
+
+
+def _new_key(source, label) -> StreamCredential:
+    """An unsaved publish key with a fresh password, which it carries once."""
+    credential = StreamCredential(
+        source=source, label=label, action=StreamCredential.Action.PUBLISH
+    )
+    credential.password = credential.generate_secret()  # type: ignore[attr-defined]
+    credential.save()
+    return credential
+
+
+def _issued(credential) -> Response:
+    """The one answer that shows a key's password, with its encoder settings."""
+    password = credential.password
+    credential.connections = connection_examples(credential, password)
+    credential.blackmagic_config = blackmagic_web_presenter_config(credential, password)
+    response = Response(IssuedEncoderKeySerializer(credential).data, status=201)
+    response["Referrer-Policy"] = "no-referrer"
+    return response
 
 
 class EncoderKeyRevoke(generics.GenericAPIView):
@@ -181,6 +204,39 @@ class EncoderKeyRevoke(generics.GenericAPIView):
             credential.revoked_at = timezone.now()
             credential.save(update_fields=["revoked_at"])
         return Response(status=204)
+
+
+@method_decorator(never_cache, name="dispatch")
+class EncoderKeyReplace(generics.GenericAPIView):
+    """Give an encoder a new key: for when its settings were lost, or leaked.
+
+    The encoder keeps its name; the old key stops working at once, and the
+    answer shows the new password and settings, once.
+    """
+
+    permission_classes = (permissions.IsAuthenticated,)
+    serializer_class = IssuedEncoderKeySerializer
+
+    @extend_schema(
+        operation_id="live_sources_encoder_keys_replace",
+        request=None,
+        responses={201: IssuedEncoderKeySerializer},
+    )
+    def post(self, request, pk, key_pk):
+        source = _source_for(request.user, pk)
+        _require_may_set_up(request.user, source.organization)
+        _require_takes_keys(source)
+        old = get_object_or_404(
+            source.credentials,
+            pk=key_pk,
+            action=StreamCredential.Action.PUBLISH,
+            revoked_at__isnull=True,
+        )
+        with transaction.atomic():
+            old.revoked_at = timezone.now()
+            old.save(update_fields=["revoked_at"])
+            credential = _new_key(source, old.label)
+        return _issued(credential)
 
 
 class LiveSourcePreviewToken(generics.GenericAPIView):

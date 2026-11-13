@@ -112,6 +112,7 @@ def _grant(credential, password):
         return HttpResponse(status=401)
 
     # Use the upstream wire format, not the public API's camelCase renderer.
+    credential.note_used(timezone.now())
     if credential.expires_at is not None:
         return JsonResponse({"expireAt": credential.expires_at.isoformat()})
     return HttpResponse(status=204)

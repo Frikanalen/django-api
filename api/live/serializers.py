@@ -23,6 +23,16 @@ class UpcomingTransmissionSerializer(serializers.ModelSerializer):
         return obj.video.name if obj.video else obj.default_name
 
 
+def booked_message(booking: Scheduleitem) -> str:
+    """Why a source can't be changed now, naming the airing in the way."""
+    start = booking.starttime.astimezone(OSLO)
+    name = booking.video.name if booking.video else booking.default_name
+    return (
+        f"Kilden skal på lufta {start:%d.%m.%Y} kl. {start:%H:%M} («{name}»). "
+        "Flytt eller fjern sendingen først."
+    )
+
+
 class LiveSourceSerializer(serializers.ModelSerializer):
     contribution_path = serializers.CharField(read_only=True)
     preview_path = serializers.CharField(read_only=True)
@@ -42,6 +52,18 @@ class LiveSourceSerializer(serializers.ModelSerializer):
     pull_target = serializers.CharField(
         read_only=True, help_text="Scheme, host and port of the pull address."
     )
+    encoder_count = serializers.SerializerMethodField(
+        help_text=(
+            "Encoders that hold a key to this source. A pushed source with none "
+            "cannot receive a signal."
+        )
+    )
+    can_delete = serializers.SerializerMethodField(
+        help_text=(
+            "A source no programme has ever used can be deleted; one that has "
+            "stays, and can be switched off."
+        )
+    )
 
     class Meta:
         model = LiveSource
@@ -52,6 +74,8 @@ class LiveSourceSerializer(serializers.ModelSerializer):
             "pull_url",
             "is_pulled",
             "pull_target",
+            "encoder_count",
+            "can_delete",
             "stream_id",
             "contribution_path",
             "preview_path",
@@ -66,6 +90,25 @@ class LiveSourceSerializer(serializers.ModelSerializer):
             "preview_path",
             "upcoming_transmissions",
         )
+
+    def get_encoder_count(self, obj: LiveSource) -> int:
+        return obj.active_encoder_keys.count() if obj.pk else 0
+
+    def get_can_delete(self, obj: LiveSource) -> bool:
+        return not (obj.pk and obj.transmissions.exists())
+
+    def validate(self, attrs):
+        """A source with a broadcast coming is spoken for as it is."""
+        source = self.instance
+        if source is None:
+            return attrs
+        switching_off = attrs.get("enabled") is False and source.enabled
+        changing_way_in = "pull_url" in attrs and bool(attrs["pull_url"]) != source.is_pulled
+        if switching_off or changing_way_in:
+            booking = source.coming_booking(timezone.now())
+            if booking is not None:
+                raise serializers.ValidationError(booked_message(booking))
+        return attrs
 
     def validate_pull_url(self, value: str) -> str:
         value = value.strip()
@@ -203,8 +246,15 @@ class EncoderKeySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = StreamCredential
-        fields: tuple[str, ...] = ("id", "label", "key_id", "created_at", "revoked_at")
-        read_only_fields = ("id", "key_id", "created_at", "revoked_at")
+        fields: tuple[str, ...] = (
+            "id",
+            "label",
+            "key_id",
+            "created_at",
+            "last_used_at",
+            "revoked_at",
+        )
+        read_only_fields = ("id", "key_id", "created_at", "last_used_at", "revoked_at")
 
 
 class ConnectionExampleSerializer(serializers.Serializer):
