@@ -129,17 +129,12 @@ sys.path.append(DJANGO_ROOT)
 DEBUG = False
 
 ########## MANAGER CONFIGURATION
+# Deliberately empty. Django mails ADMINS on server errors and MANAGERS on
+# broken links; errors go to the logs (Loki) and alerts instead, so nothing
+# here may turn on mail to anyone just because SMTP gets configured.
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#admins
-ADMINS = (
-    ("Tore Sinding Bekkedal", "toresbe@gmail.com"),
-    ("Odin Hørthe Omdal", "odin.omdal@gmail.com"),
-)
-
-# See: https://docs.djangoproject.com/en/dev/ref/settings/#managers
-MANAGERS = ADMINS + (
-    ("Frikanalen styret", "styret@frikanalen.tv"),
-    ("Olav Hardang", "olav.hardang@p7.no"),
-)
+ADMINS: list[tuple[str, str]] = []
+MANAGERS: list[tuple[str, str]] = []
 ########## END MANAGER CONFIGURATION
 
 
@@ -315,24 +310,17 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 ########## LOGGING CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#logging
-# A sample logging configuration. The only tangible logging
-# performed by this configuration is to send an email to
-# the site admins on every HTTP 500 error when DEBUG=False.
-# See http://docs.djangoproject.com/en/dev/topics/logging for
-# more details on how to customize your logging configuration.
+# Everything goes to the console, where Loki picks it up. There is no
+# AdminEmailHandler: errors must never turn into mail, whatever the email
+# settings below say. This config replaces the handlers of Django's own
+# "django" logger, which by default include mail_admins.
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "filters": {"require_debug_false": {"()": "django.utils.log.RequireDebugFalse"}},
     "handlers": {
         "console": {
             "level": "DEBUG",
             "class": "logging.StreamHandler",
-        },
-        "mail_admins": {
-            "level": "ERROR",
-            "filters": ["require_debug_false"],
-            "class": "django.utils.log.AdminEmailHandler",
         },
     },
     "loggers": {
@@ -343,16 +331,6 @@ LOGGING = {
         },
         "django": {
             "handlers": ["console"],
-            "level": "ERROR",
-            "propagate": True,
-        },
-        "django.request": {
-            "handlers": ["mail_admins"],
-            "level": "ERROR",
-            "propagate": True,
-        },
-        "gunicorn": {
-            "handlers": ["mail_admins"],
             "level": "ERROR",
             "propagate": True,
         },
@@ -451,8 +429,25 @@ SPECTACULAR_SETTINGS = {
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_URLS_REGEX = r"^/api/.*$"  # anyway, only enable CORS for the API
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = "Frikanalen <noreply@frikanalen.tv>"
+########## EMAIL CONFIGURATION
+# Off unless the environment turns it on: the console backend only prints.
+# To send for real, set EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+# and EMAIL_HOST; EMAIL_HOST_USER / EMAIL_HOST_PASSWORD come from a Secret.
+# Port 587 with STARTTLS is mail.frikanalen.tv's submission port.
+EMAIL_BACKEND = env.str("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = env.str("EMAIL_HOST", default="localhost")
+EMAIL_PORT = env.int("EMAIL_PORT", default=587)
+EMAIL_HOST_USER = env.str("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env.str("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
+# Without a timeout, a hung SMTP server would hang the request sending mail.
+EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=10)
+DEFAULT_FROM_EMAIL = env.str("DEFAULT_FROM_EMAIL", default="Frikanalen <noreply@frikanalen.tv>")
+# Sender of Django's own error mail. Nothing sends that (see LOGGING), but
+# keep it off root@localhost in case something ever does.
+SERVER_EMAIL = env.str("SERVER_EMAIL", default=DEFAULT_FROM_EMAIL)
+########## END EMAIL CONFIGURATION
 SECRET_KEY = env.str("SECRET_KEY")
 ALLOWED_HOSTS = env.str("ALLOWED_HOSTS").split(",")
 DATABASES = {"default": env.db()}

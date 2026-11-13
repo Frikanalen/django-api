@@ -1,7 +1,10 @@
+import logging
+
 import pytest
 from django.conf import settings
 from django.test import Client, override_settings
 from django.urls import Resolver404, resolve
+from django.utils.log import AdminEmailHandler
 
 
 @pytest.mark.parametrize(
@@ -56,3 +59,21 @@ def test_csrf_endpoint_mints_a_token_and_sets_the_cookie() -> None:
     assert response.status_code == 200
     assert response.json()["csrfToken"]
     assert "csrftoken" in response.cookies
+
+
+def _all_log_handlers() -> list[logging.Handler]:
+    loggers = [logging.getLogger(), *logging.Logger.manager.loggerDict.values()]
+    return [h for lg in loggers if isinstance(lg, logging.Logger) for h in lg.handlers]
+
+
+def test_no_logger_mails_errors() -> None:
+    """Errors go to the logs, never to mail, so turning on SMTP sends nothing by itself."""
+    assert not any(isinstance(h, AdminEmailHandler) for h in _all_log_handlers())
+    assert settings.ADMINS == []
+    assert settings.MANAGERS == []
+
+
+def test_a_server_error_sends_no_mail(mailoutbox: list) -> None:
+    logging.getLogger("django.request").error("Internal Server Error: /boom", exc_info=False)
+    logging.getLogger("gunicorn.error").error("worker died")
+    assert mailoutbox == []

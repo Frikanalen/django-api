@@ -11,7 +11,15 @@ If the server is run with `uv run manage.py runserver`, .env and .env.local are 
 - ALLOWED_HOSTS - comma-separated list of permitted domains
 - DATABASE_URL - database URL
 - CACHE_URL - cache URL
-- SMTP_SERVER - smtp server for outgoing email
+- EMAIL_BACKEND - defaults to the console backend, which only prints; set
+  `django.core.mail.backends.smtp.EmailBackend` to send for real
+- EMAIL_HOST, EMAIL_PORT (587), EMAIL_USE_TLS (true), EMAIL_USE_SSL (false),
+  EMAIL_TIMEOUT (10) - SMTP server
+- EMAIL_HOST_USER, EMAIL_HOST_PASSWORD - SMTP login
+- DEFAULT_FROM_EMAIL, SERVER_EMAIL - sender address (`Frikanalen <noreply@frikanalen.tv>`)
+
+Django never mails errors to anyone: ADMINS and MANAGERS are empty and no
+logger has an AdminEmailHandler. Errors go to the logs.
 
 ## Installation
 
