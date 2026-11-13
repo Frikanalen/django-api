@@ -6,6 +6,7 @@ import json
 from ipaddress import ip_address
 from uuid import UUID
 
+from django.conf import settings
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
@@ -145,7 +146,12 @@ def authenticate_preview_token(token, payload):
     if claims is None:
         return HttpResponse(status=401)
     source, user = claims
-    if payload.get("path") not in (source.contribution_path, source.preview_path):
+    # The programme return is what the channel airs, the same for every
+    # source: anyone who may preview a source may watch it come back.
+    allowed_paths = [source.contribution_path, source.preview_path]
+    if settings.FK_PROGRAM_RETURN_PATH:
+        allowed_paths.append(settings.FK_PROGRAM_RETURN_PATH)
+    if payload.get("path") not in allowed_paths:
         return HttpResponse(status=401)
     # Rechecked on use, so leaving the organization ends access at once.
     if not can_administer_organization(user, source.organization):
@@ -176,6 +182,10 @@ def authenticate_local_converter(payload):
         return HttpResponse(status=401)
     if action == "read":
         allowed = _is_enabled_source_path(path, "contribution_path")
+    elif action == "publish" and path and path == settings.FK_PROGRAM_RETURN_PATH:
+        # The programme return's converter, started the same way, reads the
+        # programme from outside MediaMTX and publishes only this path.
+        allowed = True
     elif action == "publish":
         pulled = _enabled_source_at(path, "contribution_path")
         allowed = _is_enabled_source_path(path, "preview_path") or (

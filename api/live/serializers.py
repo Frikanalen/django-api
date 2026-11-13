@@ -117,6 +117,13 @@ class PreviewTokenSerializer(serializers.Serializer):
     preview_path = serializers.CharField(
         help_text="The Opus-audio preview, if a conversion worker runs for this source."
     )
+    program_path = serializers.CharField(
+        allow_blank=True,
+        help_text=(
+            "A low-latency copy of what the channel is airing, readable with the "
+            "same token. Empty where the receiver has no programme return."
+        ),
+    )
 
 
 class SignalVideoSerializer(serializers.Serializer):

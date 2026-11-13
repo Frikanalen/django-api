@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -38,6 +39,24 @@ def _source_for(user, pk) -> LiveSource:
     return source
 
 
+def _attach_upcoming(sources) -> None:
+    """Give each source its coming bookings: live airings of the videos it feeds."""
+    upcoming = (
+        Scheduleitem.objects.filter(
+            is_live=True,
+            video__live_transmission__source__in=sources,
+            airtime__endswith__gt=timezone.now(),
+        )
+        .select_related("video__live_transmission")
+        .order_by("starttime")
+    )
+    by_source: dict[int, list[Scheduleitem]] = {}
+    for item in upcoming:
+        by_source.setdefault(item.video.live_transmission.source_id, []).append(item)
+    for source in sources:
+        source.upcoming = by_source.get(source.pk, [])
+
+
 def _require_may_set_up(user, organization) -> None:
     if not may_act_for(user, organization):
         raise PermissionDenied(MAY_SET_UP)
@@ -63,21 +82,7 @@ class OrganizationLiveSourceList(generics.ListCreateAPIView):
         if not can_administer_organization(self.request.user, organization):
             raise PermissionDenied("You must belong to this organization.")
         sources = list(LiveSource.objects.filter(organization=organization).order_by("name", "pk"))
-        # A source's coming bookings: live airings of the videos it feeds.
-        upcoming = (
-            Scheduleitem.objects.filter(
-                is_live=True,
-                video__live_transmission__source__in=sources,
-                airtime__endswith__gt=timezone.now(),
-            )
-            .select_related("video__live_transmission")
-            .order_by("starttime")
-        )
-        by_source: dict[int, list[Scheduleitem]] = {}
-        for item in upcoming:
-            by_source.setdefault(item.video.live_transmission.source_id, []).append(item)
-        for source in sources:
-            source.upcoming = by_source.get(source.pk, [])
+        _attach_upcoming(sources)
         return sources
 
     def perform_create(self, serializer):
@@ -100,7 +105,9 @@ class LiveSourceDetail(generics.RetrieveUpdateAPIView):
     http_method_names = ["get", "patch", "head", "options"]
 
     def get_object(self):
-        return _source_for(self.request.user, self.kwargs["pk"])
+        source = _source_for(self.request.user, self.kwargs["pk"])
+        _attach_upcoming([source])
+        return source
 
     def perform_update(self, serializer):
         _require_may_set_up(self.request.user, serializer.instance.organization)
@@ -205,6 +212,7 @@ class LiveSourcePreviewToken(generics.GenericAPIView):
                 "expires_at": timezone.now() + preview_tokens.TOKEN_TTL,
                 "contribution_path": source.contribution_path,
                 "preview_path": source.preview_path,
+                "program_path": settings.FK_PROGRAM_RETURN_PATH,
             }
         )
         return Response(serializer.data, status=201)
