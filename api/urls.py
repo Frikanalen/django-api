@@ -20,7 +20,7 @@ import api.schedule.views as schedule_views
 import api.series.views as series_views
 import api.video.views as video_views
 import api.videofile.views as videofile_views
-from api.auth import password_reset
+from api.auth import password_reset, two_factor
 from fkweb.views import CsrfView
 
 from . import views
@@ -40,6 +40,8 @@ class ObtainAuthTokenJsonOnly(ObtainAuthToken):
     code tries to both send form-multipart and JSON."""
 
     parser_classes = (parsers.JSONParser,)
+    # Asks accounts with two-factor on for `otp` too (fk-cli logs in here).
+    serializer_class = two_factor.AuthTokenWithSecondFactorSerializer
 
 
 # Annotated because the opening literal is all patterns, which would fix
@@ -54,6 +56,15 @@ api_patterns: list[URLPattern | URLResolver] = [
     path("user/register", auth_views.UserCreate.as_view(), name="api-user-create"),
     path("user/login", auth_views.UserLogin.as_view(), name="api-user-login"),
     path("user/logout", auth_views.UserLogout.as_view(), name="api-user-logout"),
+    path("user/2fa", two_factor.TwoFactorStatus.as_view(), name="api-user-2fa"),
+    path("user/2fa/setup", two_factor.TwoFactorSetup.as_view(), name="api-user-2fa-setup"),
+    path("user/2fa/confirm", two_factor.TwoFactorConfirm.as_view(), name="api-user-2fa-confirm"),
+    path("user/2fa/disable", two_factor.TwoFactorDisable.as_view(), name="api-user-2fa-disable"),
+    path(
+        "user/2fa/recovery-codes",
+        two_factor.TwoFactorRecoveryCodes.as_view(),
+        name="api-user-2fa-recovery-codes",
+    ),
     path(
         "user/password",
         password_reset.PasswordChange.as_view(),

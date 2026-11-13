@@ -9,8 +9,12 @@ from django.urls import re_path as url
 
 import agenda.urls
 import api.urls
+from api.auth.two_factor import AdminAuthenticationWithSecondFactorForm
 
 admin.autodiscover()
+# The admin login asks accounts with two-factor on for their code too.
+admin.site.login_form = AdminAuthenticationWithSecondFactorForm
+admin.site.login_template = "admin/login_otp.html"
 
 urlpatterns: list[URLPattern | URLResolver] = [
     url(r"^admin/", admin.site.urls),

@@ -47,6 +47,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
 from api.auth.serializers import UserSerializer
+from api.auth.two_factor import require_second_factor
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,9 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
     uid = serializers.CharField()
     token = serializers.CharField()
     new_password = serializers.CharField(write_only=True, trim_whitespace=False)
+    # For accounts with two-factor on: the mailbox alone must not get past
+    # the second factor. Without it they answer 400 `otp_required` on `otp`.
+    otp = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
 
 class DetailSerializer(serializers.Serializer):
@@ -188,6 +192,9 @@ class PasswordResetConfirm(generics.GenericAPIView):
         ):
             raise ValidationError({"token": INVALID_LINK}, code="invalid")
 
+        # Checked before the password so a wrong code leaves it unchanged.
+        device = require_second_factor(user, data.get("otp"))
+
         password = data["new_password"]
         # Django ships Norwegian for its password validators; the site is
         # Norwegian even though the API's own default language is not.
@@ -200,6 +207,7 @@ class PasswordResetConfirm(generics.GenericAPIView):
 
         # Saving rotated the session auth hash, which ends every other
         # session of this user; this one starts fresh.
+        user.otp_device = device
         login(request._request, user)
         run_in_background(_send_password_changed_notice, user)
         return Response(UserSerializer(user).data)

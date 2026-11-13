@@ -95,6 +95,10 @@ class UserSerializer(serializers.ModelSerializer):
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField()
+    # Only for accounts with two-factor on: a code from the authenticator
+    # app, or a recovery code. Without it such a login answers 400 with
+    # code `otp_required` on `otp`.
+    otp = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
 
 class LogoutSerializer(serializers.Serializer):
