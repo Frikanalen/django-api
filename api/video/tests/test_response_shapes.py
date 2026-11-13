@@ -96,6 +96,7 @@ def expected_video_json(video: Video) -> dict:
             "name": "Video test organization",
             "homepage": None,
             "description": "",
+            "orgnr": "",
             "postalAddress": None,
             "streetAddress": None,
             "editorId": editor.pk,
