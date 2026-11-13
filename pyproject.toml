@@ -26,6 +26,7 @@ dependencies = [
     "markdown==3.11.3",
     "mypy>=1.11",
     "psycopg2-binary>=2.9.10",
+    "pwned-passwords-django>=5.2",
     "pymemcache>=4.0.0",
     "uvicorn>=0.30",
 ]

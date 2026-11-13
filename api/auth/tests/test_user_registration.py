@@ -97,3 +97,29 @@ def test_registration_refuses_weak_passwords(password: str, why: str) -> None:
     assert {error["attr"] for error in errors} == {"password"}
     assert any(why in error["detail"] for error in errors), errors
     assert not User.objects.filter(email=VALID_USER["email"]).exists()
+
+
+def test_registration_refuses_a_breached_password(pwned_passwords_offline) -> None:
+    pwned_passwords_offline.breached = {"tr0ub4dor&3 is long"}
+
+    response = register(APIClient(), {**VALID_USER, "password": "tr0ub4dor&3 is long"})
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    [error] = response.json()["errors"]
+    assert error["attr"] == "password"
+    assert "datalekkasjer" in error["detail"]
+
+
+def test_registration_accepts_a_password_hibp_has_not_seen(pwned_passwords_offline) -> None:
+    pwned_passwords_offline.breached = set()
+
+    response = register(APIClient(), VALID_USER)
+
+    assert response.status_code == status.HTTP_201_CREATED
+
+
+def test_registration_refuses_short_passwords() -> None:
+    response = register(APIClient(), {**VALID_USER, "password": "short pw!"})
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert {e["attr"] for e in response.json()["errors"]} == {"password"}

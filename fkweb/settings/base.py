@@ -164,18 +164,34 @@ TEST_RUNNER = "django.test.runner.DiscoverRunner"
 ########## END GENERAL CONFIGURATION
 
 ########## PASSWORDS
-# Django's stock validators, applied wherever a password is set: sign-up and
-# profile changes (api/auth/serializers.py), password reset
-# (api/auth/password_reset.py) and the admin.
+# Applied wherever a password is set: sign-up, password change, password
+# reset and the admin.
+#
+# What matters most is that a password is not already in attackers'
+# wordlists (NIST SP 800-63B), so the main check asks Have I Been Pwned's
+# Pwned Passwords whether it has appeared in a breach. Only the first five
+# hex digits of its SHA-1 leave the server (k-anonymity), and the reply is
+# padded so its size gives nothing away. If HIBP does not answer within
+# API_TIMEOUT the validator falls back to Django's common-password list
+# rather than refusing the password.
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {
         "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-        "OPTIONS": {"min_length": 8},
+        "OPTIONS": {"min_length": 10},
     },
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {
+        "NAME": "pwned_passwords_django.validators.PwnedPasswordsValidator",
+        "OPTIONS": {
+            "error_message": (
+                "Dette passordet finnes i kjente datalekkasjer og kan ikke brukes. Velg et annet."
+            ),
+            "help_message": "Passordet kan ikke være et som finnes i kjente datalekkasjer.",
+        },
+    },
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
+PWNED_PASSWORDS = {"API_TIMEOUT": 2.0}
 # How long a password reset link works. Django's default is three days;
 # a link sitting in an inbox that long is a liability, an hour is plenty.
 # A link also stops working once it has been used, because the token is
