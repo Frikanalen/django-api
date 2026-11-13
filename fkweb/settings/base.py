@@ -9,6 +9,7 @@ import logging
 import sys
 from datetime import timedelta
 from os.path import abspath, basename, dirname, join, normpath
+from urllib.parse import urlsplit
 
 from environ import ImproperlyConfigured
 
@@ -195,6 +196,14 @@ PWNED_PASSWORDS = {"API_TIMEOUT": 2.0}
 # The name authenticator apps file the account under. Staging sets its own
 # so its entry is not mistaken for the real one.
 OTP_TOTP_ISSUER = env.str("OTP_TOTP_ISSUER", default="Frikanalen")
+# Passkeys and security keys (django-otp-webauthn). A credential belongs to
+# the site's host name and works nowhere else, so staging and prod keep
+# separate credentials, and changing SITE_URL's host strands every key
+# already registered.
+OTP_WEBAUTHN_RP_ID = urlsplit(SITE_URL).hostname
+OTP_WEBAUTHN_RP_NAME = OTP_TOTP_ISSUER
+OTP_WEBAUTHN_ALLOWED_ORIGINS = [SITE_URL]
+OTP_WEBAUTHN_HELPER_CLASS = "api.auth.webauthn.Helper"
 # How long a password reset link works. Django's default is three days;
 # a link sitting in an inbox that long is a liability, an hour is plenty.
 # A link also stops working once it has been used, because the token is
@@ -341,6 +350,7 @@ THIRD_PARTY_APPS = (
     "django_otp",
     "django_otp.plugins.otp_totp",
     "django_otp.plugins.otp_static",
+    "django_otp_webauthn",
 )
 
 # Apps specific for this project go here.
@@ -424,6 +434,8 @@ REST_FRAMEWORK = {
         "user": None,
         "password_reset": "10/hour",
         "password_reset_confirm": "20/hour",
+        # Two-factor codes and security key ceremonies, per client address.
+        "two_factor": "60/hour",
     },
     # The ingress controller is the one proxy in front of Django. Without
     # this, DRF keys throttles on the whole X-Forwarded-For header, which a

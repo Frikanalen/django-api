@@ -1,39 +1,53 @@
 """
-Optional two-factor authentication with an authenticator app, on django-otp.
+Optional two-factor authentication, on django-otp.
 
-django-otp supplies the devices: a TOTPDevice holds the secret an
-authenticator app shares (RFC 6238 codes, with exponential back-off after
-failed attempts), and a StaticDevice holds single-use recovery codes for a
-lost phone. This module is the API around them:
+django-otp supplies the devices, and an account can have any number of
+them:
 
-- setup/confirm: a new TOTPDevice starts unconfirmed; it only protects the
-  account once the user has proved their app produces its codes, and only
-  then are recovery codes issued.
-- every way in asks for a code once the account has a confirmed device:
-  the session login, API token issuance (fk-cli), the password reset
-  confirmation (a mailbox alone must not get past the second factor) and
-  the admin login. See `require_second_factor`.
-- turning it off, or replacing the recovery codes, takes a current code.
+- TOTPDevice: an authenticator app (RFC 6238 codes, with exponential
+  back-off after failed attempts).
+- WebAuthnCredential (django-otp-webauthn, see api/auth/webauthn.py): a
+  passkey or a security key. A passkey can also log in on its own, without
+  the password (see webauthn.PasskeyLogin*).
+- StaticDevice: single-use recovery codes for a lost phone or key, issued
+  when the first app or key is added.
+
+The account has two-factor on while it has at least one confirmed app or
+key. Then every way in asks for the second step: the session login, API
+token issuance (fk-cli, codes only), the password reset confirmation (a
+mailbox alone must not get past the second factor) and the admin login
+(codes only). See `require_second_factor`.
+
+Changing the methods (adding, renaming, removing, new recovery codes)
+takes a session that has passed the second step, so a stolen session
+cookie, or one that was logged in before two-factor was turned on, cannot
+remove the protection. Such a session can pass the step later with
+`TwoFactorVerify` or a security key (webauthn.SecondFactor*).
 
 Staff can remove a lost device in the admin (django-otp registers its
-models there), which is the way back for someone who has lost both their
-phone and their recovery codes.
+models there), which is the way back for someone who has lost every method
+and their recovery codes.
 """
 
 import base64
+import time
 from io import BytesIO
 
 import django_otp
 from django import forms
 from django.contrib.admin.forms import AdminAuthenticationForm
 from django.db import transaction
+from django.shortcuts import get_object_or_404
+from django_otp import DEVICE_ID_SESSION_KEY
+from django_otp.models import Device
 from django_otp.plugins.otp_static.models import StaticDevice, StaticToken
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from django_otp.qr import write_qrcode_image
+from django_otp_webauthn.models import WebAuthnCredential
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, serializers, status
 from rest_framework.authtoken.serializers import AuthTokenSerializer
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -45,10 +59,35 @@ APP_DEVICE_NAME = "Autentiseringsapp"
 CODE_REQUIRED = "Skriv inn koden fra autentiseringsappen."
 CODE_WRONG = "Koden stemmer ikke. Prøv igjen med en ny kode."
 CODE_THROTTLED = "For mange feil koder. Vent litt før du prøver igjen."
+VERIFY_FIRST = "Bekreft med en kode eller sikkerhetsnøkkel først."
+
+# How long a password that was right waits for its second step (a security
+# key) in the session, and how long a passed step waits to be used.
+PENDING_SECONDS = 5 * 60
+PENDING_USER_KEY = "two_factor_pending_user"
+PASSED_KEY = "two_factor_passed"
+
+# The kinds of method, as the API names them.
+KINDS = {"totp": TOTPDevice, "webauthn": WebAuthnCredential}
+
+
+def second_factor_devices(user) -> list[Device]:
+    """The user's confirmed apps and keys (not the recovery codes)."""
+    return [
+        *TOTPDevice.objects.filter(user=user, confirmed=True).order_by("id"),
+        *WebAuthnCredential.objects.filter(user=user, confirmed=True).order_by("id"),
+    ]
 
 
 def has_two_factor(user) -> bool:
-    return TOTPDevice.objects.filter(user=user, confirmed=True).exists()
+    return (
+        TOTPDevice.objects.filter(user=user, confirmed=True).exists()
+        or WebAuthnCredential.objects.filter(user=user, confirmed=True).exists()
+    )
+
+
+def has_security_key(user) -> bool:
+    return WebAuthnCredential.objects.filter(user=user, confirmed=True).exists()
 
 
 def _normalise(code: str) -> str:
@@ -65,7 +104,7 @@ def verify_second_factor(user, code: str):
     code = _normalise(code)
     if not code:
         return None
-    # A six-digit code is the app's; anything else can only be a recovery code.
+    # A six-digit code is an app's; anything else can only be a recovery code.
     model = TOTPDevice if code.isdigit() and len(code) == 6 else StaticDevice
     with transaction.atomic():
         devices = list(model.objects.select_for_update().filter(user=user, confirmed=True))
@@ -73,26 +112,93 @@ def verify_second_factor(user, code: str):
             allowed, _ = device.verify_is_allowed()
             if not allowed:
                 raise ValidationError({"otp": CODE_THROTTLED}, code="throttled")
+        # Each device counts a code it refuses as a failed attempt. With
+        # two apps, the right code for one is refused by the other first,
+        # which is not an attempt at that one; undo those counts when some
+        # device accepts.
+        before = [
+            (device, device.throttling_failure_count, device.throttling_failure_timestamp)
+            for device in devices
+        ]
+        for device in devices:
             if device.verify_token(code):
+                for other, count, timestamp in before:
+                    if other is not device and other.throttling_failure_count != count:
+                        other.throttling_failure_count = count
+                        other.throttling_failure_timestamp = timestamp
+                        other.save(
+                            update_fields=[
+                                "throttling_failure_count",
+                                "throttling_failure_timestamp",
+                            ]
+                        )
                 return device
     return None
 
 
-def require_second_factor(user, code: str | None):
-    """Pass if `user` has no second factor, or if `code` is right.
+def _fresh(entry, user) -> bool:
+    return (
+        isinstance(entry, dict)
+        and entry.get("user") == user.pk
+        and time.time() - entry.get("at", 0) < PENDING_SECONDS
+    )
+
+
+def require_second_factor(user, code: str | None, request=None):
+    """Pass if `user` has no second factor, or if the second step is done.
+
+    The step is done with `code` (an app code or a recovery code), or, given
+    the `request`, by a security key used in this session since the
+    password was found right (see webauthn.SecondFactorComplete).
 
     Returns the device that verified, or None for an account without one.
-    The error says which: `otp_required` when no code was given, so a
-    client knows to ask for one, `invalid` when it was wrong.
+    The error says which: `otp_required` when the step is missing, so a
+    client knows to ask for it, `invalid` when the code was wrong. With a
+    `request`, `otp_required` also lets this session use a security key for
+    the next few minutes.
     """
     if not has_two_factor(user):
         return None
+
+    session = getattr(request, "session", None)
+    if session is not None:
+        passed = session.pop(PASSED_KEY, None)
+        if _fresh(passed, user):
+            device = Device.from_persistent_id(passed["device"])
+            if device is not None and device.user_id == user.pk and device.confirmed:
+                session.pop(PENDING_USER_KEY, None)
+                return device
+
     if not code:
+        if session is not None:
+            session[PENDING_USER_KEY] = {"user": user.pk, "at": time.time()}
         raise ValidationError({"otp": CODE_REQUIRED}, code="otp_required")
     device = verify_second_factor(user, code)
     if device is None:
         raise ValidationError({"otp": CODE_WRONG}, code="invalid")
+    if session is not None:
+        session.pop(PENDING_USER_KEY, None)
     return device
+
+
+def pending_user(request):
+    """The user whose password was right in this session and who still owes
+    the second step, or None."""
+    from django.contrib.auth import get_user_model
+
+    entry = request.session.get(PENDING_USER_KEY)
+    if not isinstance(entry, dict) or time.time() - entry.get("at", 0) >= PENDING_SECONDS:
+        return None
+    return get_user_model()._default_manager.filter(pk=entry.get("user"), is_active=True).first()
+
+
+def record_passed(request, user, device) -> None:
+    """Let the next `require_second_factor` for `user` in this session pass."""
+    request.session[PASSED_KEY] = {
+        "user": user.pk,
+        "device": device.persistent_id,
+        "at": time.time(),
+    }
 
 
 def mark_verified(request, device) -> None:
@@ -103,6 +209,24 @@ def mark_verified(request, device) -> None:
     """
     if device is not None:
         django_otp.login(request, device)
+
+
+def session_is_verified(request) -> bool:
+    """Whether this session passed the second step with one of the user's
+    devices that still exists."""
+    session = getattr(request, "session", None)
+    persistent_id = session.get(DEVICE_ID_SESSION_KEY) if session is not None else None
+    if not persistent_id:
+        return False
+    device = Device.from_persistent_id(persistent_id)
+    return device is not None and device.user_id == request.user.pk
+
+
+def require_verified_session(request) -> None:
+    """Changing the methods of an account with two-factor on takes a session
+    that has passed the second step."""
+    if has_two_factor(request.user) and not session_is_verified(request):
+        raise PermissionDenied(VERIFY_FIRST, code="verify_required")
 
 
 def _qr_data_uri(text: str) -> str:
@@ -121,12 +245,72 @@ def _issue_recovery_codes(user) -> list[str]:
     return codes
 
 
+def first_method_added(user) -> list[str] | None:
+    """Recovery codes when `user` has just got their first app or key.
+
+    Call after confirming the new device. Codes that already exist are kept:
+    a second method is no reason to replace them.
+    """
+    if len(second_factor_devices(user)) != 1:
+        return None
+    if StaticToken.objects.filter(device__user=user, device__confirmed=True).exists():
+        return None
+    return _issue_recovery_codes(user)
+
+
+def method_id(device: Device) -> str:
+    kind = "webauthn" if isinstance(device, WebAuthnCredential) else "totp"
+    return f"{kind}-{device.pk}"
+
+
+def device_for_method(user, method: str) -> Device:
+    kind, _, pk = method.partition("-")
+    model = KINDS.get(kind)
+    if model is None or not pk.isdigit():
+        raise ValidationError({"id": "Ukjent metode."}, code="invalid")
+    return get_object_or_404(model, user=user, pk=int(pk), confirmed=True)
+
+
 # --- API ---------------------------------------------------------------
+
+
+class MethodSerializer(serializers.Serializer):
+    id = serializers.CharField(read_only=True, help_text="`totp-<n>` or `webauthn-<n>`")
+    kind = serializers.ChoiceField(choices=["totp", "webauthn"], read_only=True)
+    name = serializers.CharField(read_only=True)
+    passkey = serializers.BooleanField(
+        read_only=True,
+        allow_null=True,
+        help_text="A key that can log in on its own. Null when the browser did not say.",
+    )
+    created_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    last_used_at = serializers.DateTimeField(read_only=True, allow_null=True)
+
+
+def _method(device: Device) -> dict:
+    webauthn = isinstance(device, WebAuthnCredential)
+    return {
+        "id": method_id(device),
+        "kind": "webauthn" if webauthn else "totp",
+        "name": device.name,
+        "passkey": device.discoverable if webauthn else None,
+        "created_at": device.created_at,
+        "last_used_at": device.last_used_at,
+    }
 
 
 class TwoFactorStatusSerializer(serializers.Serializer):
     enabled = serializers.BooleanField(read_only=True)
     recovery_codes_left = serializers.IntegerField(read_only=True)
+    verified = serializers.BooleanField(
+        read_only=True,
+        help_text="This session has passed the second step, so it may change the methods.",
+    )
+    methods = MethodSerializer(many=True, read_only=True)
+
+
+class TwoFactorSetupRequestSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=64, required=False, allow_blank=True)
 
 
 class TwoFactorSetupSerializer(serializers.Serializer):
@@ -143,10 +327,24 @@ class RecoveryCodesSerializer(serializers.Serializer):
     recovery_codes = serializers.ListField(child=serializers.CharField(), read_only=True)
 
 
+class MethodAddedSerializer(serializers.Serializer):
+    method = MethodSerializer(read_only=True)
+    recovery_codes = serializers.ListField(
+        child=serializers.CharField(),
+        read_only=True,
+        allow_null=True,
+        help_text="Only with the account's first method; shown once.",
+    )
+
+
+class RenameSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=64)
+
+
 class _TwoFactorView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "password_reset_confirm"
+    throttle_scope = "two_factor"
 
     def _code(self, request) -> str:
         serializer = CodeSerializer(data=request.data)
@@ -155,42 +353,67 @@ class _TwoFactorView(generics.GenericAPIView):
 
 
 class TwoFactorStatus(_TwoFactorView):
-    """Whether the account has an authenticator app, and recovery codes left."""
+    """The account's apps and keys, recovery codes left, and whether this
+    session may change them."""
 
     serializer_class = TwoFactorStatusSerializer
     throttle_classes = []
 
     def get(self, request):
         user = request.user
+        devices = second_factor_devices(user)
         left = StaticToken.objects.filter(device__user=user, device__confirmed=True).count()
         return Response(
             {
-                "enabled": has_two_factor(user),
-                "recovery_codes_left": left if has_two_factor(user) else 0,
+                "enabled": bool(devices),
+                "recovery_codes_left": left if devices else 0,
+                "verified": session_is_verified(request),
+                "methods": [_method(d) for d in devices],
             }
         )
 
 
-class TwoFactorSetup(_TwoFactorView):
+class TwoFactorVerify(_TwoFactorView):
+    """Pass the second step in this session with an app or recovery code,
+    so it may change the methods."""
+
+    serializer_class = CodeSerializer
+
+    @extend_schema(responses={204: None})
+    def post(self, request):
+        code = self._code(request)
+        if not has_two_factor(request.user):
+            raise ValidationError(
+                {"detail": "Totrinnsbekreftelse er ikke slått på."}, code="not_enabled"
+            )
+        try:
+            device = verify_second_factor(request.user, code)
+        except ValidationError:
+            raise ValidationError({"code": CODE_THROTTLED}, code="throttled") from None
+        if device is None:
+            raise ValidationError({"code": CODE_WRONG}, code="invalid")
+        mark_verified(request._request, device)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class TotpSetup(_TwoFactorView):
     """Start adding an authenticator app: a new secret, as text and QR code.
 
     It protects nothing until confirmed with a code from the app. Starting
-    over replaces an unconfirmed secret; an account that already has a
-    confirmed app has to turn it off first.
+    over replaces an unconfirmed secret.
     """
 
-    serializer_class = TwoFactorSetupSerializer
-    throttle_classes = []
+    serializer_class = TwoFactorSetupRequestSerializer
 
-    @extend_schema(request=None, responses=TwoFactorSetupSerializer)
+    @extend_schema(request=TwoFactorSetupRequestSerializer, responses=TwoFactorSetupSerializer)
     def post(self, request):
+        require_verified_session(request)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        name = serializer.validated_data.get("name", "").strip() or APP_DEVICE_NAME
         user = request.user
-        if has_two_factor(user):
-            raise ValidationError(
-                {"detail": "Totrinnsbekreftelse er allerede slått på."}, code="already_enabled"
-            )
         TOTPDevice.objects.filter(user=user, confirmed=False).delete()
-        device = TOTPDevice.objects.create(user=user, name=APP_DEVICE_NAME, confirmed=False)
+        device = TOTPDevice.objects.create(user=user, name=name, confirmed=False)
         url = device.config_url
         return Response(
             {
@@ -201,17 +424,18 @@ class TwoFactorSetup(_TwoFactorView):
         )
 
 
-class TwoFactorConfirm(_TwoFactorView):
-    """Finish adding the app with a code from it. Returns the recovery codes.
+class TotpConfirm(_TwoFactorView):
+    """Finish adding the app with a code from it.
 
-    This is the only time the codes are returned; afterwards the API only
-    says how many are left.
+    With the account's first method, this also returns the recovery codes,
+    the only time they are returned.
     """
 
     serializer_class = CodeSerializer
 
-    @extend_schema(responses=RecoveryCodesSerializer)
+    @extend_schema(responses={201: MethodAddedSerializer})
     def post(self, request):
+        require_verified_session(request)
         user = request.user
         code = _normalise(self._code(request))
         device = TOTPDevice.objects.filter(user=user, confirmed=False).last()
@@ -222,40 +446,61 @@ class TwoFactorConfirm(_TwoFactorView):
         with transaction.atomic():
             device.confirmed = True
             device.save(update_fields=["confirmed"])
-            codes = _issue_recovery_codes(user)
-        mark_verified(request._request, device)
-        return Response({"recovery_codes": codes}, status=status.HTTP_201_CREATED)
+            codes = first_method_added(user)
+        if not session_is_verified(request):
+            mark_verified(request._request, device)
+        return Response(
+            MethodAddedSerializer({"method": _method(device), "recovery_codes": codes}).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
-class TwoFactorDisable(_TwoFactorView):
-    """Turn two-factor off with a current app code or a recovery code."""
+class TwoFactorMethod(_TwoFactorView):
+    """Rename or remove one app or key.
 
-    serializer_class = CodeSerializer
+    Removing the last one turns two-factor off and deletes the recovery
+    codes.
+    """
+
+    serializer_class = RenameSerializer
+    http_method_names = ["patch", "delete"]
+
+    @extend_schema(responses=MethodSerializer)
+    def patch(self, request, method):
+        require_verified_session(request)
+        device = device_for_method(request.user, method)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        device.name = serializer.validated_data["name"].strip()
+        device.save(update_fields=["name"])
+        return Response(_method(device))
 
     @extend_schema(responses={204: None})
-    def post(self, request):
+    def delete(self, request, method):
+        require_verified_session(request)
         user = request.user
-        if not has_two_factor(user):
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        require_second_factor(user, self._code(request))
-        TOTPDevice.objects.filter(user=user).delete()
-        StaticDevice.objects.filter(user=user).delete()
+        device = device_for_method(user, method)
+        with transaction.atomic():
+            device.delete()
+            if not has_two_factor(user):
+                StaticDevice.objects.filter(user=user).delete()
+                TOTPDevice.objects.filter(user=user).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class TwoFactorRecoveryCodes(_TwoFactorView):
-    """Replace the recovery codes, given a current code. Old ones stop working."""
+    """Replace the recovery codes. Old ones stop working."""
 
-    serializer_class = CodeSerializer
+    serializer_class = RecoveryCodesSerializer
 
-    @extend_schema(responses=RecoveryCodesSerializer)
+    @extend_schema(request=None, responses=RecoveryCodesSerializer)
     def post(self, request):
         user = request.user
         if not has_two_factor(user):
             raise ValidationError(
                 {"detail": "Totrinnsbekreftelse er ikke slått på."}, code="not_enabled"
             )
-        require_second_factor(user, self._code(request))
+        require_verified_session(request)
         return Response({"recovery_codes": _issue_recovery_codes(user)})
 
 
@@ -263,7 +508,11 @@ class TwoFactorRecoveryCodes(_TwoFactorView):
 
 
 class AuthTokenWithSecondFactorSerializer(AuthTokenSerializer):
-    """DRF's token login (username/password), plus `otp` for accounts with 2FA."""
+    """DRF's token login (username/password), plus `otp` for accounts with 2FA.
+
+    Codes only: an account with nothing but security keys uses a recovery
+    code here.
+    """
 
     otp = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
@@ -277,10 +526,10 @@ class AdminAuthenticationWithSecondFactorForm(AdminAuthenticationForm):
     """The admin login, asking for a code only from accounts that have 2FA."""
 
     otp_token = forms.CharField(
-        label="Kode fra autentiseringsapp",
+        label="Kode fra autentiseringsapp eller gjenopprettingskode",
         required=False,
         help_text="Bare hvis totrinnsbekreftelse er slått på for kontoen.",
-        widget=forms.TextInput(attrs={"autocomplete": "one-time-code", "inputmode": "numeric"}),
+        widget=forms.TextInput(attrs={"autocomplete": "one-time-code"}),
     )
 
     def clean(self):

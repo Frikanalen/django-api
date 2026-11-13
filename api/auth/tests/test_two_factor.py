@@ -49,14 +49,25 @@ def client(account: User) -> APIClient:
     return client
 
 
-def enable(client: APIClient) -> tuple[TOTPDevice, list[str]]:
-    setup = client.post(reverse("api-user-2fa-setup"))
+def add_app(client: APIClient, name: str = "", steps_ahead: int = 0) -> tuple[TOTPDevice, dict]:
+    setup = client.post(reverse("api-user-2fa-totp-setup"), {"name": name}, format="json")
     assert setup.status_code == status.HTTP_200_OK, setup.json()
     device = TOTPDevice.objects.get(confirmed=False)
-    confirm = client.post(reverse("api-user-2fa-confirm"), {"code": code(device)}, format="json")
+    confirm = client.post(
+        reverse("api-user-2fa-totp-confirm"), {"code": code(device, steps_ahead)}, format="json"
+    )
     assert confirm.status_code == status.HTTP_201_CREATED, confirm.json()
     device.refresh_from_db()
-    return device, confirm.json()["recoveryCodes"]
+    return device, confirm.json()
+
+
+def enable(client: APIClient) -> tuple[TOTPDevice, list[str]]:
+    device, body = add_app(client)
+    return device, body["recoveryCodes"]
+
+
+def status_of(client: APIClient) -> dict:
+    return client.get(reverse("api-user-2fa")).json()
 
 
 def login(payload: dict):
@@ -71,20 +82,25 @@ def errors(response) -> set[tuple[str, str]]:
 
 
 def test_setup_returns_a_secret_and_a_qr_code(client: APIClient) -> None:
-    response = client.post(reverse("api-user-2fa-setup"))
+    response = client.post(reverse("api-user-2fa-totp-setup"))
 
     body = response.json()
     assert body["otpauthUrl"].startswith("otpauth://totp/Frikanalen")
     assert body["qrCode"].startswith("data:image/svg+xml;base64,")
     assert len(body["secret"]) >= 16
     # Nothing is protected until the app has proved itself.
-    assert client.get(reverse("api-user-2fa")).json() == {"enabled": False, "recoveryCodesLeft": 0}
+    assert status_of(client) == {
+        "enabled": False,
+        "recoveryCodesLeft": 0,
+        "verified": False,
+        "methods": [],
+    }
 
 
 def test_confirm_needs_a_right_code(client: APIClient) -> None:
-    client.post(reverse("api-user-2fa-setup"))
+    client.post(reverse("api-user-2fa-totp-setup"))
 
-    response = client.post(reverse("api-user-2fa-confirm"), {"code": "000000"}, format="json")
+    response = client.post(reverse("api-user-2fa-totp-confirm"), {"code": "000000"}, format="json")
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert not TOTPDevice.objects.filter(confirmed=True).exists()
@@ -95,13 +111,74 @@ def test_confirm_turns_it_on_and_hands_out_recovery_codes(client: APIClient) -> 
 
     assert len(recovery) == 10
     assert len(set(recovery)) == 10
-    assert client.get(reverse("api-user-2fa")).json() == {"enabled": True, "recoveryCodesLeft": 10}
+    body = status_of(client)
+    assert body["enabled"] and body["verified"]
+    assert body["recoveryCodesLeft"] == 10
+    assert [(m["kind"], m["name"]) for m in body["methods"]] == [("totp", "Autentiseringsapp")]
 
 
-def test_setup_again_is_refused_while_on(client: APIClient) -> None:
+def test_a_second_app_keeps_the_recovery_codes(client: APIClient) -> None:
+    _, recovery = enable(client)
+
+    _, second = add_app(client, name="Jobbtelefon", steps_ahead=1)
+
+    assert second["recoveryCodes"] is None
+    assert second["method"]["name"] == "Jobbtelefon"
+    assert [m["name"] for m in status_of(client)["methods"]] == ["Autentiseringsapp", "Jobbtelefon"]
+    assert status_of(client)["recoveryCodesLeft"] == 10
+    payload = {"email": EMAIL, "password": PASSWORD, "otp": recovery[0]}
+    assert login(payload).status_code == status.HTTP_200_OK
+
+
+def test_either_app_logs_in(client: APIClient) -> None:
+    first, _ = enable(client)
+    second, _ = add_app(client, name="Nettbrett", steps_ahead=1)
+
+    # The second app, whose code the first refuses before the second takes it.
+    # Confirming used up the windows these codes come from; free them.
+    TOTPDevice.objects.filter(pk__in=[first.pk, second.pk]).update(last_t=-1)
+    for device in (second, first):
+        response = login({"email": EMAIL, "password": PASSWORD, "otp": code(device, 1)})
+        assert response.status_code == status.HTTP_200_OK, response.json()
+    # Neither is left in back-off by the other's code.
+    first.refresh_from_db()
+    second.refresh_from_db()
+    assert first.throttling_failure_count == second.throttling_failure_count == 0
+
+
+def test_an_unverified_session_cannot_change_the_methods(client: APIClient) -> None:
+    device, _ = enable(client)
+    # Logged in some other way before two-factor was on, say.
+    other = APIClient()
+    assert other.login(username=EMAIL, password=PASSWORD)
+    method = status_of(client)["methods"][0]["id"]
+
+    for response in (
+        other.post(reverse("api-user-2fa-totp-setup")),
+        other.delete(reverse("api-user-2fa-method", args=[method])),
+        other.patch(reverse("api-user-2fa-method", args=[method]), {"name": "x"}, format="json"),
+        other.post(reverse("api-user-2fa-recovery-codes")),
+    ):
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.json()["errors"][0]["code"] == "verify_required"
+    assert not status_of(other)["verified"]
+
+    verify = other.post(reverse("api-user-2fa-verify"), {"code": code(device, 1)}, format="json")
+    assert verify.status_code == status.HTTP_204_NO_CONTENT
+    assert status_of(other)["verified"]
+    renamed = other.patch(
+        reverse("api-user-2fa-method", args=[method]), {"name": "Telefon"}, format="json"
+    )
+    assert renamed.json()["name"] == "Telefon"
+
+
+def test_verify_with_a_wrong_code(client: APIClient) -> None:
     enable(client)
 
-    assert client.post(reverse("api-user-2fa-setup")).status_code == status.HTTP_400_BAD_REQUEST
+    response = client.post(reverse("api-user-2fa-verify"), {"code": "000000"}, format="json")
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert errors(response) == {("code", "invalid")}
 
 
 # Logging in
@@ -226,26 +303,51 @@ def test_admin_login_without_two_factor_needs_no_code(account: User) -> None:
 # Turning it off, new recovery codes
 
 
-def test_disable_needs_a_code(client: APIClient) -> None:
-    device, _ = enable(client)
+def test_removing_one_of_two_apps_keeps_two_factor(client: APIClient) -> None:
+    first, _ = enable(client)
+    add_app(client, name="Nettbrett", steps_ahead=1)
+    method = status_of(client)["methods"][0]["id"]
 
-    refused = client.post(reverse("api-user-2fa-disable"), {"code": "000000"}, format="json")
-    assert refused.status_code == status.HTTP_400_BAD_REQUEST
-    # A failure locks the device for a moment; let it pass for the test.
-    device.refresh_from_db()
-    device.throttle_reset()
+    assert (
+        client.delete(reverse("api-user-2fa-method", args=[method])).status_code
+        == status.HTTP_204_NO_CONTENT
+    )
 
-    done = client.post(reverse("api-user-2fa-disable"), {"code": code(device, 1)}, format="json")
+    assert [m["name"] for m in status_of(client)["methods"]] == ["Nettbrett"]
+    assert status_of(client)["recoveryCodesLeft"] == 10
+    stale = login({"email": EMAIL, "password": PASSWORD, "otp": code(first, 2)})
+    assert errors(stale) == {("otp", "invalid")}
+
+
+def test_removing_the_last_method_turns_it_off(client: APIClient) -> None:
+    enable(client)
+    method = status_of(client)["methods"][0]["id"]
+
+    done = client.delete(reverse("api-user-2fa-method", args=[method]))
+
     assert done.status_code == status.HTTP_204_NO_CONTENT
+    assert status_of(client)["enabled"] is False
+    assert not StaticToken.objects.exists()
     assert login({"email": EMAIL, "password": PASSWORD}).status_code == status.HTTP_200_OK
 
 
-def test_new_recovery_codes_replace_the_old(client: APIClient) -> None:
-    device, old = enable(client)
+def test_someone_elses_method_is_not_found(client: APIClient) -> None:
+    enable(client)
+    method = status_of(client)["methods"][0]["id"]
+    User.objects.create_user(email="other@example.test", password=PASSWORD)
+    other = APIClient()
+    assert other.login(username="other@example.test", password=PASSWORD)
 
-    response = client.post(
-        reverse("api-user-2fa-recovery-codes"), {"code": code(device, 1)}, format="json"
-    )
+    response = other.delete(reverse("api-user-2fa-method", args=[method]))
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert TOTPDevice.objects.filter(confirmed=True).exists()
+
+
+def test_new_recovery_codes_replace_the_old(client: APIClient) -> None:
+    _, old = enable(client)
+
+    response = client.post(reverse("api-user-2fa-recovery-codes"))
 
     new = response.json()["recoveryCodes"]
     assert len(new) == 10
@@ -256,7 +358,7 @@ def test_new_recovery_codes_replace_the_old(client: APIClient) -> None:
 
 def test_two_factor_endpoints_need_a_login(db) -> None:
     assert APIClient().get(reverse("api-user-2fa")).status_code in (401, 403)
-    assert APIClient().post(reverse("api-user-2fa-setup")).status_code in (401, 403)
+    assert APIClient().post(reverse("api-user-2fa-totp-setup")).status_code in (401, 403)
 
 
 def test_after_a_wrong_code_the_app_backs_off(client: APIClient) -> None:
