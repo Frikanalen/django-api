@@ -124,6 +124,12 @@ api_patterns: list[URLPattern | URLResolver] = [
         organization_views.OrganizationDetail.as_view(),
         name="api-organization-detail",
     ),
+    # Prefills the form for a new organization from Brønnøysundregistrene.
+    path(
+        "organization/brreg/<str:orgnr>",
+        organization_views.BrregLookup.as_view(),
+        name="api-organization-brreg-lookup",
+    ),
     # Live contribution: an organization sets up and checks its own feed.
     path(
         "organization/<int:pk>/live-sources",
