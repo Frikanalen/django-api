@@ -23,6 +23,16 @@ class UpcomingTransmissionSerializer(serializers.ModelSerializer):
         return obj.video.name if obj.video else obj.default_name
 
 
+def booked_message(booking: Scheduleitem) -> str:
+    """Why a source can't be changed now, naming the airing in the way."""
+    start = booking.starttime.astimezone(OSLO)
+    name = booking.video.name if booking.video else booking.default_name
+    return (
+        f"Kilden skal på lufta {start:%d.%m.%Y} kl. {start:%H:%M} («{name}»). "
+        "Flytt eller fjern sendingen først."
+    )
+
+
 class LiveSourceSerializer(serializers.ModelSerializer):
     contribution_path = serializers.CharField(read_only=True)
     preview_path = serializers.CharField(read_only=True)
@@ -42,6 +52,18 @@ class LiveSourceSerializer(serializers.ModelSerializer):
     pull_target = serializers.CharField(
         read_only=True, help_text="Scheme, host and port of the pull address."
     )
+    encoder_count = serializers.SerializerMethodField(
+        help_text=(
+            "Encoders that hold a key to this source. A pushed source with none "
+            "cannot receive a signal."
+        )
+    )
+    can_delete = serializers.SerializerMethodField(
+        help_text=(
+            "A source no programme has ever used can be deleted; one that has "
+            "stays, and can be switched off."
+        )
+    )
 
     class Meta:
         model = LiveSource
@@ -52,6 +74,8 @@ class LiveSourceSerializer(serializers.ModelSerializer):
             "pull_url",
             "is_pulled",
             "pull_target",
+            "encoder_count",
+            "can_delete",
             "stream_id",
             "contribution_path",
             "preview_path",
@@ -66,6 +90,25 @@ class LiveSourceSerializer(serializers.ModelSerializer):
             "preview_path",
             "upcoming_transmissions",
         )
+
+    def get_encoder_count(self, obj: LiveSource) -> int:
+        return obj.active_encoder_keys.count() if obj.pk else 0
+
+    def get_can_delete(self, obj: LiveSource) -> bool:
+        return not (obj.pk and obj.transmissions.exists())
+
+    def validate(self, attrs):
+        """A source with a broadcast coming is spoken for as it is."""
+        source = self.instance
+        if source is None:
+            return attrs
+        switching_off = attrs.get("enabled") is False and source.enabled
+        changing_way_in = "pull_url" in attrs and bool(attrs["pull_url"]) != source.is_pulled
+        if switching_off or changing_way_in:
+            booking = source.coming_booking(timezone.now())
+            if booking is not None:
+                raise serializers.ValidationError(booked_message(booking))
+        return attrs
 
     def validate_pull_url(self, value: str) -> str:
         value = value.strip()
@@ -117,6 +160,85 @@ class PreviewTokenSerializer(serializers.Serializer):
     preview_path = serializers.CharField(
         help_text="The Opus-audio preview, if a conversion worker runs for this source."
     )
+    program_path = serializers.CharField(
+        allow_blank=True,
+        help_text=(
+            "A low-latency copy of what the channel is airing, readable with the "
+            "same token. Empty where the receiver has no programme return."
+        ),
+    )
+
+
+class SignalVideoSerializer(serializers.Serializer):
+    codec = serializers.CharField(help_text="As MediaMTX names it, e.g. `H264`.")
+    width = serializers.IntegerField(allow_null=True)
+    height = serializers.IntegerField(allow_null=True)
+    profile = serializers.CharField(allow_blank=True)
+
+
+class SignalAudioSerializer(serializers.Serializer):
+    codec = serializers.CharField(help_text="As MediaMTX names it, e.g. `MPEG-4 Audio`.")
+    sample_rate = serializers.IntegerField(allow_null=True)
+    channel_count = serializers.IntegerField(allow_null=True)
+
+
+class SignalSrtSerializer(serializers.Serializer):
+    """Counters since the SRT connection opened."""
+
+    packets_received = serializers.IntegerField()
+    packets_lost = serializers.IntegerField(help_text="Lost on the way; SRT asks for these again.")
+    packets_retransmitted = serializers.IntegerField()
+    packets_dropped = serializers.IntegerField(
+        help_text="Never recovered in time: these are what a viewer sees as glitches."
+    )
+    round_trip_ms = serializers.FloatField(allow_null=True)
+
+
+class SignalSerializer(serializers.Serializer):
+    """The signal arriving on a source, as the encoder sends it."""
+
+    available = serializers.BooleanField(
+        help_text="False where the receiver cannot be asked; nothing else is known then."
+    )
+    receiving = serializers.BooleanField()
+    since = serializers.DateTimeField(required=False, allow_null=True)
+    protocol = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="`SRT`, `RTMP`, `RTSP` or `WebRTC`; empty for a pulled source.",
+    )
+    video = SignalVideoSerializer(required=False, allow_null=True)
+    audio = SignalAudioSerializer(required=False, allow_null=True)
+    bytes_received = serializers.IntegerField(
+        required=False,
+        help_text="Since the signal came in. The difference between two reads gives the bitrate.",
+    )
+    frames_in_error = serializers.IntegerField(required=False)
+    srt = SignalSrtSerializer(required=False, allow_null=True)
+    measured_at = serializers.DateTimeField()
+
+
+class SignalSampleSerializer(serializers.Serializer):
+    at = serializers.DateTimeField(help_text="The end of the step this sample covers.")
+    receiving = serializers.BooleanField()
+    bitrate = serializers.IntegerField(allow_null=True, help_text="Bits per second.")
+    lost = serializers.IntegerField(help_text="SRT packets lost on the way and asked for again.")
+    dropped = serializers.IntegerField(help_text="SRT packets that never arrived in time.")
+    reconnected = serializers.BooleanField(
+        help_text="The encoder had connected anew since the step before."
+    )
+
+
+class SignalHistorySerializer(serializers.Serializer):
+    """How a source's signal has held up, from before the page was opened."""
+
+    available = serializers.BooleanField(
+        help_text="False where there is no record to ask; `samples` is empty then."
+    )
+    step_seconds = serializers.IntegerField()
+    samples = SignalSampleSerializer(
+        many=True, help_text="Oldest first, from the first step with a signal in."
+    )
 
 
 class EncoderKeySerializer(serializers.ModelSerializer):
@@ -124,8 +246,15 @@ class EncoderKeySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = StreamCredential
-        fields: tuple[str, ...] = ("id", "label", "key_id", "created_at", "revoked_at")
-        read_only_fields = ("id", "key_id", "created_at", "revoked_at")
+        fields: tuple[str, ...] = (
+            "id",
+            "label",
+            "key_id",
+            "created_at",
+            "last_used_at",
+            "revoked_at",
+        )
+        read_only_fields = ("id", "key_id", "created_at", "last_used_at", "revoked_at")
 
 
 class ConnectionExampleSerializer(serializers.Serializer):

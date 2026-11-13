@@ -39,6 +39,16 @@ FK_MEDIAMTX_RTMP_URL = env.str("FK_MEDIAMTX_RTMP_URL", default="")
 FK_MEDIAMTX_RTSP_URL = env.str("FK_MEDIAMTX_RTSP_URL", default="")
 FK_MEDIAMTX_WEBRTC_URL = env.str("FK_MEDIAMTX_WEBRTC_URL", default="")
 FK_MEDIAMTX_HLS_URL = env.str("FK_MEDIAMTX_HLS_URL", default="")
+# MediaMTX's control API, in-cluster only: where Django reads what signal a
+# live source is receiving. Empty leaves signal reports unavailable.
+FK_MEDIAMTX_API_URL = env.str("FK_MEDIAMTX_API_URL", default="")
+# Prometheus, which scrapes MediaMTX's metrics: where Django reads how a live
+# source's signal has held up over the last hour. Empty leaves the history out.
+FK_PROMETHEUS_URL = env.str("FK_PROMETHEUS_URL", default="")
+# The MediaMTX path carrying a low-latency copy of the channel's programme
+# output, for the monitor a crew keeps up at a live transmission. Empty
+# where the receiver has no programme return.
+FK_PROGRAM_RETURN_PATH = env.str("FK_PROGRAM_RETURN_PATH", default="")
 # Fernet keys for pulled sources' addresses, comma-separated: the first
 # encrypts, the rest still decrypt (rotation). Per environment, from OpenBao.
 # Unset, no source can be made a pulled one.

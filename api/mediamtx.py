@@ -6,6 +6,7 @@ import json
 from ipaddress import ip_address
 from uuid import UUID
 
+from django.conf import settings
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
@@ -15,7 +16,7 @@ from django.views.decorators.debug import sensitive_variables
 from django.views.decorators.http import require_GET, require_POST
 
 from api.auth.permissions import can_administer_organization
-from fk import preview_tokens
+from fk import preview_tokens, receiver
 from fk.models import LiveSource, StreamCredential
 
 
@@ -37,6 +38,11 @@ def authenticate(request):
         return HttpResponse(status=401)
 
     token = payload.get("token")
+    if payload.get("action") == "api":
+        # MediaMTX's control API has one client, Django itself, which signs
+        # its own token (fk.receiver). Nothing else may use the API.
+        allowed = isinstance(token, str) and len(token) <= 512 and receiver.verify_api_token(token)
+        return HttpResponse(status=204 if allowed else 401)
     if isinstance(token, str) and token and not payload.get("password"):
         return authenticate_preview_token(token, payload)
     if not payload.get("password") and _is_loopback(payload.get("ip")):
@@ -106,6 +112,7 @@ def _grant(credential, password):
         return HttpResponse(status=401)
 
     # Use the upstream wire format, not the public API's camelCase renderer.
+    credential.note_used(timezone.now())
     if credential.expires_at is not None:
         return JsonResponse({"expireAt": credential.expires_at.isoformat()})
     return HttpResponse(status=204)
@@ -140,7 +147,12 @@ def authenticate_preview_token(token, payload):
     if claims is None:
         return HttpResponse(status=401)
     source, user = claims
-    if payload.get("path") not in (source.contribution_path, source.preview_path):
+    # The programme return is what the channel airs, the same for every
+    # source: anyone who may preview a source may watch it come back.
+    allowed_paths = [source.contribution_path, source.preview_path]
+    if settings.FK_PROGRAM_RETURN_PATH:
+        allowed_paths.append(settings.FK_PROGRAM_RETURN_PATH)
+    if payload.get("path") not in allowed_paths:
         return HttpResponse(status=401)
     # Rechecked on use, so leaving the organization ends access at once.
     if not can_administer_organization(user, source.organization):
@@ -171,6 +183,10 @@ def authenticate_local_converter(payload):
         return HttpResponse(status=401)
     if action == "read":
         allowed = _is_enabled_source_path(path, "contribution_path")
+    elif action == "publish" and path and path == settings.FK_PROGRAM_RETURN_PATH:
+        # The programme return's converter, started the same way, reads the
+        # programme from outside MediaMTX and publishes only this path.
+        allowed = True
     elif action == "publish":
         pulled = _enabled_source_at(path, "contribution_path")
         allowed = _is_enabled_source_path(path, "preview_path") or (

@@ -146,3 +146,44 @@ def test_disabled_source_and_inactive_user_are_refused(member, source):
     member.is_active = False
     member.save()
     assert mediamtx(token, path=source.preview_path).status_code == 401
+
+
+def test_one_source_carries_its_unfinished_bookings_too(member, source):
+    now = timezone.now()
+    book(source, now - timedelta(hours=3), name="Over")
+    on_air = book(source, now - timedelta(minutes=30), name="On air")
+
+    response = client_for(member).get(reverse("api-live-source-detail", args=[source.pk]))
+
+    assert [item["id"] for item in response.json()["upcomingTransmissions"]] == [on_air.pk]
+
+
+def test_programme_return_is_offered_and_readable_only_where_configured(member, source, settings):
+    settings.FK_PROGRAM_RETURN_PATH = ""
+    data = issue_token(member, source).json()
+    assert data["programPath"] == ""
+    assert mediamtx(data["token"], path="contrib/program").status_code == 401
+    assert mediamtx(data["token"], path="").status_code == 401
+
+    settings.FK_PROGRAM_RETURN_PATH = "contrib/program"
+    data = issue_token(member, source).json()
+    assert data["programPath"] == "contrib/program"
+    assert mediamtx(data["token"], path="contrib/program").status_code == 204
+    # Still a token for watching, and only over WebRTC.
+    assert mediamtx(data["token"], path="contrib/program", action="publish").status_code == 401
+    assert mediamtx(data["token"], path="contrib/program", protocol="rtsp").status_code == 401
+
+
+def test_only_the_local_converter_publishes_the_programme_return(settings):
+    settings.FK_PROGRAM_RETURN_PATH = "contrib/program"
+    converter = {"token": "", "protocol": "rtsp", "action": "publish", "path": "contrib/program"}
+
+    assert mediamtx(**converter, ip="127.0.0.1").status_code == 204
+    assert mediamtx(**converter, ip="192.0.2.1").status_code == 401
+    # Loopback may not read it back or publish anything else by this rule.
+    assert mediamtx(**{**converter, "action": "read"}, ip="127.0.0.1").status_code == 401
+    assert mediamtx(**{**converter, "path": "contrib/other"}, ip="127.0.0.1").status_code == 401
+
+    settings.FK_PROGRAM_RETURN_PATH = ""
+    assert mediamtx(**converter, ip="127.0.0.1").status_code == 401
+    assert mediamtx(**{**converter, "path": ""}, ip="127.0.0.1").status_code == 401
