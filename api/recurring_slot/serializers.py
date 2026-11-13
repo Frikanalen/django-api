@@ -7,6 +7,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
 from api.auth.permissions import can_administer_organization
+from fk.models import Organization
 from scheduling import broadcast_time, services
 from scheduling.models import (
     FillRule,
@@ -42,6 +43,13 @@ class RecurringSlotSerializer(serializers.ModelSerializer):
         help_text="Leave out to use the owner's 'newest uploads, fill the window' "
         "rule, created if needed. Null means grants don't fill themselves.",
     )
+    jukebox = serializers.BooleanField(
+        write_only=True,
+        required=False,
+        help_text="True makes this a jukebox slot: the station's airtime, filled "
+        "from the filler pool. Takes the place of an owner and a fill rule. "
+        "Read it back as a slot with no organization whose rule's pool is 'filler'.",
+    )
     organization_name = serializers.CharField(
         source="organization.name", read_only=True, allow_null=True, default=None
     )
@@ -63,12 +71,23 @@ class RecurringSlotSerializer(serializers.ModelSerializer):
             "ends_on",
             "default_fill_rule",
             "default_fill_rule_id",
+            "jukebox",
             "description",
         )
         read_only_fields = ("id", "organization_name", "default_fill_rule", "description")
         extra_kwargs = {"organization": {"required": True, "allow_null": True}}
 
     def validate(self, attrs):
+        self._wants_jukebox = attrs.pop("jukebox", False)
+        if self._wants_jukebox:
+            # The jukebox is the station's own airtime; its rule is set in save().
+            attrs["organization"] = None
+            attrs.pop("default_fill_rule", None)
+            if not Organization.objects.filter(pk=services.station_organization_id()).exists():
+                raise serializers.ValidationError(
+                    {"jukebox": "The station organization is missing, so nothing can own the rule."}
+                )
+
         slot = copy(self.instance) if self.instance else RecurringSlot()
         for field, value in attrs.items():
             setattr(slot, field, value)
@@ -87,7 +106,7 @@ class RecurringSlotSerializer(serializers.ModelSerializer):
         self._wants_standard_rule = (
             "default_fill_rule" not in attrs and owner_changed and organization is not None
         )
-        if "default_fill_rule" not in attrs and owner_changed:
+        if "default_fill_rule" not in attrs and (owner_changed or self._wants_jukebox):
             attrs["default_fill_rule"] = slot.default_fill_rule = None
 
         try:
@@ -112,6 +131,9 @@ class RecurringSlotSerializer(serializers.ModelSerializer):
         return attrs
 
     def _with_rule(self, validated_data):
+        if self._wants_jukebox:
+            validated_data["default_fill_rule"] = services.jukebox_fill_rule()
+            return validated_data
         if self._wants_standard_rule:
             validated_data["default_fill_rule"] = services.standard_fill_rule(
                 validated_data.get("organization") or self.instance.organization

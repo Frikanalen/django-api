@@ -230,3 +230,51 @@ def test_fill_rules_are_listed_for_staff_and_own_members(
     member_ids = {r["id"] for r in member_client.get(url).data["results"]}
     assert member_ids == {rule.pk}
     assert APIClient().get(url).status_code in (401, 403)
+
+
+def test_staff_create_a_jukebox_slot(staff_client: APIClient, organization: Organization, settings):
+    settings.STATION_ORGANIZATION_ID = other_organization("Frikanalen").pk
+    response = staff_client.post(
+        reverse("api-recurring-slot-list"),
+        # The owner is ignored: a jukebox slot is the station's.
+        payload(organization, jukebox=True),
+        format="json",
+    )
+    assert response.status_code == status.HTTP_201_CREATED, response.data
+    body = response.json()
+    assert body["organization"] is None
+    assert body["defaultFillRule"]["pool"] == "filler"
+    assert "jukebox" not in body
+    rule = RecurringSlot.objects.get(pk=body["id"]).default_fill_rule
+    assert rule.organization_id == settings.STATION_ORGANIZATION_ID
+    assert rule.mode == FillRule.Mode.FILL
+
+    # Every jukebox slot shares the one rule.
+    second = staff_client.post(
+        reverse("api-recurring-slot-list"),
+        payload(None, jukebox=True, weekdays=[5]),
+        format="json",
+    )
+    assert second.json()["defaultFillRule"]["id"] == rule.pk
+
+
+def test_a_members_slot_can_become_a_jukebox_slot(
+    staff_client: APIClient, slot: RecurringSlot, settings
+):
+    settings.STATION_ORGANIZATION_ID = other_organization("Frikanalen").pk
+    response = staff_client.patch(
+        reverse("api-recurring-slot-detail", args=[slot.pk]), {"jukebox": True}, format="json"
+    )
+    assert response.status_code == status.HTTP_200_OK, response.data
+    slot.refresh_from_db()
+    assert slot.organization is None
+    assert slot.default_fill_rule.pool == FillRule.Pool.FILLER
+
+
+def test_a_jukebox_slot_needs_the_station_organization(staff_client: APIClient, settings):
+    settings.STATION_ORGANIZATION_ID = 999_999
+    response = staff_client.post(
+        reverse("api-recurring-slot-list"), payload(None, jukebox=True), format="json"
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert error_attrs(response) == {"jukebox"}
