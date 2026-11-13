@@ -272,6 +272,6 @@ def test_videofile_list_filters(catalogue, lookup: str, expected: list[str]) -> 
 def test_videofile_variant_filter_rejects_an_unlisted_name(catalogue) -> None:
     """The filter takes its choices from the enum, so a name outside it
     is a bad request rather than a silently empty result."""
-    response = APIClient().get(reverse("api-videofile-list") + "?variant=hls")
+    response = APIClient().get(reverse("api-videofile-list") + "?variant=smooth")
 
     assert response.status_code == 400

@@ -34,6 +34,14 @@ class VideoFileVariant(models.TextChoices):
     # player should prefer `dash` whenever both are present.
     DASH_PREVIEW = "dash_preview", "Transient low-quality MPEG-DASH manifest"
     WEBM_MED = "webm_med", "Medium-quality WebM"
+    # HLS playlists over the `dash` ladder's own media files, for Apple
+    # devices: native HLS is what lets Safari AirPlay a video with its
+    # picture, and seek with the system player. The playlists live in
+    # `hls/` like any other variant, but name the media as `../dash/...`
+    # by byte range, so nothing is encoded or stored twice. That makes
+    # them only as current as the ladder: ingest rewrites them whenever
+    # it rebuilds `dash`.
+    HLS = "hls", "HLS playlists over the DASH media"
 
     @property
     def mime_type(self) -> str | None:
@@ -56,6 +64,7 @@ MIME_TYPES = {
     VideoFileVariant.DASH: "application/dash+xml",
     VideoFileVariant.DASH_PREVIEW: "application/dash+xml",
     VideoFileVariant.WEBM_MED: "video/webm",
+    VideoFileVariant.HLS: "application/vnd.apple.mpegurl",
 }
 
 

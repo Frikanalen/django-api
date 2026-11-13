@@ -40,7 +40,7 @@ def test_a_dash_manifest_resolves_under_its_own_directory(video: Video) -> None:
 
 def test_an_unlisted_variant_is_rejected(video: Video) -> None:
     with pytest.raises(ValidationError):
-        VideoFile(video=video, variant="hls", filename="master.m3u8").full_clean()
+        VideoFile(video=video, variant="smooth", filename="manifest.ism").full_clean()
 
 
 def test_mime_types_are_declared_where_we_have_an_answer() -> None:
@@ -62,4 +62,17 @@ def test_mime_types_are_declared_where_we_have_an_answer() -> None:
         # manifest, only shorter-lived and worse.
         VideoFileVariant.DASH_PREVIEW: "application/dash+xml",
         VideoFileVariant.WEBM_MED: "video/webm",
+        VideoFileVariant.HLS: "application/vnd.apple.mpegurl",
     }
+
+
+def test_hls_playlists_resolve_under_their_own_directory(video: Video) -> None:
+    playlist = VideoFile.objects.create(
+        video=video,
+        variant=VideoFileVariant.HLS,
+        filename="master.m3u8",
+    )
+
+    # The playlists reach the media as ../dash/, so they have to be served
+    # from the directory next to it rather than from inside it.
+    assert playlist.location(relative=True) == f"{video.pk}/hls/master.m3u8"
