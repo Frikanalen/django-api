@@ -85,6 +85,9 @@ class BrregEntitySerializer(serializers.Serializer):
     name = serializers.CharField()
     organization_form = serializers.CharField(help_text="E.g. Forening/lag/innretning")
     homepage = serializers.CharField(allow_blank=True)
+    purpose = serializers.CharField(
+        allow_blank=True, help_text="Vedtektsfestet formål: what the organization is for."
+    )
     street_address = serializers.CharField(allow_blank=True)
     postal_address = serializers.CharField(allow_blank=True)
     bankrupt = serializers.BooleanField()

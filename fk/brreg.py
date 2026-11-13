@@ -61,6 +61,13 @@ def _homepage(value: str | None) -> str:
     return value if re.match(r"https?://", value) else f"https://{value}"
 
 
+def _lines(value) -> str:
+    """The register splits free text into a list of lines; join it back up."""
+    if isinstance(value, str):
+        return value.strip()
+    return " ".join(line.strip() for line in value or [] if line and line.strip())
+
+
 def _entity(data: dict) -> dict:
     street = _format_address(data.get("forretningsadresse"))
     # Most associations register one address only; it serves for both.
@@ -71,6 +78,8 @@ def _entity(data: dict) -> dict:
         "name": data.get("navn") or "",
         "organization_form": form.get("beskrivelse") or "",
         "homepage": _homepage(data.get("hjemmeside")),
+        # Vedtektsfestet formål; older entries only have the activity field.
+        "purpose": _lines(data.get("vedtektsfestetFormaal")) or _lines(data.get("aktivitet")),
         "street_address": street,
         "postal_address": postal,
         "bankrupt": bool(data.get("konkurs")),

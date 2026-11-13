@@ -18,6 +18,7 @@ ENTITY = {
     "navn": "TESTFORENINGEN",
     "organisasjonsform": {"kode": "FLI", "beskrivelse": "Forening/lag/innretning"},
     "hjemmeside": "www.testforeningen.no",
+    "vedtektsfestetFormaal": ["Foreningen skal lage", "lokal-TV."],
     "forretningsadresse": {
         "land": "Norge",
         "landkode": "NO",
@@ -104,6 +105,7 @@ def test_lookup_returns_our_fields(client, monkeypatch):
         "name": "TESTFORENINGEN",
         "organization_form": "Forening/lag/innretning",
         "homepage": "https://www.testforeningen.no",
+        "purpose": "Foreningen skal lage lokal-TV.",
         "street_address": "Testgata 1\n0150 OSLO",
         "postal_address": "Testgata 1\n0150 OSLO",
         "bankrupt": False,
@@ -202,3 +204,10 @@ def test_invalid_orgnr_is_not_saved(client):
     )
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+def test_activity_stands_in_for_a_missing_purpose(client, monkeypatch):
+    entity = {k: v for k, v in ENTITY.items() if k != "vedtektsfestetFormaal"}
+    answer(monkeypatch, dict(entity, aktivitet=["Drive nærradio"]))
+
+    assert client.get(url(VALID)).data["purpose"] == "Drive nærradio"
