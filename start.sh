@@ -12,4 +12,7 @@ if [ "$DJANGO_LOAD_FIXTURES" = "true" ]; then
   ./manage.py loaddata frikanalen || true
 fi
 
-gunicorn fkweb.wsgi:application --bind 0.0.0.0:8080
+# Threads, so one slow request does not hold up every other one. The signal
+# report needs at least two: Django asks MediaMTX, and MediaMTX asks Django
+# whether that is allowed before it answers.
+gunicorn fkweb.wsgi:application --bind 0.0.0.0:8080 --threads "${GUNICORN_THREADS:-8}"
