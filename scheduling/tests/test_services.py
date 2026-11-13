@@ -81,6 +81,26 @@ def test_issue_is_idempotent_and_never_reissues_a_cancelled_occurrence(weekly_sl
     assert AirtimeGrant.objects.get(starttime=OPEN_WEEK).state == State.CANCELLED
 
 
+def test_issue_skips_a_suspended_member(weekly_slot) -> None:
+    organization = weekly_slot.organization
+    organization.is_rogue = True
+    organization.save()
+
+    assert services.issue_grants(NOW) == []
+    assert not AirtimeGrant.objects.exists()
+
+
+def test_a_suspended_members_grant_compiles_to_nothing(weekly_slot) -> None:
+    services.issue_grants(NOW)
+    grant = AirtimeGrant.objects.get(starttime=OPEN_WEEK)
+    organization = grant.organization
+    organization.is_rogue = True
+    organization.save()
+
+    assert services.compile_grant(grant) is False
+    assert not grant.schedule_items.exists()
+
+
 def test_issue_skips_a_window_already_granted_to_someone_else(weekly_slot, make_grant) -> None:
     other = Organization.objects.create(name="Other")
     make_grant(OPEN_WEEK - timedelta(minutes=30), organization=other)

@@ -353,7 +353,11 @@ def issue_grants(now: datetime) -> list[AirtimeGrant]:
     station = station_organization_id()
     station_exists = Organization.objects.filter(pk=station).exists()
     issued = []
-    for slot in RecurringSlot.objects.select_related("default_fill_rule"):
+    # A suspended (is_rogue) member keeps its slots but is issued nothing.
+    slots = RecurringSlot.objects.select_related("default_fill_rule").exclude(
+        organization__is_rogue=True
+    )
+    for slot in slots:
         if slot.organization_id is None and not station_exists:
             logger.error(
                 "Not issuing unowned %s: STATION_ORGANIZATION_ID %s is missing", slot, station
@@ -439,7 +443,15 @@ def compile_grant(grant: AirtimeGrant) -> bool:
     A grant owns its window, so normally nothing else is there. If
     something is -- a staff entry, or a row from before the cut-over --
     the grant is left as it was and the conflict logged.
+
+    A suspended (is_rogue) member's grant compiles to nothing: what it
+    put on the schedule and has not aired yet comes off, and the grant
+    is left in its state.
     """
+    if grant.organization.is_rogue:
+        grant.schedule_items.filter(starttime__gt=timezone.now()).delete()
+        logger.warning("Not compiling %s: %s is suspended", grant, grant.organization)
+        return False
     try:
         with transaction.atomic():
             grant.schedule_items.all().delete()
