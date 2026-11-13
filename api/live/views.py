@@ -14,8 +14,9 @@ from api.live.serializers import (
     IssuedEncoderKeySerializer,
     LiveSourceSerializer,
     PreviewTokenSerializer,
+    SignalSerializer,
 )
-from fk import preview_tokens
+from fk import preview_tokens, receiver
 from fk.models import LiveSource, Organization, Scheduleitem, StreamCredential
 from fk.stream_connections import blackmagic_web_presenter_config, connection_examples
 from scheduling.services import may_act_for
@@ -207,3 +208,34 @@ class LiveSourcePreviewToken(generics.GenericAPIView):
             }
         )
         return Response(serializer.data, status=201)
+
+
+@method_decorator(never_cache, name="dispatch")
+class LiveSourceSignal(generics.GenericAPIView):
+    serializer_class = SignalSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    @extend_schema(
+        operation_id="live_sources_signal_retrieve",
+        summary="The signal a live source is receiving",
+        description=(
+            "What the receiver sees arriving on this source right now, as the "
+            "encoder sends it: format, how long it has been in, and transport "
+            "health. Reading it does not start a pulled source."
+        ),
+        responses={
+            200: SignalSerializer,
+            404: OpenApiResponse(description="No such source in your organizations."),
+        },
+    )
+    def get(self, request, pk):
+        source = _source_for(request.user, pk)
+        try:
+            signal = receiver.signal(source) if source.enabled else {"receiving": False}
+        except receiver.ReceiverUnavailable:
+            # An answer rather than an error: the page polls this, and where
+            # the receiver's API is not set up it simply has nothing to show.
+            signal = {"available": False, "receiving": False}
+        return Response(
+            self.get_serializer({"available": True, **signal, "measured_at": timezone.now()}).data
+        )

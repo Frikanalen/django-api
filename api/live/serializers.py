@@ -119,6 +119,55 @@ class PreviewTokenSerializer(serializers.Serializer):
     )
 
 
+class SignalVideoSerializer(serializers.Serializer):
+    codec = serializers.CharField(help_text="As MediaMTX names it, e.g. `H264`.")
+    width = serializers.IntegerField(allow_null=True)
+    height = serializers.IntegerField(allow_null=True)
+    profile = serializers.CharField(allow_blank=True)
+
+
+class SignalAudioSerializer(serializers.Serializer):
+    codec = serializers.CharField(help_text="As MediaMTX names it, e.g. `MPEG-4 Audio`.")
+    sample_rate = serializers.IntegerField(allow_null=True)
+    channel_count = serializers.IntegerField(allow_null=True)
+
+
+class SignalSrtSerializer(serializers.Serializer):
+    """Counters since the SRT connection opened."""
+
+    packets_received = serializers.IntegerField()
+    packets_lost = serializers.IntegerField(help_text="Lost on the way; SRT asks for these again.")
+    packets_retransmitted = serializers.IntegerField()
+    packets_dropped = serializers.IntegerField(
+        help_text="Never recovered in time: these are what a viewer sees as glitches."
+    )
+    round_trip_ms = serializers.FloatField(allow_null=True)
+
+
+class SignalSerializer(serializers.Serializer):
+    """The signal arriving on a source, as the encoder sends it."""
+
+    available = serializers.BooleanField(
+        help_text="False where the receiver cannot be asked; nothing else is known then."
+    )
+    receiving = serializers.BooleanField()
+    since = serializers.DateTimeField(required=False, allow_null=True)
+    protocol = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="`SRT`, `RTMP`, `RTSP` or `WebRTC`; empty for a pulled source.",
+    )
+    video = SignalVideoSerializer(required=False, allow_null=True)
+    audio = SignalAudioSerializer(required=False, allow_null=True)
+    bytes_received = serializers.IntegerField(
+        required=False,
+        help_text="Since the signal came in. The difference between two reads gives the bitrate.",
+    )
+    frames_in_error = serializers.IntegerField(required=False)
+    srt = SignalSrtSerializer(required=False, allow_null=True)
+    measured_at = serializers.DateTimeField()
+
+
 class EncoderKeySerializer(serializers.ModelSerializer):
     """An encoder's publish credential, as listed: never its password."""
 

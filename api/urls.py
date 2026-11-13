@@ -130,6 +130,11 @@ api_patterns: list[URLPattern | URLResolver] = [
         name="api-live-source-encoder-key-revoke",
     ),
     path(
+        "live-sources/<int:pk>/signal",
+        live_views.LiveSourceSignal.as_view(),
+        name="api-live-source-signal",
+    ),
+    path(
         "live-sources/<int:pk>/preview-token",
         live_views.LiveSourcePreviewToken.as_view(),
         name="api-live-source-preview-token",

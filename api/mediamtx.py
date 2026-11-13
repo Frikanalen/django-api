@@ -15,7 +15,7 @@ from django.views.decorators.debug import sensitive_variables
 from django.views.decorators.http import require_GET, require_POST
 
 from api.auth.permissions import can_administer_organization
-from fk import preview_tokens
+from fk import preview_tokens, receiver
 from fk.models import LiveSource, StreamCredential
 
 
@@ -37,6 +37,11 @@ def authenticate(request):
         return HttpResponse(status=401)
 
     token = payload.get("token")
+    if payload.get("action") == "api":
+        # MediaMTX's control API has one client, Django itself, which signs
+        # its own token (fk.receiver). Nothing else may use the API.
+        allowed = isinstance(token, str) and len(token) <= 512 and receiver.verify_api_token(token)
+        return HttpResponse(status=204 if allowed else 401)
     if isinstance(token, str) and token and not payload.get("password"):
         return authenticate_preview_token(token, payload)
     if not payload.get("password") and _is_loopback(payload.get("ip")):

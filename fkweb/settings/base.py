@@ -39,6 +39,9 @@ FK_MEDIAMTX_RTMP_URL = env.str("FK_MEDIAMTX_RTMP_URL", default="")
 FK_MEDIAMTX_RTSP_URL = env.str("FK_MEDIAMTX_RTSP_URL", default="")
 FK_MEDIAMTX_WEBRTC_URL = env.str("FK_MEDIAMTX_WEBRTC_URL", default="")
 FK_MEDIAMTX_HLS_URL = env.str("FK_MEDIAMTX_HLS_URL", default="")
+# MediaMTX's control API, in-cluster only: where Django reads what signal a
+# live source is receiving. Empty leaves signal reports unavailable.
+FK_MEDIAMTX_API_URL = env.str("FK_MEDIAMTX_API_URL", default="")
 # Fernet keys for pulled sources' addresses, comma-separated: the first
 # encrypts, the rest still decrypt (rotation). Per environment, from OpenBao.
 # Unset, no source can be made a pulled one.
