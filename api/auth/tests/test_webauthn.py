@@ -124,6 +124,11 @@ class SoftKey:
         }
 
 
+@pytest.fixture(autouse=True)
+def passkeys_on(settings) -> None:
+    settings.PASSKEYS_ENABLED = True
+
+
 @pytest.fixture
 def account() -> User:
     return User.objects.create_user(email=EMAIL, password=PASSWORD)
@@ -416,3 +421,36 @@ def test_removing_a_key(client: APIClient) -> None:
     assert not WebAuthnCredential.objects.exists()
     assert status_of(client)["enabled"] is False
     assert passkey_login(APIClient(), key).status_code == status.HTTP_400_BAD_REQUEST
+
+
+# Switched off (PASSKEYS_ENABLED=False, as in production for now)
+
+
+def test_switched_off_the_ceremonies_do_not_exist(settings, client: APIClient) -> None:
+    settings.PASSKEYS_ENABLED = False
+
+    assert APIClient().get(reverse("api-user-login-passkey")).json() == {"enabled": False}
+    for name in (
+        "api-user-login-passkey-begin",
+        "api-user-2fa-webauthn-register-begin",
+        "api-user-2fa-webauthn-begin",
+    ):
+        assert client.post(reverse(name)).status_code == status.HTTP_404_NOT_FOUND
+    assert status_of(client)["passkeys"] is False
+
+
+def test_switched_off_a_registered_key_does_not_count(settings, client: APIClient) -> None:
+    add_key(client, SoftKey())
+    settings.PASSKEYS_ENABLED = False
+
+    assert status_of(client)["enabled"] is False
+    assert status_of(client)["methods"] == []
+    response = APIClient().post(
+        reverse("api-user-login"), {"email": EMAIL, "password": PASSWORD}, format="json"
+    )
+    assert response.status_code == status.HTTP_200_OK
+
+
+def test_switched_on_the_login_page_is_told(client: APIClient) -> None:
+    assert APIClient().get(reverse("api-user-login-passkey")).json() == {"enabled": True}
+    assert status_of(client)["passkeys"] is True

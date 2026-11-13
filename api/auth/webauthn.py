@@ -31,7 +31,7 @@ from django_otp_webauthn.utils import rewrite_exceptions
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, serializers, status
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.parsers import JSONParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.renderers import JSONRenderer
@@ -111,6 +111,13 @@ class RegisterCompleteSerializer(CredentialSerializer):
 class _View(generics.GenericAPIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "two_factor"
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        # Switched off (PASSKEYS_ENABLED), the ceremonies do not exist.
+        if not two_factor.passkeys_enabled():
+            raise NotFound()
+
     # The browser's credential is WebAuthn's own JSON (clientDataJSON,
     # authenticatorData, ...); the API's camelCase parser would rename its
     # keys. This view's own fields are single words, so a plain parser does.
@@ -250,6 +257,21 @@ class SecondFactorComplete(_View):
 
 
 # --- Passkey login -------------------------------------------------------
+
+
+class PasskeysAvailableSerializer(serializers.Serializer):
+    enabled = serializers.BooleanField(read_only=True)
+
+
+class PasskeysAvailable(generics.GenericAPIView):
+    """Whether passkeys are switched on here, so the login page knows
+    whether to offer them."""
+
+    permission_classes = [AllowAny]
+    serializer_class = PasskeysAvailableSerializer
+
+    def get(self, request):
+        return Response({"enabled": two_factor.passkeys_enabled()})
 
 
 class PasskeyLoginBegin(_OptionsView):

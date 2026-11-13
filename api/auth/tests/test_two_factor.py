@@ -88,12 +88,16 @@ def test_setup_returns_a_secret_and_a_qr_code(client: APIClient) -> None:
     assert body["otpauthUrl"].startswith("otpauth://totp/Frikanalen")
     assert body["qrCode"].startswith("data:image/svg+xml;base64,")
     assert len(body["secret"]) >= 16
+    # The three blades, for apps that show an icon per account.
+    assert "&image=https%3A%2F%2F" in body["otpauthUrl"]
+    assert body["otpauthUrl"].endswith("authenticator-icon.png")
     # Nothing is protected until the app has proved itself.
     assert status_of(client) == {
         "enabled": False,
         "recoveryCodesLeft": 0,
         "verified": False,
         "methods": [],
+        "passkeys": False,
     }
 
 
