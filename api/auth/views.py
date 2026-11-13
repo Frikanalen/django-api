@@ -16,6 +16,7 @@ from api.auth.serializers import (
     NewUserSerializer,
     UserSerializer,
 )
+from api.auth.two_factor import require_second_factor
 
 
 class UserCreate(generics.CreateAPIView):
@@ -70,6 +71,10 @@ class UserLogin(CreateAPIView):
         if not user:
             raise AuthenticationFailed("Incorrect email or password.")
 
+        # Only after the password: asking first would tell anyone which
+        # addresses have two-factor on.
+        user.otp_device = require_second_factor(user, data.get("otp"))
+        # django-otp's user_logged_in handler records otp_device in the session.
         login(request._request, user)
         return Response(UserSerializer(user).data)
 

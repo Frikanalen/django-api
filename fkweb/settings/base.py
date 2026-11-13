@@ -192,6 +192,9 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 PWNED_PASSWORDS = {"API_TIMEOUT": 2.0}
+# The name authenticator apps file the account under. Staging sets its own
+# so its entry is not mistaken for the real one.
+OTP_TOTP_ISSUER = env.str("OTP_TOTP_ISSUER", default="Frikanalen")
 # How long a password reset link works. Django's default is three days;
 # a link sitting in an inbox that long is a liability, an hour is plenty.
 # A link also stops working once it has been used, because the token is
@@ -334,6 +337,10 @@ THIRD_PARTY_APPS = (
     "rest_framework",
     "rest_framework.authtoken",
     "phonenumber_field",
+    # Optional two-factor authentication (api/auth/two_factor.py).
+    "django_otp",
+    "django_otp.plugins.otp_totp",
+    "django_otp.plugins.otp_static",
 )
 
 # Apps specific for this project go here.
