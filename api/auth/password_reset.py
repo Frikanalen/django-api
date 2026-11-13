@@ -30,8 +30,8 @@ import threading
 from urllib.parse import urlsplit
 
 from django.conf import settings
-from django.contrib.auth import get_user_model, login
-from django.contrib.auth.forms import PasswordResetForm, SetPasswordForm
+from django.contrib.auth import get_user_model, login, update_session_auth_hash
+from django.contrib.auth.forms import PasswordChangeForm, PasswordResetForm, SetPasswordForm
 from django.contrib.auth.tokens import default_token_generator
 from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -42,7 +42,7 @@ from django.utils.http import urlsafe_base64_decode
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, serializers, status
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
@@ -203,3 +203,60 @@ class PasswordResetConfirm(generics.GenericAPIView):
         login(request._request, user)
         run_in_background(_send_password_changed_notice, user)
         return Response(UserSerializer(user).data)
+
+
+class PasswordChangeSerializer(serializers.Serializer):
+    current_password = serializers.CharField(write_only=True, trim_whitespace=False)
+    new_password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+
+class PasswordChange(generics.GenericAPIView):
+    """Change your own password, given the current one.
+
+    Django's PasswordChangeForm: the current password must be right and the
+    new one must pass AUTH_PASSWORD_VALIDATORS. Other sessions end (the
+    session auth hash rotates); this one stays signed in. Someone holding
+    only a stolen session cannot use this to take the account over; they
+    would have to know the password, or have the mailbox for a reset.
+    """
+
+    serializer_class = PasswordChangeSerializer
+    permission_classes = [IsAuthenticated]
+    # Shares the confirm scope: both guess at a secret.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset_confirm"
+
+    @extend_schema(responses={204: None})
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        user = request.user
+
+        with translation.override("nb"):
+            form = PasswordChangeForm(
+                user,
+                {
+                    "old_password": data["current_password"],
+                    "new_password1": data["new_password"],
+                    "new_password2": data["new_password"],
+                },
+            )
+            if not form.is_valid():
+                errors = {}
+                if "old_password" in form.errors:
+                    errors["current_password"] = [str(m) for m in form.errors["old_password"]]
+                new = [
+                    str(m)
+                    for field, messages in form.errors.items()
+                    if field != "old_password"
+                    for m in messages
+                ]
+                if new:
+                    errors["new_password"] = new
+                raise ValidationError(errors)
+        form.save()
+
+        update_session_auth_hash(request._request, user)
+        run_in_background(_send_password_changed_notice, user)
+        return Response(status=status.HTTP_204_NO_CONTENT)

@@ -1,4 +1,4 @@
-from django.contrib.auth import get_user_model, update_session_auth_hash
+from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import translation
@@ -66,29 +66,10 @@ class SimpleOrgSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=False)
+    # No password here: changing it takes the current one, which is
+    # POST /api/user/password (api/auth/password_reset.py).
     editor_of = SimpleOrgSerializer(source="editor", many=True, read_only=True)
     member_of = SimpleOrgSerializer(source="organization_set", many=True, read_only=True)
-
-    def validate(self, attrs):
-        if "password" in attrs:
-            check_password_strength(attrs["password"], self.instance)
-        return attrs
-
-    def update(self, instance, validated_data):
-        # The default update() would write the raw password string to the
-        # password column; it must go through set_password to be hashed.
-        password = validated_data.pop("password", None)
-        user = super().update(instance, validated_data)
-        if password is not None:
-            user.set_password(password)
-            user.save(update_fields=["password"])
-            request = self.context.get("request")
-            if request is not None:
-                # Keep the current session alive; other sessions are
-                # invalidated by the rotated session auth hash.
-                update_session_auth_hash(request, user)
-        return user
 
     class Meta:
         model = User
@@ -108,7 +89,6 @@ class UserSerializer(serializers.ModelSerializer):
             "last_name",
             "date_of_birth",
             "phone_number",
-            "password",
         )
 
 
