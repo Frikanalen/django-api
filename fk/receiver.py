@@ -159,8 +159,8 @@ def _prometheus_range(query, start, end, step):
 def history(source, minutes, now):
     """Samples of a source's signal over the last `minutes`, oldest first.
 
-    One per scrape step while a signal was in; steps without one are left
-    out. Each holds what happened since the step before, in the shape the
+    One per scrape step from the first step with a signal in; a later step
+    without one says so. Each holds what happened since the step before, in the shape the
     live page builds from the signal report: bitrate, packets lost and
     dropped (SRT), and whether the encoder had connected anew.
     """
@@ -194,6 +194,19 @@ def history(source, minutes, now):
     for at in range(start, end + 1, step):
         if not totals["ready"].get(at):
             previous = None
+            # Before the first signal there is nothing to tell; after it,
+            # a step without one is a hole in the broadcast.
+            if samples:
+                samples.append(
+                    {
+                        "at": datetime.fromtimestamp(at, tz=UTC),
+                        "receiving": False,
+                        "bitrate": None,
+                        "lost": 0,
+                        "dropped": 0,
+                        "reconnected": False,
+                    }
+                )
             continue
         received = totals[_BYTES].get(at)
         lost = totals[_LOST].get(at)

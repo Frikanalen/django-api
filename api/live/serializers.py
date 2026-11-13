@@ -194,7 +194,7 @@ class SignalHistorySerializer(serializers.Serializer):
     )
     step_seconds = serializers.IntegerField()
     samples = SignalSampleSerializer(
-        many=True, help_text="Oldest first. Steps with no signal are left out."
+        many=True, help_text="Oldest first, from the first step with a signal in."
     )
 
 

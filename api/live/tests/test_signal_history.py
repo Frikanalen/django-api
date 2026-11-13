@@ -73,7 +73,7 @@ def test_history_turns_counters_into_what_happened_each_step(source, prometheus)
     assert (start, end, step) == (END - 3600, END, 30)
 
 
-def test_steps_without_a_signal_are_left_out_and_nothing_is_counted_across_them(source, prometheus):
+def test_a_hole_in_the_signal_is_told_and_nothing_is_counted_across_it(source, prometheus):
     path = source.contribution_path
     prometheus["result"] = [
         series("paths", {5: 1, 4: 1, 3: 0, 1: 1, 0: 1}, name=path, state="ready"),
@@ -83,11 +83,13 @@ def test_steps_without_a_signal_are_left_out_and_nothing_is_counted_across_them(
 
     samples = receiver.history(source, 60, NOW)
 
-    assert [(END - s["at"].timestamp()) // 30 for s in samples] == [5, 4, 1, 0]
-    # The first step after the gap has nothing to be measured against.
-    assert samples[2]["bitrate"] is None
-    assert samples[2]["lost"] == 0
-    assert samples[3]["bitrate"] == round(100 * 8 / 30)
+    # Nothing before the first signal; the two steps without one after it.
+    assert [(END - s["at"].timestamp()) // 30 for s in samples] == [5, 4, 3, 2, 1, 0]
+    assert [s["receiving"] for s in samples] == [True, True, False, False, True, True]
+    # The first step after the hole has nothing to be measured against.
+    assert samples[4]["bitrate"] is None
+    assert samples[4]["lost"] == 0
+    assert samples[5]["bitrate"] == round(100 * 8 / 30)
 
 
 def test_a_counter_starting_over_is_a_reconnect(source, prometheus):
