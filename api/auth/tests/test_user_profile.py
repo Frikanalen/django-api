@@ -108,32 +108,15 @@ def test_identity_confirmation_is_visible_but_cannot_be_changed(
     assert account.identity_confirmed is True
 
 
-NEW_PASSWORD = "a sturdy new passphrase"
-
-
-def test_password_updates_are_hashed_and_usable(client: APIClient, account: User) -> None:
-    """
-    Replaces the pinned plaintext-password defect: a PATCHed password
-    must be hashed, never stored verbatim, and must work for a fresh
-    login while the old password stops working.
-    """
-    response = client.patch(reverse("api-user-detail"), {"password": NEW_PASSWORD}, format="json")
+def test_profile_update_cannot_change_the_password(client: APIClient, account: User) -> None:
+    """Changing the password takes the current one: POST /api/user/password."""
+    response = client.patch(
+        reverse("api-user-detail"), {"password": "a sturdy new passphrase"}, format="json"
+    )
 
     assert response.status_code == status.HTTP_200_OK
     account.refresh_from_db()
-    assert account.password != NEW_PASSWORD
-    assert account.check_password(NEW_PASSWORD)
-    assert not account.check_password(PASSWORD)
-
-    login = APIClient().post(
-        reverse("api-user-login"), {"email": EMAIL, "password": NEW_PASSWORD}, format="json"
-    )
-    assert login.status_code == status.HTTP_200_OK
-
-    stale_login = APIClient().post(
-        reverse("api-user-login"), {"email": EMAIL, "password": PASSWORD}, format="json"
-    )
-    assert stale_login.status_code == status.HTTP_401_UNAUTHORIZED
+    assert account.check_password(PASSWORD)
 
 
 @pytest.fixture
@@ -199,14 +182,3 @@ def test_a_deleted_account_can_no_longer_authenticate(client: APIClient, account
     )
     assert login.status_code == status.HTTP_401_UNAUTHORIZED
     assert not Token.objects.filter(key=token.key).exists()
-
-
-def test_weak_password_update_is_refused(client: APIClient, account: User) -> None:
-    response = client.patch(reverse("api-user-detail"), {"password": "12345678"}, format="json")
-
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-    errors = response.json()["errors"]
-    assert {error["attr"] for error in errors} == {"password"}
-    assert any("bare tall" in error["detail"] for error in errors), errors
-    account.refresh_from_db()
-    assert account.check_password(PASSWORD)

@@ -199,3 +199,60 @@ def test_weak_password_is_refused_in_norwegian(account: User) -> None:
     assert account.check_password(OLD_PASSWORD)
     # The link still works after a rejected password.
     assert confirm(uid, token, NEW_PASSWORD).status_code == status.HTTP_200_OK
+
+
+# Changing the password from the profile, given the current one.
+
+
+def change(client: APIClient, current: str, new: str):
+    return client.post(
+        reverse("api-user-password-change"),
+        {"currentPassword": current, "newPassword": new},
+        format="json",
+    )
+
+
+def logged_in(account: User) -> APIClient:
+    client = APIClient()
+    assert client.login(username=account.email, password=OLD_PASSWORD)
+    return client
+
+
+def test_change_needs_a_login(account: User) -> None:
+    assert change(APIClient(), OLD_PASSWORD, NEW_PASSWORD).status_code in (401, 403)
+
+
+def test_change_sets_password_keeps_session_and_notifies(account: User) -> None:
+    client = logged_in(account)
+    other_session = logged_in(account)
+
+    response = change(client, OLD_PASSWORD, NEW_PASSWORD)
+
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+    account.refresh_from_db()
+    assert account.check_password(NEW_PASSWORD)
+    assert client.get(reverse("api-user-detail")).status_code == status.HTTP_200_OK
+    # Every other session ends with the old password.
+    assert other_session.get(reverse("api-user-detail")).status_code in (401, 403)
+    assert [m.subject for m in mail.outbox] == ["Passordet ditt på Frikanalen er endret"]
+
+
+def test_change_refuses_a_wrong_current_password(account: User) -> None:
+    response = change(logged_in(account), "not my password", NEW_PASSWORD)
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert {e["attr"] for e in response.json()["errors"]} == {"current_password"}
+    account.refresh_from_db()
+    assert account.check_password(OLD_PASSWORD)
+    assert mail.outbox == []
+
+
+def test_change_refuses_a_weak_new_password(account: User) -> None:
+    response = change(logged_in(account), OLD_PASSWORD, "12345678")
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    errors = response.json()["errors"]
+    assert {e["attr"] for e in errors} == {"new_password"}
+    assert any("bare tall" in e["detail"] for e in errors), errors
+    account.refresh_from_db()
+    assert account.check_password(OLD_PASSWORD)

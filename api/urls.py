@@ -55,6 +55,11 @@ api_patterns: list[URLPattern | URLResolver] = [
     path("user/login", auth_views.UserLogin.as_view(), name="api-user-login"),
     path("user/logout", auth_views.UserLogout.as_view(), name="api-user-logout"),
     path(
+        "user/password",
+        password_reset.PasswordChange.as_view(),
+        name="api-user-password-change",
+    ),
+    path(
         "user/password-reset",
         password_reset.PasswordResetRequest.as_view(),
         name="api-user-password-reset",
