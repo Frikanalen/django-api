@@ -33,7 +33,7 @@ def schedule_version() -> str:
     Kept in the same cache the changes clear, so it needs no bookkeeping of
     its own: after a clear the next caller mints a new one.
     """
-    return cache.get_or_set(SCHEDULE_VERSION_KEY, lambda: timezone.now().isoformat(), None)
+    return str(cache.get_or_set(SCHEDULE_VERSION_KEY, lambda: timezone.now().isoformat(), None))
 
 
 def clear_page_cache_after_commit() -> None:
