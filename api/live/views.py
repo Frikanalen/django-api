@@ -4,7 +4,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import generics, permissions
 from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.response import Response
@@ -15,6 +15,7 @@ from api.live.serializers import (
     IssuedEncoderKeySerializer,
     LiveSourceSerializer,
     PreviewTokenSerializer,
+    SignalHistorySerializer,
     SignalSerializer,
 )
 from fk import preview_tokens, receiver
@@ -246,4 +247,52 @@ class LiveSourceSignal(generics.GenericAPIView):
             signal = {"available": False, "receiving": False}
         return Response(
             self.get_serializer({"available": True, **signal, "measured_at": timezone.now()}).data
+        )
+
+
+@method_decorator(never_cache, name="dispatch")
+class LiveSourceSignalHistory(generics.GenericAPIView):
+    serializer_class = SignalHistorySerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    @extend_schema(
+        operation_id="live_sources_signal_history_retrieve",
+        summary="How a live source's signal has held up",
+        description=(
+            "Bitrate, SRT packet loss and reconnects for this source over the last "
+            "while, one sample per scrape step, from the receiver's metrics. It "
+            "covers the time before the caller started watching."
+        ),
+        parameters=[
+            OpenApiParameter(
+                "minutes",
+                int,
+                description=f"How far back, at most {receiver.HISTORY_MAX_MINUTES}. Default 60.",
+            )
+        ],
+        responses={
+            200: SignalHistorySerializer,
+            404: OpenApiResponse(description="No such source in your organizations."),
+        },
+    )
+    def get(self, request, pk):
+        source = _source_for(request.user, pk)
+        try:
+            minutes = int(request.query_params.get("minutes", 60))
+        except ValueError:
+            minutes = 60
+        minutes = min(max(minutes, 1), receiver.HISTORY_MAX_MINUTES)
+        try:
+            samples = receiver.history(source, minutes, timezone.now())
+            available = True
+        except receiver.ReceiverUnavailable:
+            samples, available = [], False
+        return Response(
+            self.get_serializer(
+                {
+                    "available": available,
+                    "step_seconds": receiver.HISTORY_STEP_SECONDS,
+                    "samples": samples,
+                }
+            ).data
         )

@@ -13,8 +13,8 @@ to distribute.
 import json
 import urllib.error
 import urllib.request
-from datetime import timedelta
-from urllib.parse import quote
+from datetime import UTC, datetime, timedelta
+from urllib.parse import quote, urlencode
 
 from django.conf import settings
 from django.core import signing
@@ -125,3 +125,99 @@ def signal(source):
                 "round_trip_ms": connection.get("msRTT"),
             }
     return result
+
+
+# --- History, from Prometheus -------------------------------------------
+#
+# MediaMTX's API knows only now. Prometheus scrapes MediaMTX's metrics, so
+# it remembers what a source's signal did before anyone opened its page.
+
+HISTORY_STEP_SECONDS = 30
+HISTORY_MAX_MINUTES = 180
+
+_BYTES = "paths_inbound_bytes"
+_LOST = "srt_conns_packets_received_loss"
+_DROPPED = "srt_conns_packets_received_drop"
+
+
+def _prometheus_range(query, start, end, step):
+    base = settings.FK_PROMETHEUS_URL
+    if not base:
+        raise ReceiverUnavailable("FK_PROMETHEUS_URL is not set")
+    params = urlencode({"query": query, "start": start, "end": end, "step": step})
+    url = f"{base.rstrip('/')}/api/v1/query_range?{params}"
+    try:
+        with urllib.request.urlopen(url, timeout=TIMEOUT_SECONDS) as response:
+            body = json.load(response)
+    except (OSError, ValueError) as error:
+        raise ReceiverUnavailable(str(error)) from error
+    if body.get("status") != "success":
+        raise ReceiverUnavailable(str(body.get("error", "query failed")))
+    return body["data"]["result"]
+
+
+def history(source, minutes, now):
+    """Samples of a source's signal over the last `minutes`, oldest first.
+
+    One per scrape step while a signal was in; steps without one are left
+    out. Each holds what happened since the step before, in the shape the
+    live page builds from the signal report: bitrate, packets lost and
+    dropped (SRT), and whether the encoder had connected anew.
+    """
+    path = source.contribution_path
+    step = HISTORY_STEP_SECONDS
+    end = int(now.timestamp()) // step * step
+    start = end - minutes * 60
+    # One query for all four series. The path is ours (a UUID), not input.
+    query = (
+        f'{{__name__=~"paths|{_BYTES}",name="{path}"}} '
+        f'or {{__name__=~"{_LOST}|{_DROPPED}",path="{path}"}}'
+    )
+    # Several series can carry one metric (a pod restart, a new SRT
+    # connection): summed per instant.
+    totals: dict[str, dict[int, float]] = {"ready": {}, _BYTES: {}, _LOST: {}, _DROPPED: {}}
+    for series in _prometheus_range(query, start, end, step):
+        labels = series.get("metric", {})
+        name = labels.get("__name__")
+        if name == "paths":
+            if labels.get("state") != "ready":
+                continue
+            name = "ready"
+        if name not in totals:
+            continue
+        for instant, value in series.get("values", []):
+            at = int(float(instant))
+            totals[name][at] = totals[name].get(at, 0.0) + float(value)
+
+    samples = []
+    previous = None
+    for at in range(start, end + 1, step):
+        if not totals["ready"].get(at):
+            previous = None
+            continue
+        received = totals[_BYTES].get(at)
+        lost = totals[_LOST].get(at)
+        dropped = totals[_DROPPED].get(at)
+        sample = {
+            "at": datetime.fromtimestamp(at, tz=UTC),
+            "receiving": True,
+            "bitrate": None,
+            "lost": 0,
+            "dropped": 0,
+            "reconnected": False,
+        }
+        if previous is not None and previous["at"] == at - step:
+            # Counters start over with a new connection.
+            if received is not None and previous["received"] is not None:
+                if received >= previous["received"]:
+                    sample["bitrate"] = round((received - previous["received"]) * 8 / step)
+                else:
+                    sample["reconnected"] = True
+            if not sample["reconnected"]:
+                if lost is not None and previous["lost"] is not None:
+                    sample["lost"] = max(0, round(lost - previous["lost"]))
+                if dropped is not None and previous["dropped"] is not None:
+                    sample["dropped"] = max(0, round(dropped - previous["dropped"]))
+        samples.append(sample)
+        previous = {"at": at, "received": received, "lost": lost, "dropped": dropped}
+    return samples

@@ -175,6 +175,29 @@ class SignalSerializer(serializers.Serializer):
     measured_at = serializers.DateTimeField()
 
 
+class SignalSampleSerializer(serializers.Serializer):
+    at = serializers.DateTimeField(help_text="The end of the step this sample covers.")
+    receiving = serializers.BooleanField()
+    bitrate = serializers.IntegerField(allow_null=True, help_text="Bits per second.")
+    lost = serializers.IntegerField(help_text="SRT packets lost on the way and asked for again.")
+    dropped = serializers.IntegerField(help_text="SRT packets that never arrived in time.")
+    reconnected = serializers.BooleanField(
+        help_text="The encoder had connected anew since the step before."
+    )
+
+
+class SignalHistorySerializer(serializers.Serializer):
+    """How a source's signal has held up, from before the page was opened."""
+
+    available = serializers.BooleanField(
+        help_text="False where there is no record to ask; `samples` is empty then."
+    )
+    step_seconds = serializers.IntegerField()
+    samples = SignalSampleSerializer(
+        many=True, help_text="Oldest first. Steps with no signal are left out."
+    )
+
+
 class EncoderKeySerializer(serializers.ModelSerializer):
     """An encoder's publish credential, as listed: never its password."""
 
