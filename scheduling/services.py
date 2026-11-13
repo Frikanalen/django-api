@@ -159,7 +159,7 @@ def set_items(
         grant.save(update_fields=["recipe", "updated_at"])
         if automatic:
             _fill(grant, _context_for([grant], now), now)
-        if grant.state == State.COMPILED:
+        if _on_schedule(grant, now):
             compile_grant(grant)
         if automatic and whole_slot and isinstance(recipe, Recipe):
             if grant.origin_slot is None:
@@ -205,7 +205,30 @@ def create_grant(
     grant.full_clean()
     with transaction.atomic():
         grant.save()
+        _publish_if_due(grant)
     return grant
+
+
+def _on_schedule(grant: AirtimeGrant, now: datetime) -> bool:
+    """Whether the grant's list belongs on the published schedule now:
+    it is compiled, or it is lock-exempt and past its deadline, which the
+    nightly run would compile anyway. Waiting for that run would leave a
+    grant given (or set up) today off the schedule until after midnight,
+    perhaps after it aired."""
+    if grant.state == State.COMPILED:
+        return True
+    return grant.state == State.OPEN and grant.lock_exempt and grant.locks_at <= now
+
+
+def _publish_if_due(grant: AirtimeGrant, now: datetime | None = None) -> None:
+    """A new grant that is already due fills from its recipe and goes on
+    the schedule at once, as the nightly run would have done."""
+    now = now or timezone.now()
+    if not _on_schedule(grant, now):
+        return
+    if grant.recipe is not None:
+        _fill(grant, _context_for([grant], now), now)
+    compile_grant(grant)
 
 
 def approve_airtime(airtime_request) -> AirtimeGrant:

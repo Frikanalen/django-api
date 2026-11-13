@@ -7,6 +7,7 @@ import pytest
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.test import override_settings
+from django.utils import timezone
 
 from fk.models import (
     LiveSource,
@@ -263,6 +264,51 @@ def test_a_lock_exempt_grant_compiles_without_locking_and_stays_editable(
     services.set_items(grant, [other], user=editor, now=NOW)
 
     assert schedule(grant) == [(other.pk, OPEN_WEEK, timedelta(minutes=20))]
+
+
+def test_items_set_on_a_lock_exempt_grant_past_its_deadline_go_on_the_schedule_at_once(
+    make_grant, make_video, editor
+) -> None:
+    # Given today, after the usual deadline: no nightly run has compiled it yet.
+    grant = make_grant(OPEN_WEEK, locks_at=NOW - timedelta(days=1), lock_exempt=True)
+    video = make_video(10)
+
+    services.set_items(grant, [video], user=editor, now=NOW)
+
+    assert schedule(grant) == [(video.pk, OPEN_WEEK, timedelta(minutes=10))]
+    grant.refresh_from_db()
+    assert grant.state == State.COMPILED
+    assert services.can_edit(grant, editor, NOW)
+
+
+def test_items_set_before_the_deadline_wait_for_the_nightly_run(
+    make_grant, make_video, editor
+) -> None:
+    grant = make_grant(OPEN_WEEK)
+
+    services.set_items(grant, [make_video(10)], user=editor, now=NOW)
+
+    assert schedule(grant) == []
+
+
+def test_airtime_given_past_its_deadline_fills_and_compiles_at_once(
+    organization, make_video
+) -> None:
+    start = timezone.now() + timedelta(days=2)
+    video = make_video(10)
+
+    grant = services.create_grant(
+        organization=organization,
+        starttime=start,
+        endtime=start + timedelta(hours=1),
+        locks_at=timezone.now() - timedelta(days=1),
+        lock_exempt=True,
+        recipe=uploads_recipe(organization),
+    )
+
+    grant.refresh_from_db()
+    assert grant.state == State.COMPILED
+    assert video.pk in [row[0] for row in schedule(grant)]
 
 
 def test_a_pending_upload_arriving_with_its_real_length_recompiles(
