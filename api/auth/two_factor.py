@@ -32,9 +32,11 @@ and their recovery codes.
 import base64
 import time
 from io import BytesIO
+from urllib.parse import quote
 
 import django_otp
 from django import forms
+from django.conf import settings
 from django.contrib.admin.forms import AdminAuthenticationForm
 from django.db import transaction
 from django.shortcuts import get_object_or_404
@@ -53,6 +55,8 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
 RECOVERY_CODE_COUNT = 10
+# Served by the frontend (public/authenticator-icon.png): the three blades.
+AUTHENTICATOR_ICON_URL = f"{settings.SITE_URL}/authenticator-icon.png"
 RECOVERY_DEVICE_NAME = "Gjenopprettingskoder"
 APP_DEVICE_NAME = "Autentiseringsapp"
 
@@ -71,23 +75,31 @@ PASSED_KEY = "two_factor_passed"
 KINDS = {"totp": TOTPDevice, "webauthn": WebAuthnCredential}
 
 
+def passkeys_enabled() -> bool:
+    """Whether passkeys and security keys are switched on here
+    (PASSKEYS_ENABLED). Off, keys can be neither added nor used, and any
+    already registered do not count as a second factor."""
+    return settings.PASSKEYS_ENABLED
+
+
 def second_factor_devices(user) -> list[Device]:
     """The user's confirmed apps and keys (not the recovery codes)."""
-    return [
-        *TOTPDevice.objects.filter(user=user, confirmed=True).order_by("id"),
-        *WebAuthnCredential.objects.filter(user=user, confirmed=True).order_by("id"),
-    ]
+    devices: list[Device] = list(
+        TOTPDevice.objects.filter(user=user, confirmed=True).order_by("id")
+    )
+    if passkeys_enabled():
+        devices += WebAuthnCredential.objects.filter(user=user, confirmed=True).order_by("id")
+    return devices
 
 
 def has_two_factor(user) -> bool:
-    return (
-        TOTPDevice.objects.filter(user=user, confirmed=True).exists()
-        or WebAuthnCredential.objects.filter(user=user, confirmed=True).exists()
-    )
+    return TOTPDevice.objects.filter(user=user, confirmed=True).exists() or has_security_key(user)
 
 
 def has_security_key(user) -> bool:
-    return WebAuthnCredential.objects.filter(user=user, confirmed=True).exists()
+    return (
+        passkeys_enabled() and WebAuthnCredential.objects.filter(user=user, confirmed=True).exists()
+    )
 
 
 def _normalise(code: str) -> str:
@@ -266,6 +278,8 @@ def method_id(device: Device) -> str:
 def device_for_method(user, method: str) -> Device:
     kind, _, pk = method.partition("-")
     model = KINDS.get(kind)
+    if model is WebAuthnCredential and not passkeys_enabled():
+        model = None
     if model is None or not pk.isdigit():
         raise ValidationError({"id": "Ukjent metode."}, code="invalid")
     return get_object_or_404(model, user=user, pk=int(pk), confirmed=True)
@@ -307,6 +321,9 @@ class TwoFactorStatusSerializer(serializers.Serializer):
         help_text="This session has passed the second step, so it may change the methods.",
     )
     methods = MethodSerializer(many=True, read_only=True)
+    passkeys = serializers.BooleanField(
+        read_only=True, help_text="Passkeys and security keys can be added here."
+    )
 
 
 class AppNameSerializer(serializers.Serializer):
@@ -369,6 +386,7 @@ class TwoFactorStatus(_TwoFactorView):
                 "recovery_codes_left": left if devices else 0,
                 "verified": session_is_verified(request),
                 "methods": [_method(d) for d in devices],
+                "passkeys": passkeys_enabled(),
             }
         )
 
@@ -414,7 +432,9 @@ class TotpSetup(_TwoFactorView):
         user = request.user
         TOTPDevice.objects.filter(user=user, confirmed=False).delete()
         device = TOTPDevice.objects.create(user=user, name=name, confirmed=False)
-        url = device.config_url
+        # Apps that show an icon per account (FreeOTP, 2FAS, Aegis, Ente
+        # Auth, ...) take it from `image`; the others ignore it.
+        url = f"{device.config_url}&image={quote(AUTHENTICATOR_ICON_URL, safe='')}"
         return Response(
             {
                 "secret": base64.b32encode(device.bin_key).decode(),

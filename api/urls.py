@@ -93,6 +93,11 @@ api_patterns: list[URLPattern | URLResolver] = [
         name="api-user-2fa-recovery-codes",
     ),
     path(
+        "user/login/passkey",
+        webauthn.PasskeysAvailable.as_view(),
+        name="api-user-login-passkey",
+    ),
+    path(
         "user/login/passkey/begin",
         webauthn.PasskeyLoginBegin.as_view(),
         name="api-user-login-passkey-begin",

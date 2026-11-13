@@ -200,6 +200,8 @@ OTP_TOTP_ISSUER = env.str("OTP_TOTP_ISSUER", default="Frikanalen")
 # the site's host name and works nowhere else, so staging and prod keep
 # separate credentials, and changing SITE_URL's host strands every key
 # already registered.
+# Off until they are ready for production; staging switches them on.
+PASSKEYS_ENABLED = env.bool("PASSKEYS_ENABLED", default=False)
 OTP_WEBAUTHN_RP_ID = urlsplit(SITE_URL).hostname
 OTP_WEBAUTHN_RP_NAME = OTP_TOTP_ISSUER
 OTP_WEBAUTHN_ALLOWED_ORIGINS = [SITE_URL]
