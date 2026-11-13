@@ -164,8 +164,9 @@ TEST_RUNNER = "django.test.runner.DiscoverRunner"
 ########## END GENERAL CONFIGURATION
 
 ########## PASSWORDS
-# Django's stock validators. They apply where Django validates a password:
-# the password reset confirmation (api/auth/password_reset.py) and the admin.
+# Django's stock validators, applied wherever a password is set: sign-up and
+# profile changes (api/auth/serializers.py), password reset
+# (api/auth/password_reset.py) and the admin.
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {
