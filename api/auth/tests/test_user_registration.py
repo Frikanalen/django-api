@@ -79,3 +79,21 @@ def test_mandatory_fields_are_enforced(missing_field: str) -> None:
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert [error["attr"] for error in response.json()["errors"]] == [missing_field]
     assert not User.objects.exists()
+
+
+@pytest.mark.parametrize(
+    ("password", "why"),
+    [
+        ("12345678", "bare tall"),
+        ("password", "for vanlig"),
+        ("new-user@example.test", "for likt"),
+    ],
+)
+def test_registration_refuses_weak_passwords(password: str, why: str) -> None:
+    response = register(APIClient(), {**VALID_USER, "password": password})
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    errors = response.json()["errors"]
+    assert {error["attr"] for error in errors} == {"password"}
+    assert any(why in error["detail"] for error in errors), errors
+    assert not User.objects.filter(email=VALID_USER["email"]).exists()
