@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from fk.models import Organization, User, Video
+from fk.models import Organization, Series, User, Video
 from scheduling import broadcast_time
 from scheduling.models import AirtimeGrant, FillRule, GrantItem, RecurringSlot
 
@@ -272,3 +272,73 @@ def test_put_items_automatic_pins_them_and_fills_the_rest(
         (video.pk, False),
     ]
     assert body["fillRule"] is not None
+
+
+def test_put_items_chooses_a_series_for_this_grant_or_its_whole_slot(
+    member, organization, video
+) -> None:
+    series = Series.objects.create(organization=organization, name="Ukens program")
+    episode = Video.objects.create(
+        name="Episode",
+        creator=member,
+        organization=organization,
+        series=series,
+        duration=timedelta(minutes=20),
+        proper_import=True,
+    )
+    slot = RecurringSlot.objects.create(
+        organization=organization,
+        weekdays=[0],
+        start_time="18:00",
+        duration=timedelta(hours=1),
+        starts_on=datetime.date(2026, 1, 1),
+    )
+    start = in_days(20)
+    grant = AirtimeGrant.objects.create(
+        organization=organization,
+        starttime=start,
+        endtime=start + timedelta(hours=1),
+        locks_at=in_days(10),
+        origin_slot=slot,
+    )
+
+    response = client_for(member).put(
+        items_url(grant), {"items": [], "automatic": True, "series": series.pk}, format="json"
+    )
+
+    assert response.status_code == 200, response.content
+    body = response.json()
+    assert (body["fillSeries"], body["fillSeriesName"]) == (series.pk, "Ukens program")
+    assert [i["video"]["id"] for i in body["items"]] == [episode.pk]  # not `video`
+    slot.refresh_from_db()
+    assert slot.default_fill_rule is None  # only this broadcast
+
+    response = client_for(member).put(
+        items_url(grant),
+        {"items": [], "automatic": True, "series": series.pk, "wholeSlot": True},
+        format="json",
+    )
+    assert response.status_code == 200, response.content
+    slot.refresh_from_db()
+    assert FillRule.objects.get(pk=slot.default_fill_rule_id).series == series
+
+    # Back to everything they upload, for this broadcast only.
+    response = client_for(member).put(
+        items_url(grant), {"items": [], "automatic": True, "series": None}, format="json"
+    )
+    assert response.json()["fillSeries"] is None
+    assert {i["video"]["id"] for i in response.json()["items"]} == {episode.pk, video.pk}
+
+
+def test_put_items_refuses_another_organizations_series(member, open_grant) -> None:
+    other = Organization.objects.create(name="Other", fkmember=True)
+    theirs = Series.objects.create(organization=other, name="Theirs")
+
+    response = client_for(member).put(
+        items_url(open_grant),
+        {"items": [], "automatic": True, "series": theirs.pk},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["attr"] == "series"

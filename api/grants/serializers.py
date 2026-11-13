@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from fk.models import LiveSource, Organization, Video
+from fk.models import LiveSource, Organization, Series, Video
 from scheduling import services
 from scheduling.models import AirtimeGrant, FillRule, GrantItem
 
@@ -60,6 +60,16 @@ class AirtimeGrantSerializer(serializers.ModelSerializer):
     items = GrantItemSerializer(many=True, read_only=True)
     items_duration = serializers.DurationField(read_only=True)
     can_edit = serializers.SerializerMethodField()
+    fill_series = serializers.IntegerField(
+        source="fill_rule.series_id",
+        read_only=True,
+        allow_null=True,
+        default=None,
+        help_text="The series the grant fills itself from, if its rule draws on one.",
+    )
+    fill_series_name = serializers.CharField(
+        source="fill_rule.series.name", read_only=True, allow_null=True, default=None
+    )
 
     class Meta:
         model = AirtimeGrant
@@ -72,6 +82,8 @@ class AirtimeGrantSerializer(serializers.ModelSerializer):
             "locks_at",
             "lock_exempt",
             "fill_rule",
+            "fill_series",
+            "fill_series_name",
             "origin_slot",
             "items",
             "items_duration",
@@ -134,4 +146,17 @@ class GrantItemsWriteSerializer(serializers.Serializer):
         default=False,
         help_text="True: the grant's rule fills the time these videos leave, and "
         "keeps doing so. False: the list stays exactly as given.",
+    )
+    series = serializers.PrimaryKeyRelatedField(
+        queryset=Series.objects.all(),
+        required=False,
+        allow_null=True,
+        help_text="With `automatic`: what the grant fills itself from. One of the "
+        "owner's series, or null for everything they upload. Leave out to keep "
+        "what it has.",
+    )
+    whole_slot = serializers.BooleanField(
+        default=False,
+        help_text="With `series`: make it the choice for the grant's recurring slot "
+        "too, so its other broadcasts follow.",
     )

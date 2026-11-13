@@ -109,6 +109,13 @@ def validate_items(grant: AirtimeGrant, videos: Sequence[Video]) -> None:
         )
 
 
+class _Keep:
+    """Leave what the grant fills from as it is."""
+
+
+KEEP = _Keep()
+
+
 def set_items(
     grant: AirtimeGrant,
     videos: Sequence[Video],
@@ -116,14 +123,22 @@ def set_items(
     user,
     now: datetime | None = None,
     automatic: bool = False,
+    series: Series | None | _Keep = KEEP,
+    whole_slot: bool = False,
 ) -> AirtimeGrant:
     """Save the list the organization (or staff) chose. Every video given
     is pinned.
 
     With `automatic`, the grant's rule fills the time the pinned videos
-    leave, now and on every later run. Without it the grant is hand-made:
-    the rule is cleared and the list stays exactly as saved. A grant that
-    is already compiled is recompiled at once.
+    leave, now and on every later run. `series` chooses what it fills
+    from: one of the owner's series, or (None) everything they upload;
+    left out, the grant keeps the rule it has. `whole_slot` makes that
+    choice the slot's too, for the other broadcasts it has issued and
+    the ones to come.
+
+    Without `automatic` the grant is hand-made: the rule is cleared and
+    the list stays exactly as saved. A grant that is already compiled is
+    recompiled at once.
     """
     now = now or timezone.now()
     with transaction.atomic():
@@ -131,13 +146,26 @@ def set_items(
         if not can_edit(grant, user, now):
             raise PermissionDenied("This grant can no longer be edited.")
         validate_items(grant, videos)
+        if isinstance(series, Series) and series.organization_id != grant.organization_id:
+            raise ValidationError({"series": "The series must belong to the grant's organization."})
         _replace_items(grant, videos, pinned=len(videos))
-        grant.fill_rule = rule_for(grant) if automatic else None
+        if not automatic:
+            grant.fill_rule = None
+        elif isinstance(series, _Keep):
+            grant.fill_rule = rule_for(grant)
+        elif series is None:
+            grant.fill_rule = standard_fill_rule(grant.organization)
+        else:
+            grant.fill_rule = series_fill_rule(series)
         grant.save(update_fields=["fill_rule", "updated_at"])
         if automatic:
             _fill(grant, _context_for([grant], now), now)
         if grant.state == State.COMPILED:
             compile_grant(grant)
+        if automatic and whole_slot and not isinstance(series, _Keep):
+            if grant.origin_slot is None:
+                raise ValidationError({"whole_slot": "This broadcast has no recurring slot."})
+            set_slot_series(grant.origin_slot, series, user=user, now=now)
     return grant
 
 

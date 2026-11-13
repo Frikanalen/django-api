@@ -55,7 +55,9 @@ class AirtimeGrantViewSet(
         return super().get_permissions()
 
     def get_queryset(self):
-        queryset = AirtimeGrant.objects.select_related("organization").prefetch_related(
+        queryset = AirtimeGrant.objects.select_related(
+            "organization", "fill_rule__series"
+        ).prefetch_related(
             Prefetch(
                 "items",
                 queryset=GrantItem.objects.select_related(
@@ -124,6 +126,8 @@ class AirtimeGrantViewSet(
                 videos,
                 user=request.user,
                 automatic=serializer.validated_data["automatic"],
+                series=serializer.validated_data.get("series", services.KEEP),
+                whole_slot=serializer.validated_data["whole_slot"],
             )
         except DjangoValidationError as error:
             raise _drf(error) from error
