@@ -10,8 +10,9 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from fk.models import Organization, Series, User, Video
+from programming.services import series_recipe, uploads_recipe
 from scheduling import broadcast_time
-from scheduling.models import AirtimeGrant, FillRule, GrantItem, RecurringSlot
+from scheduling.models import AirtimeGrant, GrantItem, RecurringSlot
 
 pytestmark = pytest.mark.django_db
 
@@ -164,23 +165,21 @@ def test_outsiders_cannot_see_or_edit_a_grant(open_grant, video) -> None:
 
 
 def test_back_to_automatic(member, organization, open_grant, video) -> None:
-    rule = FillRule.objects.create(
-        organization=organization, name="Newest", pool="organization", ordering="latest"
-    )
+    recipe = uploads_recipe(organization)
     slot = RecurringSlot.objects.create(
         organization=organization,
         weekdays=[0],
         start_time="12:00",
         duration=timedelta(hours=1),
         starts_on=datetime.date(2026, 1, 1),
-        default_fill_rule=rule,
+        recipe=recipe,
     )
     AirtimeGrant.objects.filter(pk=open_grant.pk).update(origin_slot=slot)
 
     response = client_for(member).post(reverse("api-grant-automatic", args=[open_grant.pk]))
 
     assert response.status_code == 200, response.content
-    assert response.json()["fillRule"] == rule.pk
+    assert response.json()["recipe"]["id"] == recipe.pk
     assert [i["video"]["id"] for i in response.json()["items"]] == [video.pk]
 
 
@@ -271,7 +270,7 @@ def test_put_items_automatic_pins_them_and_fills_the_rest(
         (chosen.pk, True),
         (video.pk, False),
     ]
-    assert body["fillRule"] is not None
+    assert body["recipe"]["kind"] == "uploads"
 
 
 def test_put_items_chooses_a_series_for_this_grant_or_its_whole_slot(
@@ -302,31 +301,35 @@ def test_put_items_chooses_a_series_for_this_grant_or_its_whole_slot(
         origin_slot=slot,
     )
 
+    chosen = {"kind": "series", "series": series.pk}
+
     response = client_for(member).put(
-        items_url(grant), {"items": [], "automatic": True, "series": series.pk}, format="json"
+        items_url(grant), {"items": [], "automatic": True, "recipe": chosen}, format="json"
     )
 
     assert response.status_code == 200, response.content
     body = response.json()
-    assert (body["fillSeries"], body["fillSeriesName"]) == (series.pk, "Ukens program")
+    assert (body["recipe"]["series"], body["recipe"]["seriesName"]) == (series.pk, "Ukens program")
     assert [i["video"]["id"] for i in body["items"]] == [episode.pk]  # not `video`
     slot.refresh_from_db()
-    assert slot.default_fill_rule is None  # only this broadcast
+    assert slot.recipe is None  # only this broadcast
 
     response = client_for(member).put(
         items_url(grant),
-        {"items": [], "automatic": True, "series": series.pk, "wholeSlot": True},
+        {"items": [], "automatic": True, "recipe": chosen, "wholeSlot": True},
         format="json",
     )
     assert response.status_code == 200, response.content
     slot.refresh_from_db()
-    assert FillRule.objects.get(pk=slot.default_fill_rule_id).series == series
+    assert slot.recipe == series_recipe(series)
 
     # Back to everything they upload, for this broadcast only.
     response = client_for(member).put(
-        items_url(grant), {"items": [], "automatic": True, "series": None}, format="json"
+        items_url(grant),
+        {"items": [], "automatic": True, "recipe": {"kind": "uploads"}},
+        format="json",
     )
-    assert response.json()["fillSeries"] is None
+    assert response.json()["recipe"]["kind"] == "uploads"
     assert {i["video"]["id"] for i in response.json()["items"]} == {episode.pk, video.pk}
 
 
@@ -336,9 +339,19 @@ def test_put_items_refuses_another_organizations_series(member, open_grant) -> N
 
     response = client_for(member).put(
         items_url(open_grant),
-        {"items": [], "automatic": True, "series": theirs.pk},
+        {"items": [], "automatic": True, "recipe": {"kind": "series", "series": theirs.pk}},
         format="json",
     )
 
     assert response.status_code == 400
     assert response.json()["errors"][0]["attr"] == "series"
+
+
+def test_members_cannot_turn_their_grant_into_jukebox(member, open_grant) -> None:
+    response = client_for(member).put(
+        items_url(open_grant),
+        {"items": [], "automatic": True, "recipe": {"kind": "jukebox"}},
+        format="json",
+    )
+
+    assert response.status_code == 400

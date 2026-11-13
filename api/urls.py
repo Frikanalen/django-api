@@ -195,11 +195,6 @@ api_patterns: list[URLPattern | URLResolver] = [
         name="api-recurring-slot-detail",
     ),
     path(
-        "recurring-slots/<int:pk>/series",
-        recurring_slot_views.RecurringSlotSeries.as_view(),
-        name="api-recurring-slot-series",
-    ),
-    path(
         "recurring-slot-requests/creation/<int:pk>/decision",
         grant_request_views.RecurringSlotCreationRequestDecision.as_view(),
         name="api-recurring-slot-creation-request-decision",
@@ -233,11 +228,6 @@ api_patterns: list[URLPattern | URLResolver] = [
         "grant-requests/exemption/<int:pk>/decision",
         grant_request_views.GrantExemptionRequestDecision.as_view(),
         name="api-exemption-request-decision",
-    ),
-    path(
-        "fill-rules",
-        recurring_slot_views.FillRuleList.as_view(),
-        name="api-fill-rule-list",
     ),
     path(
         "recurring-slot-requests",

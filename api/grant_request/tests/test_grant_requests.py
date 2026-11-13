@@ -88,7 +88,7 @@ def test_member_requests_airtime_and_staff_approval_creates_the_grant(
     assert request.status == ReviewStatus.APPROVED
     assert request.grant.organization == organization
     assert request.grant.starttime == start
-    assert request.grant.fill_rule is not None
+    assert request.grant.recipe is not None
     assert not request.grant.lock_exempt
 
 

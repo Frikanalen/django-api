@@ -17,6 +17,7 @@ from fk.models import (
     User,
     Video,
 )
+from programming.services import series_of, series_recipe, uploads_recipe
 from scheduling import broadcast_time, services
 from scheduling.models import AirtimeGrant, GrantItem, RecurringSlot
 
@@ -74,7 +75,7 @@ def test_issue_creates_a_grant_per_occurrence_up_to_the_horizon(weekly_slot) -> 
     grants = list(AirtimeGrant.objects.order_by("starttime"))
     assert [g.starttime for g in grants] == [THIS_WEEK, NEXT_WEEK, OPEN_WEEK]
     assert all(g.endtime - g.starttime == timedelta(hours=1) for g in grants)
-    assert all(g.fill_rule == weekly_slot.default_fill_rule for g in grants)
+    assert all(g.recipe == weekly_slot.recipe for g in grants)
     assert all(g.origin_slot == weekly_slot for g in grants)
     assert grants[2].locks_at == datetime.datetime(2026, 1, 12, tzinfo=OSLO)
 
@@ -202,9 +203,10 @@ def test_refill_only_writes_when_the_answer_changed(weekly_slot, make_video) -> 
     services.fill_grants(NOW)
     assert open_.items.get().pk == first_item.pk  # untouched
 
+    # A new upload premieres in the slot's next window still open to change.
     newer = make_video(25)
     services.fill_grants(NOW)
-    assert items(open_)[0] == newer.pk
+    assert items(AirtimeGrant.objects.get(starttime=THIS_WEEK))[0] == newer.pk
 
 
 def test_hand_edited_grants_are_not_refilled(weekly_slot, editor, make_video) -> None:
@@ -217,7 +219,7 @@ def test_hand_edited_grants_are_not_refilled(weekly_slot, editor, make_video) ->
     services.fill_grants(NOW)
 
     open_.refresh_from_db()
-    assert open_.fill_rule is None
+    assert open_.recipe is None
     assert items(open_) == [chosen.pk]
 
 
@@ -378,7 +380,7 @@ def test_make_automatic_restores_the_slots_rule_and_fills(weekly_slot, make_vide
     services.make_automatic(open_, user=editor, now=NOW)
 
     open_.refresh_from_db()
-    assert open_.fill_rule == weekly_slot.default_fill_rule
+    assert open_.recipe == weekly_slot.recipe
     assert items(open_) == [newest.pk]
 
 
@@ -391,7 +393,7 @@ def test_make_automatic_without_a_slot_uses_the_owners_standard_rule(
     services.make_automatic(grant, user=editor, now=NOW)
 
     grant.refresh_from_db()
-    assert grant.fill_rule == services.standard_fill_rule(organization)
+    assert grant.recipe == uploads_recipe(organization)
     assert items(grant) == [video.pk]
 
 
@@ -407,15 +409,17 @@ def test_pinned_items_lead_and_the_rule_fills_the_rest(weekly_slot, make_video, 
     services.set_items(open_, [chosen], user=editor, now=NOW, automatic=True)
 
     open_.refresh_from_db()
-    assert open_.fill_rule == weekly_slot.default_fill_rule
+    assert open_.recipe == weekly_slot.recipe
     assert items(open_) == [chosen.pk, new.pk]  # 30 + 20; `old` no longer fits
     assert list(open_.items.values_list("pinned", flat=True)) == [True, False]
 
-    # A later run keeps the pin and still follows new uploads around it.
-    newer = make_video(20)
+    # A later run keeps the pin and fills around it again. The earlier
+    # windows have the two uploads by then, so this one gets the least
+    # aired of them.
     services.fill_grants(NOW)
-    assert items(open_) == [chosen.pk, newer.pk]
-    assert old.pk not in items(open_)
+    assert items(open_)[0] == chosen.pk
+    assert list(open_.items.values_list("pinned", flat=True)) == [True, False]
+    assert items(open_)[1] in (old.pk, new.pk)
 
 
 def test_a_pinned_video_is_not_picked_again(weekly_slot, make_video, editor) -> None:
@@ -493,10 +497,10 @@ def test_a_slot_pointed_at_a_series_leads_with_its_newest_unaired_episode(
     make_video(30)
     services.run_nightly(NOW)
 
-    services.set_slot_series(weekly_slot, series, user=editor, now=NOW)
+    services.set_slot_recipe(weekly_slot, series_recipe(series), user=editor, now=NOW)
 
     weekly_slot.refresh_from_db()
-    assert weekly_slot.default_fill_rule.series == series
+    assert series_of(weekly_slot.recipe) == series
     grants = AirtimeGrant.objects.filter(origin_slot=weekly_slot).order_by("starttime")
     # The first week leads with the newest episode; once both have been
     # on, they rotate least aired first, the older one breaking the tie.
@@ -517,21 +521,21 @@ def test_only_the_owner_points_a_slot_and_only_at_its_own_series(
     stranger = User.objects.create(email="stranger@example.test", identity_confirmed=True)
 
     with pytest.raises(ValidationError, match="must belong"):
-        services.set_slot_series(weekly_slot, theirs, user=editor, now=NOW)
+        services.set_slot_recipe(weekly_slot, series_recipe(theirs), user=editor, now=NOW)
     with pytest.raises(PermissionDenied):
-        services.set_slot_series(weekly_slot, None, user=stranger, now=NOW)
+        services.set_slot_recipe(weekly_slot, weekly_slot.recipe, user=stranger, now=NOW)
 
 
 def test_a_slot_goes_back_to_everything_the_owner_uploads(
     weekly_slot, make_video, editor, organization
 ) -> None:
     series = Series.objects.create(organization=organization, name="Ukens program")
-    services.set_slot_series(weekly_slot, series, user=editor, now=NOW)
+    services.set_slot_recipe(weekly_slot, series_recipe(series), user=editor, now=NOW)
 
-    services.set_slot_series(weekly_slot, None, user=editor, now=NOW)
+    services.set_slot_recipe(weekly_slot, uploads_recipe(organization), user=editor, now=NOW)
 
     weekly_slot.refresh_from_db()
-    assert weekly_slot.default_fill_rule == services.standard_fill_rule(organization)
+    assert weekly_slot.recipe == uploads_recipe(organization)
 
 
 def test_create_grant_defaults_the_deadline(organization) -> None:

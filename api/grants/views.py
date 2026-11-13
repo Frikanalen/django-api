@@ -15,6 +15,7 @@ from api.grants.serializers import (
     GrantItemsWriteSerializer,
 )
 from api.pagination import FkDefaultPagination
+from api.programming.serializers import build_recipe
 from scheduling import services
 from scheduling.models import AirtimeGrant, GrantItem
 
@@ -56,7 +57,10 @@ class AirtimeGrantViewSet(
 
     def get_queryset(self):
         queryset = AirtimeGrant.objects.select_related(
-            "organization", "fill_rule__series"
+            "organization",
+            "recipe__series_source__series",
+            "recipe__jukebox_settings",
+            "recipe__playlist_source",
         ).prefetch_related(
             Prefetch(
                 "items",
@@ -90,8 +94,13 @@ class AirtimeGrantViewSet(
     def create(self, request, *args, **kwargs):
         serializer = AirtimeGrantCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        if data.get("recipe"):
+            data["recipe"] = build_recipe(
+                data["recipe"], organization=data["organization"], user=request.user
+            )
         try:
-            grant = services.create_grant(**serializer.validated_data)
+            grant = services.create_grant(**data)
         except DjangoValidationError as error:
             raise _drf(error) from error
         return self._respond(grant, status=201)
@@ -115,18 +124,21 @@ class AirtimeGrantViewSet(
     @action(detail=True, methods=["put"])
     def items(self, request, pk=None):
         """Save the chosen videos, pinned, in the order given. With
-        `automatic`, the grant's rule fills the time they leave."""
+        `automatic`, the grant's recipe fills the time they leave."""
         grant = self.get_object()
         serializer = GrantItemsWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         videos = [item["video"] for item in serializer.validated_data["items"]]
+        choice = serializer.validated_data.get("recipe")
         try:
             grant = services.set_items(
                 grant,
                 videos,
                 user=request.user,
                 automatic=serializer.validated_data["automatic"],
-                series=serializer.validated_data.get("series", services.KEEP),
+                recipe=build_recipe(choice, organization=grant.organization, user=request.user)
+                if choice
+                else services.KEEP,
                 whole_slot=serializer.validated_data["whole_slot"],
             )
         except DjangoValidationError as error:
@@ -136,7 +148,7 @@ class AirtimeGrantViewSet(
     @extend_schema(request=None, responses=AirtimeGrantSerializer)
     @action(detail=True, methods=["post"])
     def automatic(self, request, pk=None):
-        """Unpin everything and let the grant's rule program the whole window."""
+        """Unpin everything and let the grant's recipe program the whole window."""
         grant = self.get_object()
         try:
             grant = services.make_automatic(grant, user=request.user)

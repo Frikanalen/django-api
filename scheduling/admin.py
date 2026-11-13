@@ -1,4 +1,4 @@
-"""Staff's tools for grants, slots and fill rules.
+"""Staff's tools for grants and slots.
 
 Grant edits go through the service layer, so the admin cannot bypass
 the rules: the items must fit, and a compiled grant is recompiled.
@@ -16,10 +16,8 @@ from scheduling import broadcast_time, services
 from scheduling.models import (
     AirtimeGrant,
     AirtimeGrantRequest,
-    FillRule,
     GrantExemptionRequest,
     GrantItem,
-    Playlist,
     RecurringSlot,
     RecurringSlotCreationRequest,
     RecurringSlotOwnershipRequest,
@@ -63,7 +61,7 @@ class AirtimeGrantForm(forms.ModelForm):
             "endtime",
             "locks_at",
             "lock_exempt",
-            "fill_rule",
+            "recipe",
         )
 
     def __init__(self, *args, **kwargs):
@@ -137,23 +135,7 @@ class AirtimeGrantAdmin(admin.ModelAdmin):
 class RecurringSlotAdmin(admin.ModelAdmin):
     list_display = ("__str__", "organization", "frequency", "start_time", "duration", "starts_on")
     list_filter = ("frequency", "organization")
-    list_select_related = ("organization", "default_fill_rule")
-    autocomplete_fields = ("default_fill_rule",)
-
-
-@admin.register(FillRule)
-class FillRuleAdmin(admin.ModelAdmin):
-    list_display = ("name", "organization", "pool", "ordering", "mode")
-    list_filter = ("pool", "ordering", "mode")
-    search_fields = ("name", "organization__name")
-    list_select_related = ("organization",)
-
-
-@admin.register(Playlist)
-class PlaylistAdmin(admin.ModelAdmin):
-    list_display = ("name", "organization")
-    search_fields = ("name", "organization__name")
-    filter_horizontal = ("videos",)
+    list_select_related = ("organization", "recipe")
 
 
 # -- Requests -----------------------------------------------------------------

@@ -8,8 +8,8 @@ The nightly pipeline (:func:`run_nightly`) runs four steps with one
 `now`, all safe to re-run:
 
 1. issue  -- each recurring slot occurrence up to the end of the week
-   after next becomes a grant, with the slot's default fill rule;
-2. fill   -- every grant with a fill rule is filled again around what
+   after next becomes a grant, with the slot's recipe;
+2. fill   -- every grant with a recipe is filled again around what
    its owner pinned, in chronological order with one shared
    ScheduleContext. Locked and compiled ones too, until a day before
    they air, so an upload made after the deadline still gets on;
@@ -29,11 +29,13 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from fk.models import Organization, Scheduleitem, Series, Video
+from fk.models import Organization, Scheduleitem, Video
+from programming.generators import plan
+from programming.models import Recipe
+from programming.selection import ScheduleContext
+from programming.services import uploads_recipe
 from scheduling import broadcast_time
-from scheduling.filling import plan
-from scheduling.models import AirtimeGrant, FillRule, GrantItem, RecurringSlot
-from scheduling.selection import ScheduleContext
+from scheduling.models import AirtimeGrant, GrantItem, RecurringSlot
 
 logger = logging.getLogger(__name__)
 
@@ -123,22 +125,21 @@ def set_items(
     user,
     now: datetime | None = None,
     automatic: bool = False,
-    series: Series | None | _Keep = KEEP,
+    recipe: Recipe | _Keep = KEEP,
     whole_slot: bool = False,
 ) -> AirtimeGrant:
     """Save the list the organization (or staff) chose. Every video given
     is pinned.
 
-    With `automatic`, the grant's rule fills the time the pinned videos
-    leave, now and on every later run. `series` chooses what it fills
-    from: one of the owner's series, or (None) everything they upload;
-    left out, the grant keeps the rule it has. `whole_slot` makes that
-    choice the slot's too, for the other broadcasts it has issued and
-    the ones to come.
+    With `automatic`, a recipe fills the time the pinned videos leave,
+    now and on every later run: `recipe` if given, otherwise the one the
+    grant has (see :func:`recipe_for`). `whole_slot` makes `recipe` the
+    slot's too, for the other broadcasts it has issued and the ones to
+    come.
 
-    Without `automatic` the grant is hand-made: the rule is cleared and
-    the list stays exactly as saved. A grant that is already compiled is
-    recompiled at once.
+    Without `automatic` the grant is hand-made: the recipe is cleared
+    and the list stays exactly as saved. A grant that is already
+    compiled is recompiled at once.
     """
     now = now or timezone.now()
     with transaction.atomic():
@@ -146,41 +147,39 @@ def set_items(
         if not can_edit(grant, user, now):
             raise PermissionDenied("This grant can no longer be edited.")
         validate_items(grant, videos)
-        if isinstance(series, Series) and series.organization_id != grant.organization_id:
-            raise ValidationError({"series": "The series must belong to the grant's organization."})
+        if isinstance(recipe, Recipe) and recipe.organization_id != grant.organization_id:
+            raise ValidationError({"recipe": "The recipe must belong to the grant's organization."})
         _replace_items(grant, videos, pinned=len(videos))
         if not automatic:
-            grant.fill_rule = None
-        elif isinstance(series, _Keep):
-            grant.fill_rule = rule_for(grant)
-        elif series is None:
-            grant.fill_rule = standard_fill_rule(grant.organization)
+            grant.recipe = None
+        elif isinstance(recipe, Recipe):
+            grant.recipe = recipe
         else:
-            grant.fill_rule = series_fill_rule(series)
-        grant.save(update_fields=["fill_rule", "updated_at"])
+            grant.recipe = recipe_for(grant)
+        grant.save(update_fields=["recipe", "updated_at"])
         if automatic:
             _fill(grant, _context_for([grant], now), now)
         if grant.state == State.COMPILED:
             compile_grant(grant)
-        if automatic and whole_slot and not isinstance(series, _Keep):
+        if automatic and whole_slot and isinstance(recipe, Recipe):
             if grant.origin_slot is None:
                 raise ValidationError({"whole_slot": "This broadcast has no recurring slot."})
-            set_slot_series(grant.origin_slot, series, user=user, now=now)
+            set_slot_recipe(grant.origin_slot, recipe, user=user, now=now)
     return grant
 
 
 def make_automatic(grant: AirtimeGrant, *, user, now: datetime | None = None) -> AirtimeGrant:
-    """Unpin everything and let the grant's rule program the whole window."""
+    """Unpin everything and let the grant's recipe program the whole window."""
     return set_items(grant, [], user=user, now=now, automatic=True)
 
 
-def rule_for(grant: AirtimeGrant) -> FillRule:
-    """The rule an automatic grant fills by: the one it has, else its
-    slot's, else the owner's standard one."""
-    if grant.fill_rule is not None:
-        return grant.fill_rule
-    slot_rule = grant.origin_slot.default_fill_rule if grant.origin_slot else None
-    return slot_rule or standard_fill_rule(grant.organization)
+def recipe_for(grant: AirtimeGrant) -> Recipe:
+    """The recipe an automatic grant fills by: the one it has, else its
+    slot's, else everything the owner uploads."""
+    if grant.recipe is not None:
+        return grant.recipe
+    slot_recipe = grant.origin_slot.recipe if grant.origin_slot else None
+    return slot_recipe or uploads_recipe(grant.organization)
 
 
 def create_grant(
@@ -190,7 +189,7 @@ def create_grant(
     endtime: datetime,
     locks_at: datetime | None = None,
     lock_exempt: bool = False,
-    fill_rule: FillRule | None = None,
+    recipe: Recipe | None = None,
 ) -> AirtimeGrant:
     """Staff gives an organization a window directly."""
     grant = AirtimeGrant(
@@ -199,7 +198,7 @@ def create_grant(
         endtime=endtime,
         locks_at=locks_at or broadcast_time.default_locks_at(starttime),
         lock_exempt=lock_exempt,
-        fill_rule=fill_rule,
+        recipe=recipe,
     )
     grant.full_clean()
     with transaction.atomic():
@@ -235,7 +234,7 @@ def approve_airtime(airtime_request) -> AirtimeGrant:
             endtime=airtime_request.endtime,
             locks_at=locks_at,
             lock_exempt=locks_at <= now,
-            fill_rule=standard_fill_rule(organization),
+            recipe=uploads_recipe(organization),
         )
     except IntegrityError as error:  # lost a race for the window
         raise ValidationError({"starttime": "Someone else got this airtime first."}) from error
@@ -267,52 +266,10 @@ def cancel_grant(grant: AirtimeGrant, *, now: datetime | None = None) -> Airtime
     return grant
 
 
-def default_fill_rule(organization: Organization) -> FillRule:
-    """The rule a newly approved or transferred slot gets: the owner's
-    new uploads first, then their archive, least aired first, filling
-    the window. Doing nothing still works, and does not repeat weekly."""
-    return FillRule.objects.create(
-        organization=organization,
-        name=f"New, then archive, from {organization.name}"[:100],
-        pool=FillRule.Pool.ORGANIZATION,
-        ordering=FillRule.Ordering.PREMIERE,
-        mode=FillRule.Mode.FILL,
-    )
-
-
-def standard_fill_rule(organization: Organization) -> FillRule:
-    """The owner's new uploads, then their archive, filling the window:
-    an existing rule like that if the organization has one, otherwise a
-    new one."""
-    existing = FillRule.objects.filter(
-        organization=organization,
-        pool=FillRule.Pool.ORGANIZATION,
-        ordering=FillRule.Ordering.PREMIERE,
-        mode=FillRule.Mode.FILL,
-    ).first()
-    return existing or default_fill_rule(organization)
-
-
-def series_fill_rule(series: Series) -> FillRule:
-    """The series' newest episode not yet aired first, then its earlier
-    episodes, least aired first: an existing rule like that, otherwise a
-    new one."""
-    rule, _ = FillRule.objects.get_or_create(
-        organization=series.organization,
-        pool=FillRule.Pool.SERIES,
-        series=series,
-        ordering=FillRule.Ordering.PREMIERE,
-        mode=FillRule.Mode.FILL,
-        defaults={"name": f"Series: {series.name}"[:100]},
-    )
-    return rule
-
-
-def set_slot_series(
-    slot: RecurringSlot, series: Series | None, *, user, now: datetime | None = None
+def set_slot_recipe(
+    slot: RecurringSlot, recipe: Recipe, *, user, now: datetime | None = None
 ) -> RecurringSlot:
-    """The owner points a slot at one of their series, or (None) back at
-    everything they upload.
+    """The owner (or staff) chooses how a slot programs itself.
 
     The grants the slot already issued follow, as long as they still fill
     themselves and are not past the point where automatic grants stop
@@ -322,15 +279,14 @@ def set_slot_series(
     owner = slot.organization
     if owner is None or not may_act_for(user, owner):
         raise PermissionDenied("You can't program this slot.")
-    if series is not None and series.organization_id != owner.pk:
-        raise ValidationError({"series": "The series must belong to the slot's organization."})
+    if recipe.organization_id != owner.pk:
+        raise ValidationError({"recipe": "The recipe must belong to the slot's organization."})
     with transaction.atomic():
-        rule = series_fill_rule(series) if series else standard_fill_rule(owner)
-        slot.default_fill_rule = rule
-        slot.save(update_fields=["default_fill_rule"])
+        slot.recipe = recipe
+        slot.save(update_fields=["recipe"])
         following = list(
-            slot.grants.filter(fill_rule__isnull=False)
-            .exclude(fill_rule=rule)
+            slot.grants.filter(recipe__isnull=False)
+            .exclude(recipe=recipe)
             .filter(
                 Q(state=State.OPEN)
                 | Q(state__in=(State.LOCKED, State.COMPILED), starttime__gt=now + REFRESH_UNTIL)
@@ -340,25 +296,11 @@ def set_slot_series(
         )
         context = _context_for(following, now)
         for grant in following:
-            grant.fill_rule = rule
-            grant.save(update_fields=["fill_rule", "updated_at"])
+            grant.recipe = recipe
+            grant.save(update_fields=["recipe", "updated_at"])
             if _fill(grant, context, now) and grant.state == State.COMPILED:
                 compile_grant(grant)
     return slot
-
-
-def jukebox_fill_rule() -> FillRule:
-    """The video jukebox: a weighted draw from the filler pool, filling
-    the window. One rule, owned by the station, shared by every jukebox
-    slot."""
-    rule, _ = FillRule.objects.get_or_create(
-        organization_id=station_organization_id(),
-        pool=FillRule.Pool.FILLER,
-        ordering=FillRule.Ordering.WEIGHTED,
-        mode=FillRule.Mode.FILL,
-        defaults={"name": "Video jukebox"},
-    )
-    return rule
 
 
 # How far ahead slot_conflicts looks. Long enough to catch slots that
@@ -420,7 +362,8 @@ def _first_overlap(
 def create_weekly_slot(
     *, organization: Organization, day: int, start_time: time, duration: timedelta
 ) -> RecurringSlot:
-    """A weekly slot from an approved creation request, with a default rule."""
+    """A weekly slot from an approved creation request, filling itself from
+    everything the owner uploads."""
     return RecurringSlot.objects.create(
         organization=organization,
         frequency=RecurringSlot.Frequency.WEEKLY,
@@ -428,16 +371,16 @@ def create_weekly_slot(
         start_time=start_time,
         duration=duration,
         starts_on=broadcast_time.local_date(timezone.now()),
-        default_fill_rule=default_fill_rule(organization),
+        recipe=uploads_recipe(organization),
     )
 
 
 def transfer_slot(slot: RecurringSlot, organization: Organization) -> None:
-    """Give a slot to a new owner. The old owner's rule stays with them;
+    """Give a slot to a new owner. The old owner's recipe stays with them;
     the new owner gets a default one. Issued grants keep their owner."""
     slot.organization = organization
-    slot.default_fill_rule = default_fill_rule(organization)
-    slot.save(update_fields=["organization", "default_fill_rule"])
+    slot.recipe = uploads_recipe(organization)
+    slot.save(update_fields=["organization", "recipe"])
 
 
 # -- The nightly pipeline ----------------------------------------------------
@@ -460,9 +403,7 @@ def issue_grants(now: datetime) -> list[AirtimeGrant]:
     station_exists = Organization.objects.filter(pk=station).exists()
     issued = []
     # A suspended (is_rogue) member keeps its slots but is issued nothing.
-    slots = RecurringSlot.objects.select_related("default_fill_rule").exclude(
-        organization__is_rogue=True
-    )
+    slots = RecurringSlot.objects.select_related("recipe").exclude(organization__is_rogue=True)
     for slot in slots:
         if slot.organization_id is None and not station_exists:
             logger.error(
@@ -482,7 +423,7 @@ def issue_grants(now: datetime) -> list[AirtimeGrant]:
                 starttime=starttime,
                 endtime=starttime + slot.duration,  # an instant: elapsed time
                 locks_at=broadcast_time.default_locks_at(starttime),
-                fill_rule=slot.default_fill_rule,
+                recipe=slot.recipe,
                 origin_slot=slot,
             )
             try:
@@ -506,17 +447,17 @@ REFRESH_UNTIL = timedelta(hours=24)
 
 
 def fill_grants(now: datetime) -> None:
-    """Refill every grant that has a fill rule, oldest first, with one
+    """Refill every grant that has a recipe, oldest first, with one
     shared context: open ones, and locked or compiled ones still more
     than REFRESH_UNTIL from air. Items change only when the answer did;
     a compiled grant whose answer changed is recompiled."""
     grants = list(
-        AirtimeGrant.objects.filter(fill_rule__isnull=False)
+        AirtimeGrant.objects.filter(recipe__isnull=False)
         .filter(
             Q(state=State.OPEN)
             | Q(state__in=(State.LOCKED, State.COMPILED), starttime__gt=now + REFRESH_UNTIL)
         )
-        .select_related("fill_rule")
+        .select_related("recipe")
         .order_by("starttime")
     )
     context = _context_for(grants, now)
@@ -661,10 +602,10 @@ def _replace_items(grant: AirtimeGrant, videos: Sequence[Video], pinned: int = 0
 
 def _fill(grant: AirtimeGrant, context: ScheduleContext, now: datetime) -> bool:
     """Fill `grant` around its pinned items. Returns whether the list changed."""
-    assert grant.fill_rule is not None
+    assert grant.recipe is not None
     items = list(grant.items.select_related("video"))
     pinned = [item.video for item in items if item.pinned]
-    picks = plan(grant.fill_rule, grant, context, now, pinned=pinned)
+    picks = plan(grant.recipe, grant, context, now, pinned=pinned)
     if [v.pk for v in picks] == [item.video_id for item in items]:
         return False
     _replace_items(grant, picks, pinned=len(pinned))

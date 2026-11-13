@@ -3,8 +3,8 @@
 A grant is a window of airtime given to one organization, plus the list
 of what plays in it. Grants never overlap, and only the compiler (see
 :mod:`scheduling.services`) turns them into Scheduleitem rows. Recurring
-slots issue grants; fill rules fill them. See the ADR "Airtime grants
-replace member scheduling".
+slots issue grants; recipes (see :mod:`programming`) fill them. See the
+ADR "Airtime grants replace member scheduling".
 """
 
 from collections.abc import Iterator
@@ -20,109 +20,8 @@ from django.db import models
 from scheduling import broadcast_time
 
 
-class Playlist(models.Model):
-    """A list of videos an organization manages, for fill rules to draw from."""
-
-    organization = models.ForeignKey(
-        "fk.Organization", on_delete=models.PROTECT, related_name="playlists"
-    )
-    name = models.CharField(max_length=100)
-    videos = models.ManyToManyField("fk.Video", blank=True, related_name="playlists")
-
-    class Meta:
-        ordering = ("organization", "name", "id")
-
-    def __str__(self):
-        return self.name
-
-
-class FillRule(models.Model):
-    """How a grant fills itself: where candidates come from, how one is
-    chosen, and whether to stop after one or fill the window."""
-
-    class Pool(models.TextChoices):
-        ORGANIZATION = "organization", "The organization's uploads"
-        PLAYLIST = "playlist", "A playlist"
-        SERIES = "series", "One of the organization's series"
-        FILLER = "filler", "The filler pool"
-
-    class Ordering(models.TextChoices):
-        LATEST = "latest", "Newest first"
-        LEAST_AIRED = "least_aired", "Least aired first"
-        PREMIERE = "premiere", "New uploads first, then the archive, least aired first"
-        SHUFFLED = "shuffled", "Shuffled"
-        WEIGHTED = "weighted", "Weighted draw (fresh, diverse, no repeats)"
-
-    class Mode(models.TextChoices):
-        ONE = "one", "One video"
-        FILL = "fill", "Fill the window"
-
-    organization = models.ForeignKey(
-        "fk.Organization",
-        on_delete=models.PROTECT,
-        related_name="fill_rules",
-        help_text="The organization that owns this rule. For organization pools, "
-        "its uploads are also the candidates.",
-    )
-    name = models.CharField(max_length=100)
-    pool = models.CharField(max_length=16, choices=Pool)
-    playlist = models.ForeignKey(
-        Playlist,
-        null=True,
-        blank=True,
-        on_delete=models.PROTECT,
-        related_name="fill_rules",
-        help_text="For playlist pools only.",
-    )
-    series = models.ForeignKey(
-        "fk.Series",
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name="fill_rules",
-        help_text="For series pools only: the rule picks from its episodes.",
-    )
-    ordering = models.CharField(max_length=16, choices=Ordering)
-    mode = models.CharField(max_length=8, choices=Mode, default=Mode.FILL)
-
-    class Meta:
-        ordering = ("organization", "name", "id")
-        constraints = [
-            models.CheckConstraint(
-                condition=(
-                    models.Q(pool="playlist", playlist__isnull=False)
-                    | (~models.Q(pool="playlist") & models.Q(playlist__isnull=True))
-                ),
-                name="fillrule_playlist_iff_playlist_pool",
-            ),
-            models.CheckConstraint(
-                condition=(
-                    models.Q(pool="series", series__isnull=False)
-                    | (~models.Q(pool="series") & models.Q(series__isnull=True))
-                ),
-                name="fillrule_series_iff_series_pool",
-            ),
-        ]
-
-    def __str__(self):
-        return self.name
-
-    def clean(self):
-        super().clean()
-        if self.pool == self.Pool.PLAYLIST and self.playlist is None:
-            raise ValidationError({"playlist": "A playlist pool needs a playlist."})
-        if self.pool != self.Pool.PLAYLIST and self.playlist is not None:
-            raise ValidationError({"playlist": "Only playlist pools take a playlist."})
-        if self.pool == self.Pool.SERIES and self.series is None:
-            raise ValidationError({"series": "A series pool needs a series."})
-        if self.pool != self.Pool.SERIES and self.series is not None:
-            raise ValidationError({"series": "Only series pools take a series."})
-        if self.series is not None and self.series.organization_id != self.organization_id:
-            raise ValidationError({"series": "The series must belong to the rule's organization."})
-
-
 class RecurringSlot(models.Model):
-    """Recurring airtime: a recurrence rule, an owner and a default fill rule.
+    """Recurring airtime: a recurrence rule, an owner and a recipe.
 
     The nightly job turns each occurrence into a grant (see
     :func:`scheduling.services.issue_grants`). Explicit fields rather than
@@ -169,13 +68,14 @@ class RecurringSlot(models.Model):
     duration = models.DurationField(validators=[MinValueValidator(timedelta(seconds=1))])
     starts_on = models.DateField()
     ends_on = models.DateField(null=True, blank=True)
-    default_fill_rule = models.ForeignKey(
-        FillRule,
+    recipe = models.ForeignKey(
+        "programming.Recipe",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="+",
-        help_text="Copied onto every grant this slot issues.",
+        help_text="How the slot's grants program themselves. Copied onto every "
+        "grant it issues. Empty: they are set up by hand.",
     )
 
     class Meta:
@@ -206,15 +106,13 @@ class RecurringSlot(models.Model):
             raise ValidationError({"month_weeks": "Choose which weeks of the month."})
         if self.frequency != self.Frequency.MONTHLY and self.month_weeks:
             raise ValidationError({"month_weeks": "Only monthly slots take weeks of the month."})
-        rule = self.default_fill_rule
+        recipe = self.recipe
         if (
-            rule is not None
+            recipe is not None
             and self.organization_id
-            and rule.organization_id != self.organization_id
+            and recipe.organization_id != self.organization_id
         ):
-            raise ValidationError(
-                {"default_fill_rule": "The rule must belong to the slot's organization."}
-            )
+            raise ValidationError({"recipe": "The recipe must belong to the slot's organization."})
 
     def describe(self) -> str:
         days = ", ".join(_WEEKDAY_NAMES[d] for d in sorted(self.weekdays)) or "every day"
@@ -304,8 +202,8 @@ class AirtimeGrant(models.Model):
         default=False,
         help_text="Editable until air; every save after compiling recompiles it. Staff only.",
     )
-    fill_rule = models.ForeignKey(
-        FillRule,
+    recipe = models.ForeignKey(
+        "programming.Recipe",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -385,7 +283,7 @@ class GrantItem(models.Model):
     hand, so it is listed like any other.
 
     A pinned item is one the owner chose: it stays, at the head of the
-    list, while the grant's fill rule programs the time left."""
+    list, while the grant's recipe programs the time left."""
 
     grant = models.ForeignKey(AirtimeGrant, on_delete=models.CASCADE, related_name="items")
     position = models.PositiveIntegerField()

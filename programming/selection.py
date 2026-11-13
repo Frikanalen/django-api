@@ -1,6 +1,6 @@
 """The weighted ordering: scoring rules and the weighted draw.
 
-The fill rules' packing loop (see :mod:`scheduling.filling`) asks a
+The recipes' packing loop (see :mod:`programming.generators`) asks a
 selector one question, repeatedly: given the time left in this grant,
 which video next?  This module answers with weighted randomness:
 every rule multiplies a candidate's weight, and the draw is
@@ -31,7 +31,7 @@ class Rule(Protocol):
 
 class Selector(Protocol):
     """What the packing loop asks for the next video. Every ordering in
-    :mod:`scheduling.filling` returns one, and records each pick in the
+    :mod:`programming.generators` returns one, and records each pick in the
     shared ScheduleContext."""
 
     def pick(self, remaining: datetime.timedelta) -> Video | None: ...

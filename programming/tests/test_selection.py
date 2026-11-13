@@ -12,7 +12,7 @@ from itertools import pairwise
 from zoneinfo import ZoneInfo
 
 from fk.models import Video
-from scheduling.selection import (
+from programming.selection import (
     Freshness,
     OrganizationDiversity,
     RepeatAvoidance,

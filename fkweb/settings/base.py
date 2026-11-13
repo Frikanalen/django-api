@@ -348,6 +348,7 @@ LOCAL_APPS = (
     "fkweb",
     "agenda",
     "fk",
+    "programming",
     "scheduling",
     "api",
     "news",
