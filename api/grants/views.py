@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Prefetch, Q
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, permissions, viewsets
 from rest_framework.decorators import action
@@ -16,7 +17,7 @@ from api.grants.serializers import (
 )
 from api.pagination import FkDefaultPagination
 from api.programming.serializers import build_recipe
-from scheduling import services
+from scheduling import broadcast_time, services
 from scheduling.models import AirtimeGrant, GrantItem
 
 
@@ -99,6 +100,13 @@ class AirtimeGrantViewSet(
             data["recipe"] = build_recipe(
                 data["recipe"], organization=data["organization"], user=request.user
             )
+        now = timezone.now()
+        if data["starttime"] <= now:
+            raise ValidationError({"starttime": "This time has already started."})
+        # Given after its usual deadline, the airtime stays open until air,
+        # so the organization can still set it up.
+        if "locks_at" not in data and "lock_exempt" not in data:
+            data["lock_exempt"] = broadcast_time.default_locks_at(data["starttime"]) <= now
         try:
             grant = services.create_grant(**data)
         except DjangoValidationError as error:

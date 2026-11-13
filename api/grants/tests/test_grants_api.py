@@ -201,6 +201,48 @@ def test_staff_create_a_grant_with_the_default_deadline(staff, organization) -> 
     assert grant.locks_at == broadcast_time.default_locks_at(start)
 
 
+def test_airtime_given_after_its_deadline_stays_open_until_air(staff, organization) -> None:
+    start = in_days(2)
+
+    response = client_for(staff).post(
+        reverse("api-grant-list"),
+        {
+            "organization": organization.pk,
+            "starttime": start.isoformat(),
+            "endtime": (start + timedelta(hours=1)).isoformat(),
+            "recipe": {"kind": "uploads"},
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201, response.content
+    body = response.json()
+    assert body["lockExempt"] is True
+    assert body["canEdit"] is True
+    assert body["recipe"]["kind"] == "uploads"
+
+
+def test_staff_cannot_give_airtime_in_the_past_or_to_a_suspended_organization(
+    staff, organization
+) -> None:
+    def give(start, to=organization):
+        return client_for(staff).post(
+            reverse("api-grant-list"),
+            {
+                "organization": to.pk,
+                "starttime": start.isoformat(),
+                "endtime": (start + timedelta(hours=1)).isoformat(),
+            },
+            format="json",
+        )
+
+    assert give(in_days(-1)).status_code == 400
+    rogue = Organization.objects.create(name="Rogue", fkmember=True, is_rogue=True)
+    response = give(in_days(12), rogue)
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["attr"] == "organization"
+
+
 def test_staff_cannot_create_an_overlapping_grant(staff, organization, open_grant) -> None:
     response = client_for(staff).post(
         reverse("api-grant-list"),

@@ -192,6 +192,8 @@ def create_grant(
     recipe: Recipe | None = None,
 ) -> AirtimeGrant:
     """Staff gives an organization a window directly."""
+    if organization.is_rogue:
+        raise ValidationError({"organization": "This organization is suspended."})
     grant = AirtimeGrant(
         organization=organization,
         starttime=starttime,
