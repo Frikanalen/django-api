@@ -309,7 +309,7 @@ class TwoFactorStatusSerializer(serializers.Serializer):
     methods = MethodSerializer(many=True, read_only=True)
 
 
-class TwoFactorSetupRequestSerializer(serializers.Serializer):
+class AppNameSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=64, required=False, allow_blank=True)
 
 
@@ -403,9 +403,9 @@ class TotpSetup(_TwoFactorView):
     over replaces an unconfirmed secret.
     """
 
-    serializer_class = TwoFactorSetupRequestSerializer
+    serializer_class = AppNameSerializer
 
-    @extend_schema(request=TwoFactorSetupRequestSerializer, responses=TwoFactorSetupSerializer)
+    @extend_schema(request=AppNameSerializer, responses=TwoFactorSetupSerializer)
     def post(self, request):
         require_verified_session(request)
         serializer = self.get_serializer(data=request.data)
