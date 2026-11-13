@@ -73,7 +73,7 @@ class UserLogin(CreateAPIView):
 
         # Only after the password: asking first would tell anyone which
         # addresses have two-factor on.
-        user.otp_device = require_second_factor(user, data.get("otp"))
+        user.otp_device = require_second_factor(user, data.get("otp"), request)
         # django-otp's user_logged_in handler records otp_device in the session.
         login(request._request, user)
         return Response(UserSerializer(user).data)

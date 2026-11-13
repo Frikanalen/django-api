@@ -20,7 +20,7 @@ import api.schedule.views as schedule_views
 import api.series.views as series_views
 import api.video.views as video_views
 import api.videofile.views as videofile_views
-from api.auth import password_reset, two_factor
+from api.auth import password_reset, two_factor, webauthn
 from fkweb.views import CsrfView
 
 from . import views
@@ -57,13 +57,50 @@ api_patterns: list[URLPattern | URLResolver] = [
     path("user/login", auth_views.UserLogin.as_view(), name="api-user-login"),
     path("user/logout", auth_views.UserLogout.as_view(), name="api-user-logout"),
     path("user/2fa", two_factor.TwoFactorStatus.as_view(), name="api-user-2fa"),
-    path("user/2fa/setup", two_factor.TwoFactorSetup.as_view(), name="api-user-2fa-setup"),
-    path("user/2fa/confirm", two_factor.TwoFactorConfirm.as_view(), name="api-user-2fa-confirm"),
-    path("user/2fa/disable", two_factor.TwoFactorDisable.as_view(), name="api-user-2fa-disable"),
+    path("user/2fa/verify", two_factor.TwoFactorVerify.as_view(), name="api-user-2fa-verify"),
+    path("user/2fa/totp/setup", two_factor.TotpSetup.as_view(), name="api-user-2fa-totp-setup"),
+    path(
+        "user/2fa/totp/confirm", two_factor.TotpConfirm.as_view(), name="api-user-2fa-totp-confirm"
+    ),
+    path(
+        "user/2fa/webauthn/register/begin",
+        webauthn.RegisterBegin.as_view(),
+        name="api-user-2fa-webauthn-register-begin",
+    ),
+    path(
+        "user/2fa/webauthn/register/complete",
+        webauthn.RegisterComplete.as_view(),
+        name="api-user-2fa-webauthn-register-complete",
+    ),
+    path(
+        "user/2fa/webauthn/begin",
+        webauthn.SecondFactorBegin.as_view(),
+        name="api-user-2fa-webauthn-begin",
+    ),
+    path(
+        "user/2fa/webauthn/complete",
+        webauthn.SecondFactorComplete.as_view(),
+        name="api-user-2fa-webauthn-complete",
+    ),
+    path(
+        "user/2fa/methods/<str:method>",
+        two_factor.TwoFactorMethod.as_view(),
+        name="api-user-2fa-method",
+    ),
     path(
         "user/2fa/recovery-codes",
         two_factor.TwoFactorRecoveryCodes.as_view(),
         name="api-user-2fa-recovery-codes",
+    ),
+    path(
+        "user/login/passkey/begin",
+        webauthn.PasskeyLoginBegin.as_view(),
+        name="api-user-login-passkey-begin",
+    ),
+    path(
+        "user/login/passkey/complete",
+        webauthn.PasskeyLoginComplete.as_view(),
+        name="api-user-login-passkey-complete",
     ),
     path(
         "user/password",

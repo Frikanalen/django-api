@@ -193,7 +193,7 @@ class PasswordResetConfirm(generics.GenericAPIView):
             raise ValidationError({"token": INVALID_LINK}, code="invalid")
 
         # Checked before the password so a wrong code leaves it unchanged.
-        device = require_second_factor(user, data.get("otp"))
+        device = require_second_factor(user, data.get("otp"), request)
 
         password = data["new_password"]
         # Django ships Norwegian for its password validators; the site is
