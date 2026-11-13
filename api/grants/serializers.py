@@ -3,9 +3,10 @@ from zoneinfo import ZoneInfo
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from api.programming.serializers import RecipeSerializer
 from fk.models import LiveSource, Organization, Video
 from scheduling import services
-from scheduling.models import AirtimeGrant, FillRule, GrantItem
+from scheduling.models import AirtimeGrant, GrantItem
 
 OSLO = ZoneInfo("Europe/Oslo")
 
@@ -60,6 +61,11 @@ class AirtimeGrantSerializer(serializers.ModelSerializer):
     items = GrantItemSerializer(many=True, read_only=True)
     items_duration = serializers.DurationField(read_only=True)
     can_edit = serializers.SerializerMethodField()
+    recipe = RecipeSerializer(
+        read_only=True,
+        allow_null=True,
+        help_text="How the grant fills the time its pinned items leave. Null: hand-made.",
+    )
 
     class Meta:
         model = AirtimeGrant
@@ -71,7 +77,7 @@ class AirtimeGrantSerializer(serializers.ModelSerializer):
             "state",
             "locks_at",
             "lock_exempt",
-            "fill_rule",
+            "recipe",
             "origin_slot",
             "items",
             "items_duration",
@@ -100,13 +106,11 @@ class AirtimeGrantCreateSerializer(serializers.ModelSerializer):
         required=False,
         help_text="Defaults to the Monday 00:00 before the grant's week airs.",
     )
-    fill_rule = serializers.PrimaryKeyRelatedField(
-        queryset=FillRule.objects.all(), required=False, allow_null=True
-    )
+    recipe = RecipeSerializer(required=False, allow_null=True)
 
     class Meta:
         model = AirtimeGrant
-        fields = ("organization", "starttime", "endtime", "locks_at", "lock_exempt", "fill_rule")
+        fields = ("organization", "starttime", "endtime", "locks_at", "lock_exempt", "recipe")
 
 
 class AirtimeGrantUpdateSerializer(serializers.Serializer):
@@ -132,6 +136,15 @@ class GrantItemsWriteSerializer(serializers.Serializer):
     items = GrantItemWriteSerializer(many=True)
     automatic = serializers.BooleanField(
         default=False,
-        help_text="True: the grant's rule fills the time these videos leave, and "
+        help_text="True: the grant's recipe fills the time these videos leave, and "
         "keeps doing so. False: the list stays exactly as given.",
+    )
+    recipe = RecipeSerializer(
+        required=False,
+        help_text="With `automatic`: how the grant fills itself. Leave out to keep what it has.",
+    )
+    whole_slot = serializers.BooleanField(
+        default=False,
+        help_text="With `recipe`: make it the choice for the grant's recurring slot "
+        "too, so its other broadcasts follow.",
     )

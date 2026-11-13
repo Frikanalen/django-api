@@ -5,7 +5,9 @@ import pytest
 from rest_framework.test import APIClient
 
 from fk.models import Organization, User
-from scheduling.models import FillRule, RecurringSlot
+from programming.models import Recipe
+from programming.services import uploads_recipe
+from scheduling.models import RecurringSlot
 
 
 @pytest.fixture
@@ -33,20 +35,15 @@ def organization(member: User) -> Organization:
 
 
 @pytest.fixture
-def rule(organization: Organization) -> FillRule:
-    return FillRule.objects.create(
-        name="Organization uploads",
-        organization=organization,
-        pool=FillRule.Pool.ORGANIZATION,
-        ordering=FillRule.Ordering.LATEST,
-    )
+def recipe(organization: Organization) -> Recipe:
+    return uploads_recipe(organization)
 
 
 @pytest.fixture
-def slot(organization: Organization, rule: FillRule) -> RecurringSlot:
+def slot(organization: Organization, recipe: Recipe) -> RecurringSlot:
     return RecurringSlot.objects.create(
         organization=organization,
-        default_fill_rule=rule,
+        recipe=recipe,
         weekdays=[2],
         start_time="18:00",
         duration=timedelta(hours=1),

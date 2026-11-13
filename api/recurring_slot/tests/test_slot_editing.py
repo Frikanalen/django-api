@@ -5,8 +5,10 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from fk.models import Organization, Series, User
-from scheduling.models import FillRule, RecurringSlot
+from fk.models import Category, Organization, Series, User
+from programming.models import Recipe
+from programming.services import uploads_recipe
+from scheduling.models import RecurringSlot
 
 pytestmark = pytest.mark.django_db
 
@@ -48,7 +50,7 @@ def test_members_cannot_change_or_delete_slots(member_client: APIClient, slot: R
     assert member_client.delete(url).status_code == 403
 
 
-def test_staff_create_a_slot_with_the_owners_standard_rule(
+def test_staff_create_a_slot_with_the_owners_standard_recipe(
     staff_client: APIClient, organization: Organization
 ):
     response = staff_client.post(
@@ -57,18 +59,17 @@ def test_staff_create_a_slot_with_the_owners_standard_rule(
     assert response.status_code == status.HTTP_201_CREATED, response.data
     slot = RecurringSlot.objects.get(pk=response.data["id"])
     assert slot.weekdays == [4]
-    assert slot.default_fill_rule.organization == organization
-    assert slot.default_fill_rule.mode == FillRule.Mode.FILL
+    assert slot.recipe == uploads_recipe(organization)
     assert response.json()["organizationName"] == organization.name
-    assert response.json()["defaultFillRule"]["id"] == slot.default_fill_rule_id
+    assert response.json()["recipe"]["kind"] == "uploads"
 
-    # A second slot reuses the same rule rather than piling up copies.
+    # A second slot reuses the same recipe rather than piling up copies.
     second = staff_client.post(
         reverse("api-recurring-slot-list"),
         payload(organization, weekdays=[5]),
         format="json",
     )
-    assert second.json()["defaultFillRule"]["id"] == slot.default_fill_rule_id
+    assert second.json()["recipe"]["id"] == slot.recipe_id
 
 
 def test_staff_can_create_a_slot_without_automatic_filling(
@@ -76,27 +77,21 @@ def test_staff_can_create_a_slot_without_automatic_filling(
 ):
     response = staff_client.post(
         reverse("api-recurring-slot-list"),
-        payload(organization, defaultFillRuleId=None),
+        payload(organization, recipe=None),
         format="json",
     )
     assert response.status_code == status.HTTP_201_CREATED, response.data
-    assert response.json()["defaultFillRule"] is None
+    assert response.json()["recipe"] is None
 
 
-def test_a_rule_must_belong_to_the_owner(staff_client: APIClient, organization: Organization):
-    foreign_rule = FillRule.objects.create(
-        organization=other_organization(),
-        name="Not theirs",
-        pool=FillRule.Pool.ORGANIZATION,
-        ordering=FillRule.Ordering.LATEST,
-    )
+def test_member_recipes_need_an_owner(staff_client: APIClient):
     response = staff_client.post(
         reverse("api-recurring-slot-list"),
-        payload(organization, defaultFillRuleId=foreign_rule.pk),
+        payload(None, recipe={"kind": "uploads"}),
         format="json",
     )
     assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert "default_fill_rule_id" in error_attrs(response)
+    assert "recipe" in error_attrs(response)
 
 
 def test_suspended_organizations_get_no_slots(staff_client: APIClient):
@@ -174,9 +169,7 @@ def test_moving_a_slot_does_not_conflict_with_itself(staff_client: APIClient, sl
     assert slot.duration == timedelta(hours=2)
 
 
-def test_a_new_owner_gets_their_own_rule(
-    staff_client: APIClient, slot: RecurringSlot, rule: FillRule
-):
+def test_a_new_owner_gets_their_own_recipe(staff_client: APIClient, slot: RecurringSlot):
     new_owner = other_organization()
     response = staff_client.patch(
         reverse("api-recurring-slot-detail", args=[slot.pk]),
@@ -186,17 +179,17 @@ def test_a_new_owner_gets_their_own_rule(
     assert response.status_code == status.HTTP_200_OK, response.data
     slot.refresh_from_db()
     assert slot.organization == new_owner
-    assert slot.default_fill_rule.organization == new_owner
+    assert slot.recipe == uploads_recipe(new_owner)
 
 
-def test_moving_keeps_the_rule(staff_client: APIClient, slot: RecurringSlot, rule: FillRule):
+def test_moving_keeps_the_recipe(staff_client: APIClient, slot: RecurringSlot, recipe: Recipe):
     staff_client.patch(
         reverse("api-recurring-slot-detail", args=[slot.pk]),
         {"weekdays": [3]},
         format="json",
     )
     slot.refresh_from_db()
-    assert slot.default_fill_rule == rule
+    assert slot.recipe == recipe
 
 
 def test_weekly_slots_need_a_weekday(staff_client: APIClient, organization: Organization):
@@ -213,49 +206,49 @@ def test_staff_delete_a_slot(staff_client: APIClient, slot: RecurringSlot):
     assert not RecurringSlot.objects.filter(pk=slot.pk).exists()
 
 
-def test_fill_rules_are_listed_for_staff_and_own_members(
-    staff_client: APIClient, member_client: APIClient, rule: FillRule
+def test_staff_create_a_themed_jukebox_slot(
+    staff_client: APIClient, organization: Organization, settings
 ):
-    foreign = FillRule.objects.create(
-        organization=other_organization(),
-        name="Not theirs",
-        pool=FillRule.Pool.ORGANIZATION,
-        ordering=FillRule.Ordering.LATEST,
-    )
-    url = reverse("api-fill-rule-list")
-    staff_ids = {r["id"] for r in staff_client.get(url).data["results"]}
-    assert staff_ids == {rule.pk, foreign.pk}
-    filtered = staff_client.get(url, {"organization": foreign.organization_id}).data
-    assert [r["id"] for r in filtered["results"]] == [foreign.pk]
-    member_ids = {r["id"] for r in member_client.get(url).data["results"]}
-    assert member_ids == {rule.pk}
-    assert APIClient().get(url).status_code in (401, 403)
-
-
-def test_staff_create_a_jukebox_slot(staff_client: APIClient, organization: Organization, settings):
     settings.STATION_ORGANIZATION_ID = other_organization("Frikanalen").pk
+    culture = Category.objects.create(id=1, name="Kultur")
+    recipe = {
+        "kind": "jukebox",
+        "name": "Kulturnatt",
+        "categories": [culture.pk],
+        "longest": "00:30:00",
+        "olderThanDays": 365,
+    }
     response = staff_client.post(
-        reverse("api-recurring-slot-list"),
-        # The owner is ignored: a jukebox slot is the station's.
-        payload(organization, jukebox=True),
-        format="json",
+        reverse("api-recurring-slot-list"), payload(None, recipe=recipe), format="json"
     )
     assert response.status_code == status.HTTP_201_CREATED, response.data
     body = response.json()
     assert body["organization"] is None
-    assert body["defaultFillRule"]["pool"] == "filler"
-    assert "jukebox" not in body
-    rule = RecurringSlot.objects.get(pk=body["id"]).default_fill_rule
-    assert rule.organization_id == settings.STATION_ORGANIZATION_ID
-    assert rule.mode == FillRule.Mode.FILL
+    assert body["recipe"] == {
+        "id": body["recipe"]["id"],
+        "kind": "jukebox",
+        "description": body["recipe"]["description"],
+        "series": None,
+        "seriesName": None,
+        "name": "Kulturnatt",
+        "categories": [culture.pk],
+        "shortest": None,
+        "longest": "00:30:00",
+        "newerThanDays": None,
+        "olderThanDays": 365,
+    }
+    assert "Kulturnatt" in body["recipe"]["description"]
+    saved = Recipe.objects.get(pk=body["recipe"]["id"])
+    assert saved.organization_id == settings.STATION_ORGANIZATION_ID
 
-    # Every jukebox slot shares the one rule.
-    second = staff_client.post(
+    # A jukebox slot is the station's: it can't also have an owner.
+    refused = staff_client.post(
         reverse("api-recurring-slot-list"),
-        payload(None, jukebox=True, weekdays=[5]),
+        payload(organization, recipe={"kind": "jukebox"}, weekdays=[5]),
         format="json",
     )
-    assert second.json()["defaultFillRule"]["id"] == rule.pk
+    assert refused.status_code == status.HTTP_400_BAD_REQUEST
+    assert error_attrs(refused) == {"organization"}
 
 
 def test_a_members_slot_can_become_a_jukebox_slot(
@@ -263,51 +256,56 @@ def test_a_members_slot_can_become_a_jukebox_slot(
 ):
     settings.STATION_ORGANIZATION_ID = other_organization("Frikanalen").pk
     response = staff_client.patch(
-        reverse("api-recurring-slot-detail", args=[slot.pk]), {"jukebox": True}, format="json"
+        reverse("api-recurring-slot-detail", args=[slot.pk]),
+        {"organization": None, "recipe": {"kind": "jukebox"}},
+        format="json",
     )
     assert response.status_code == status.HTTP_200_OK, response.data
     slot.refresh_from_db()
     assert slot.organization is None
-    assert slot.default_fill_rule.pool == FillRule.Pool.FILLER
+    assert response.json()["recipe"]["kind"] == "jukebox"
 
 
 def test_a_jukebox_slot_needs_the_station_organization(staff_client: APIClient, settings):
     settings.STATION_ORGANIZATION_ID = 999_999
     response = staff_client.post(
-        reverse("api-recurring-slot-list"), payload(None, jukebox=True), format="json"
+        reverse("api-recurring-slot-list"),
+        payload(None, recipe={"kind": "jukebox"}),
+        format="json",
     )
     assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert error_attrs(response) == {"jukebox"}
+    assert error_attrs(response) == {"kind"}
 
 
-def test_a_member_points_their_slot_at_a_series(member, member_client, organization, slot) -> None:
-    member.identity_confirmed = True
-    member.save()
+def test_a_jukebox_theme_must_make_sense(staff_client: APIClient, settings):
+    settings.STATION_ORGANIZATION_ID = other_organization("Frikanalen").pk
+    response = staff_client.post(
+        reverse("api-recurring-slot-list"),
+        payload(None, recipe={"kind": "jukebox", "shortest": "01:00:00", "longest": "00:10:00"}),
+        format="json",
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+def test_staff_point_a_slot_at_a_series(staff_client, organization, slot) -> None:
     series = Series.objects.create(organization=organization, name="Ukens program")
-    url = reverse("api-recurring-slot-series", args=[slot.pk])
+    url = reverse("api-recurring-slot-detail", args=[slot.pk])
 
-    response = member_client.put(url, {"series": series.pk}, format="json")
+    response = staff_client.patch(
+        url, {"recipe": {"kind": "series", "series": series.pk}}, format="json"
+    )
 
     assert response.status_code == 200, response.content
-    rule = response.json()["defaultFillRule"]
-    assert (rule["pool"], rule["series"], rule["seriesName"]) == (
+    recipe = response.json()["recipe"]
+    assert (recipe["kind"], recipe["series"], recipe["seriesName"]) == (
         "series",
         series.pk,
         "Ukens program",
     )
 
-    response = member_client.put(url, {"series": None}, format="json")
-    assert response.json()["defaultFillRule"]["pool"] == "organization"
-
-
-def test_an_outsider_cannot_point_a_slot(slot) -> None:
-    outsider = APIClient()
-    outsider.force_authenticate(
-        User.objects.create(email="outsider@example.test", identity_confirmed=True)
+    theirs = Series.objects.create(organization=other_organization(), name="Theirs")
+    response = staff_client.patch(
+        url, {"recipe": {"kind": "series", "series": theirs.pk}}, format="json"
     )
-
-    response = outsider.put(
-        reverse("api-recurring-slot-series", args=[slot.pk]), {"series": None}, format="json"
-    )
-
-    assert response.status_code == 403
+    assert response.status_code == 400
+    assert error_attrs(response) == {"series"}

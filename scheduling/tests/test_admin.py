@@ -20,7 +20,7 @@ def admin_client(client):
     return client
 
 
-@pytest.mark.parametrize("model", ["airtimegrant", "recurringslot", "fillrule", "playlist"])
+@pytest.mark.parametrize("model", ["airtimegrant", "recurringslot"])
 def test_changelist_and_add_pages_render(admin_client, model) -> None:
     assert admin_client.get(reverse(f"admin:scheduling_{model}_changelist")).status_code == 200
     assert admin_client.get(reverse(f"admin:scheduling_{model}_add")).status_code == 200
@@ -39,7 +39,7 @@ def test_editing_a_compiled_grant_in_the_admin_recompiles_it(
         {
             "locks_at_0": grant.locks_at.date().isoformat(),
             "locks_at_1": grant.locks_at.time().isoformat(),
-            "fill_rule": "",
+            "recipe": "",
             "items-TOTAL_FORMS": "1",
             "items-INITIAL_FORMS": "0",
             "items-MIN_NUM_FORMS": "0",
@@ -64,7 +64,7 @@ def test_the_admin_refuses_items_longer_than_the_window(
         {
             "locks_at_0": grant.locks_at.date().isoformat(),
             "locks_at_1": grant.locks_at.time().isoformat(),
-            "fill_rule": "",
+            "recipe": "",
             "items-TOTAL_FORMS": "1",
             "items-INITIAL_FORMS": "0",
             "items-MIN_NUM_FORMS": "0",

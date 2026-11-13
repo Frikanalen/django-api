@@ -27,8 +27,8 @@ from fk.models import (
     User,
     Video,
 )
-from scheduling.filling import candidates
-from scheduling.models import FillRule
+from programming.generators import candidates
+from programming.models import Recipe
 
 pytestmark = pytest.mark.django_db
 
@@ -169,7 +169,7 @@ def test_videos_stop_being_offered_to_the_jukebox(lose_editor, organization, vid
 @pytest.mark.parametrize("lose_editor", LOSS)
 def test_videos_stop_being_picked_by_the_filler_pool(lose_editor, organization, video) -> None:
     """
-    The fill rules' filler pool: an accountable video from a second
+    The jukebox's pool: an accountable video from a second
     organization keeps the pool non-empty, so what is asserted is the
     choice between the two, not merely an empty pool.
     """
@@ -186,31 +186,23 @@ def test_videos_stop_being_picked_by_the_filler_pool(lose_editor, organization, 
         is_filler=True,
         has_tono_records=False,
     )
-    rule = FillRule(
-        organization=accountable_org,
-        pool=FillRule.Pool.FILLER,
-        ordering=FillRule.Ordering.WEIGHTED,
-    )
+    recipe = Recipe.objects.create(organization=accountable_org, kind=Recipe.Kind.JUKEBOX)
 
     lose_editor(organization)
 
-    assert candidates(rule) == [accountable_video]
+    assert list(candidates(recipe, datetime.now(UTC))) == [accountable_video]
 
 
 @pytest.mark.parametrize("lose_editor", LOSS)
 def test_videos_stop_being_picked_for_their_organizations_grants(
     lose_editor, organization, video
 ) -> None:
-    rule = FillRule(
-        organization=organization,
-        pool=FillRule.Pool.ORGANIZATION,
-        ordering=FillRule.Ordering.SHUFFLED,
-    )
-    assert candidates(rule) == [video]
+    recipe = Recipe.objects.create(organization=organization, kind=Recipe.Kind.UPLOADS)
+    assert list(candidates(recipe, datetime.now(UTC))) == [video]
 
     lose_editor(organization)
 
-    assert candidates(rule) == []
+    assert list(candidates(recipe, datetime.now(UTC))) == []
     assert list(Video.objects.listable()) == []
 
 

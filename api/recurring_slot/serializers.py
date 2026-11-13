@@ -7,63 +7,34 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
 from api.auth.permissions import can_administer_organization
-from fk.models import Organization, Series
+from api.programming.serializers import RecipeSerializer, build_recipe
+from programming.models import Recipe
+from programming.services import uploads_recipe
 from scheduling import broadcast_time, services
 from scheduling.models import (
-    FillRule,
     RecurringSlot,
     RecurringSlotCreationRequest,
     RecurringSlotOwnershipRequest,
     ReviewStatus,
 )
 
-
-class FillRuleSummarySerializer(serializers.ModelSerializer):
-    series_name = serializers.CharField(
-        source="series.name", read_only=True, allow_null=True, default=None
-    )
-
-    class Meta:
-        model = FillRule
-        fields = ("id", "name", "pool", "ordering", "mode", "series", "series_name")
-        read_only_fields = fields
-
-
-class SlotSeriesSerializer(serializers.Serializer):
-    """What a slot's automatic programming draws from."""
-
-    series = serializers.PrimaryKeyRelatedField(
-        queryset=Series.objects.all(),
-        allow_null=True,
-        help_text="One of the owner's series: each grant leads with its newest "
-        "episode not yet aired, then earlier ones. Null: everything the owner uploads.",
-    )
+_UNSET = object()
 
 
 class RecurringSlotSerializer(serializers.ModelSerializer):
     """Recurring airtime. Each occurrence becomes an airtime grant two
-    Mondays before it airs; the grant copies the slot's time.
+    Mondays before it airs; the grant copies the slot's time and recipe.
 
     Staff create, change and delete slots. A change only affects grants
     issued after it: grants already issued keep their time and owner.
     """
 
-    default_fill_rule = FillRuleSummarySerializer(read_only=True, allow_null=True)
-    default_fill_rule_id = serializers.PrimaryKeyRelatedField(
-        source="default_fill_rule",
-        queryset=FillRule.objects.all(),
-        write_only=True,
+    recipe = RecipeSerializer(
         required=False,
         allow_null=True,
-        help_text="Leave out to use the owner's standard rule (new uploads, then the "
-        "archive), created if needed. Null means grants don't fill themselves.",
-    )
-    jukebox = serializers.BooleanField(
-        write_only=True,
-        required=False,
-        help_text="True makes this a jukebox slot: the station's airtime, filled "
-        "from the filler pool. Takes the place of an owner and a fill rule. "
-        "Read it back as a slot with no organization whose rule's pool is 'filler'.",
+        help_text="How the slot's grants program themselves. Leave out on a new "
+        "owner for everything they upload. Null: the grants are set up by hand. "
+        "A jukebox recipe makes this the station's airtime, with no organization.",
     )
     organization_name = serializers.CharField(
         source="organization.name", read_only=True, allow_null=True, default=None
@@ -84,53 +55,47 @@ class RecurringSlotSerializer(serializers.ModelSerializer):
             "duration",
             "starts_on",
             "ends_on",
-            "default_fill_rule",
-            "default_fill_rule_id",
-            "jukebox",
+            "recipe",
             "description",
         )
-        read_only_fields = ("id", "organization_name", "default_fill_rule", "description")
+        read_only_fields = ("id", "organization_name", "description")
         extra_kwargs = {"organization": {"required": True, "allow_null": True}}
 
     def validate(self, attrs):
-        self._wants_jukebox = attrs.pop("jukebox", False)
-        if self._wants_jukebox:
-            # The jukebox is the station's own airtime; its rule is set in save().
-            attrs["organization"] = None
-            attrs.pop("default_fill_rule", None)
-            if not Organization.objects.filter(pk=services.station_organization_id()).exists():
+        # The recipe is looked up or created in save(), so validation
+        # writes nothing.
+        self._choice = attrs.pop("recipe", _UNSET)
+        jukebox = isinstance(self._choice, dict) and self._choice["kind"] == Recipe.Kind.JUKEBOX
+        if jukebox:
+            if attrs.get("organization") is not None:
                 raise serializers.ValidationError(
-                    {"jukebox": "The station organization is missing, so nothing can own the rule."}
+                    {"organization": "A jukebox slot is the station's airtime: leave this empty."}
                 )
+            attrs["organization"] = None
 
         slot = copy(self.instance) if self.instance else RecurringSlot()
         for field, value in attrs.items():
             setattr(slot, field, value)
 
         organization = slot.organization
-        owner_changed = self.instance is None or (
+        self._owner_changed = self.instance is None or (
             "organization" in attrs and attrs["organization"] != self.instance.organization
         )
-        if owner_changed and organization is not None and organization.is_rogue:
+        if self._owner_changed and organization is not None and organization.is_rogue:
             raise serializers.ValidationError(
                 {"organization": "This organization is suspended and can't be given airtime."}
             )
-        # Leaving the rule out on a new owner means the owner's standard
-        # rule (the old owner's can't follow the slot). It is looked up or
-        # created in save(), so validation writes nothing.
-        self._wants_standard_rule = (
-            "default_fill_rule" not in attrs and owner_changed and organization is not None
-        )
-        if "default_fill_rule" not in attrs and (owner_changed or self._wants_jukebox):
-            attrs["default_fill_rule"] = slot.default_fill_rule = None
+        if isinstance(self._choice, dict) and not jukebox and organization is None:
+            raise serializers.ValidationError(
+                {"recipe": "Only the jukebox runs in the station's own airtime."}
+            )
 
         try:
+            slot.clean_fields(exclude=["recipe"])
+            slot.recipe = None  # checked against the owner when it is built
             slot.clean()
         except DjangoValidationError as error:
-            errors = error.message_dict
-            if "default_fill_rule" in errors:  # the field it is written through
-                errors["default_fill_rule_id"] = errors.pop("default_fill_rule")
-            raise serializers.ValidationError(errors) from error
+            raise serializers.ValidationError(error.message_dict) from error
 
         conflicts = services.slot_conflicts(slot)
         if conflicts:
@@ -145,23 +110,31 @@ class RecurringSlotSerializer(serializers.ModelSerializer):
             )
         return attrs
 
-    def _with_rule(self, validated_data):
-        if self._wants_jukebox:
-            validated_data["default_fill_rule"] = services.jukebox_fill_rule()
-            return validated_data
-        if self._wants_standard_rule:
-            validated_data["default_fill_rule"] = services.standard_fill_rule(
-                validated_data.get("organization") or self.instance.organization
+    def _with_recipe(self, validated_data):
+        organization = (
+            validated_data["organization"]
+            if "organization" in validated_data or self.instance is None
+            else self.instance.organization
+        )
+        if isinstance(self._choice, dict):
+            validated_data["recipe"] = build_recipe(
+                self._choice, organization=organization, user=self.context["request"].user
             )
+        elif self._choice is None:
+            validated_data["recipe"] = None
+        elif self._owner_changed:
+            # The old owner's recipe can't follow the slot: the new owner
+            # gets the standard one, the station none.
+            validated_data["recipe"] = uploads_recipe(organization) if organization else None
         return validated_data
 
     def create(self, validated_data):
         with transaction.atomic():
-            return super().create(self._with_rule(validated_data))
+            return super().create(self._with_recipe(validated_data))
 
     def update(self, instance, validated_data):
         with transaction.atomic():
-            return super().update(instance, self._with_rule(validated_data))
+            return super().update(instance, self._with_recipe(validated_data))
 
 
 def require_administered_organization(serializer, attrs):

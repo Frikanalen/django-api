@@ -7,8 +7,8 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from fk.models import Organization, User
+from programming.services import uploads_recipe
 from scheduling.models import (
-    FillRule,
     RecurringSlot,
     RecurringSlotCreationRequest,
     RecurringSlotOwnershipRequest,
@@ -32,15 +32,10 @@ def make_foreign_slot(*, with_rule: bool = False) -> tuple[Organization, Recurri
     owner = Organization.objects.create(name="Current slot owner", editor=owner_editor)
     rule = None
     if with_rule:
-        rule = FillRule.objects.create(
-            name="Former owner's rule",
-            organization=owner,
-            pool=FillRule.Pool.ORGANIZATION,
-            ordering=FillRule.Ordering.LATEST,
-        )
+        rule = uploads_recipe(owner)
     slot = RecurringSlot.objects.create(
         organization=owner,
-        default_fill_rule=rule,
+        recipe=rule,
         weekdays=[2],
         start_time="14:15",
         duration=timedelta(minutes=45),
@@ -110,7 +105,7 @@ def test_outsider_cannot_request_for_another_organization(
     assert not RecurringSlotCreationRequest.objects.exists()
 
 
-def test_admin_approval_creates_a_weekly_slot_with_a_default_rule_and_records_audit(
+def test_admin_approval_creates_a_weekly_slot_with_a_default_recipe_and_records_audit(
     staff: User,
     organization: Organization,
     member: User,
@@ -135,10 +130,7 @@ def test_admin_approval_creates_a_weekly_slot_with_a_default_rule_and_records_au
     assert slot.frequency == RecurringSlot.Frequency.WEEKLY
     assert slot.weekdays == [4]
     # Doing nothing works: new uploads, then the archive, fill the window.
-    rule = slot.default_fill_rule
-    assert rule is not None
-    assert rule.organization == organization
-    assert (rule.pool, rule.ordering, rule.mode) == ("organization", "premiere", "fill")
+    assert slot.recipe == uploads_recipe(organization)
     assert slot.start_time == time(20, 30)
     assert slot.duration == timedelta(hours=1, minutes=30)
     assert slot_request.reviewed_by == staff
@@ -191,10 +183,8 @@ def test_admin_approval_transfers_ownership_with_a_rule_for_the_new_owner(
 
     slot.refresh_from_db()
     assert slot.organization == organization
-    # The former owner keeps its rule; the new owner gets a default one.
-    assert slot.default_fill_rule is not None
-    assert slot.default_fill_rule.organization == organization
-    assert FillRule.objects.filter(organization=previous_owner).exists()
+    # The former owner's recipe doesn't follow the slot.
+    assert slot.recipe == uploads_recipe(organization)
     assert slot_request.reviewed_by == staff
     assert slot_request.admin_comment == "Transferred by agreement."
 
@@ -301,5 +291,5 @@ def test_recurring_slots_are_listed_publicly(slot: RecurringSlot) -> None:
     assert listed["id"] == slot.pk
     assert listed["weekdays"] == [2]
     assert listed["frequency"] == "weekly"
-    assert listed["defaultFillRule"]["ordering"] == "latest"
+    assert listed["recipe"]["kind"] == "uploads"
     assert listed["description"] == "Weekly Wed"

@@ -6,8 +6,10 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from fk.models import Organization, User, Video
+from programming.models import Recipe
+from programming.services import uploads_recipe
 from scheduling import broadcast_time
-from scheduling.models import AirtimeGrant, FillRule, RecurringSlot
+from scheduling.models import AirtimeGrant, RecurringSlot
 
 OSLO = ZoneInfo("Europe/Oslo")
 
@@ -53,14 +55,9 @@ def make_video(editor: User, organization: Organization) -> Callable[..., Video]
 
 
 @pytest.fixture
-def rule(organization: Organization) -> FillRule:
-    return FillRule.objects.create(
-        organization=organization,
-        name="Newest",
-        pool=FillRule.Pool.ORGANIZATION,
-        ordering=FillRule.Ordering.LATEST,
-        mode=FillRule.Mode.FILL,
-    )
+def recipe(organization: Organization) -> Recipe:
+    """Everything the organization uploads: new first, then the archive."""
+    return uploads_recipe(organization)
 
 
 @pytest.fixture
@@ -76,7 +73,7 @@ def make_grant(organization: Organization) -> Callable[..., AirtimeGrant]:
 
 
 @pytest.fixture
-def weekly_slot(organization: Organization, rule: FillRule) -> RecurringSlot:
+def weekly_slot(organization: Organization, recipe: Recipe) -> RecurringSlot:
     """Thursdays 19:00-20:00 Oslo."""
     return RecurringSlot.objects.create(
         organization=organization,
@@ -85,5 +82,5 @@ def weekly_slot(organization: Organization, rule: FillRule) -> RecurringSlot:
         start_time=datetime.time(19),
         duration=timedelta(hours=1),
         starts_on=datetime.date(2026, 1, 1),
-        default_fill_rule=rule,
+        recipe=recipe,
     )
