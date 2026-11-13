@@ -30,6 +30,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from fk.models import Organization, Scheduleitem, Video
+from fk.signals import clear_page_cache_after_commit
 from programming.generators import plan
 from programming.models import Recipe
 from programming.selection import ScheduleContext
@@ -580,9 +581,13 @@ def recompile_for_video(video: Video, now: datetime | None = None) -> None:
         state=State.COMPILED, starttime__gt=now, items__video=video
     ).distinct()
     # Staff entries have no grant to recompile; they only follow how it airs.
-    Scheduleitem.objects.filter(video=video, grant=None, starttime__gt=now).exclude(
-        is_live=live
-    ).update(is_live=live)
+    # .update() sends no signals, so the page cache is cleared by hand.
+    if (
+        Scheduleitem.objects.filter(video=video, grant=None, starttime__gt=now)
+        .exclude(is_live=live)
+        .update(is_live=live)
+    ):
+        clear_page_cache_after_commit()
     for grant in grants:
         rows = list(grant.schedule_items.filter(video=video).values_list("duration", "is_live"))
         listed = grant.items.filter(video=video).count()

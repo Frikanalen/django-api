@@ -1,4 +1,7 @@
-from rest_framework import viewsets
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import serializers, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
 
 from api.auth.permissions import IsStaffOrReadOnly
 from api.pagination import FkSchedulePagination
@@ -8,6 +11,7 @@ from api.schedule.serializers import (
     ScheduleitemReadSerializer,
 )
 from fk.models import Scheduleitem
+from fk.signals import schedule_version
 
 
 class ScheduleitemViewSet(viewsets.ModelViewSet):
@@ -51,3 +55,15 @@ class ScheduleitemViewSet(viewsets.ModelViewSet):
         if self.action in ["create", "update", "partial_update"]:
             return ScheduleitemModifySerializer
         return ScheduleitemReadSerializer
+
+    @extend_schema(
+        responses=inline_serializer("ScheduleVersion", fields={"version": serializers.CharField()}),
+    )
+    @action(detail=False, methods=["get"], pagination_class=None, filterset_class=None)
+    def version(self, request):
+        """An opaque token that changes whenever the schedule or a grant does.
+
+        For callers that cache the schedule (the frontend): poll this, and
+        refetch only when it differs from the last one seen.
+        """
+        return Response({"version": schedule_version()})
