@@ -2,6 +2,7 @@ from phonenumber_field.phonenumber import PhoneNumber
 from rest_framework import serializers
 
 from api.serializers import logger
+from fk.brreg import is_valid_orgnr, normalize_orgnr
 from fk.models import Organization
 
 
@@ -26,6 +27,15 @@ class OrganizationSerializer(serializers.ModelSerializer):
                     # Blank rather than drop, so the response keeps its shape.
                     data[field] = "" if isinstance(data[field], str) else None
         return data
+
+    def validate_orgnr(self, value: str) -> str:
+        """Blank, or a real organisasjonsnummer; stored without spaces."""
+        value = normalize_orgnr(value)
+        if value and not is_valid_orgnr(value):
+            raise serializers.ValidationError(
+                "Organisasjonsnummeret må ha ni siffer og et gyldig kontrollsiffer."
+            )
+        return value
 
     def get_editor_email(self, obj: Organization) -> str | None:
         if obj.editor:
@@ -56,6 +66,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "name",
             "homepage",
             "description",
+            "orgnr",
             "postal_address",
             "street_address",
             "editor_id",
@@ -65,3 +76,16 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "fkmember",
             "is_rogue",
         )
+
+
+class BrregEntitySerializer(serializers.Serializer):
+    """An entity in Enhetsregisteret, as the fields of a new organization."""
+
+    orgnr = serializers.CharField()
+    name = serializers.CharField()
+    organization_form = serializers.CharField(help_text="E.g. Forening/lag/innretning")
+    homepage = serializers.CharField(allow_blank=True)
+    street_address = serializers.CharField(allow_blank=True)
+    postal_address = serializers.CharField(allow_blank=True)
+    bankrupt = serializers.BooleanField()
+    being_dissolved = serializers.BooleanField()

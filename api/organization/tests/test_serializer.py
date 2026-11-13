@@ -17,6 +17,7 @@ def test_serializer_includes_organization_and_editor_details(
         "name": "Organization test group",
         "homepage": "https://example.test",
         "description": "An organization used by the API tests.",
+        "orgnr": "",
         "postal_address": "Postboks 1",
         "street_address": "Testgata 2",
         "editor_id": editor.pk,
