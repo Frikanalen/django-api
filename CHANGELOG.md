@@ -1,5 +1,34 @@
 # Changelog
 
+## [3.2.0](https://github.com/Frikanalen/django-api/compare/v3.1.0...v3.2.0) (2026-11-13)
+
+
+### Features
+
+* **auth:** apply Django's password validators at sign-up and profile change ([#118](https://github.com/Frikanalen/django-api/issues/118)) ([fb17740](https://github.com/Frikanalen/django-api/commit/fb1774038054c289762b8ccf03477ceb3b39d0a2))
+* **auth:** change password with the current one, POST /api/user/password ([#119](https://github.com/Frikanalen/django-api/issues/119)) ([3dc98a3](https://github.com/Frikanalen/django-api/commit/3dc98a3b0d4b0eb9f61964a3a35f09da8757346b))
+* **auth:** optional two-factor authentication with an authenticator app ([#125](https://github.com/Frikanalen/django-api/issues/125)) ([fc3d33c](https://github.com/Frikanalen/django-api/commit/fc3d33c5f0e7ee83032f3893b79321ad6e05cd3c))
+* **auth:** passkeys behind PASSKEYS_ENABLED; logo for authenticator apps ([#129](https://github.com/Frikanalen/django-api/issues/129)) ([dec8497](https://github.com/Frikanalen/django-api/commit/dec849764fe62a3f10f7b8af587dfd6ef2cd8638))
+* **auth:** passkeys, security keys and several two-factor methods ([#128](https://github.com/Frikanalen/django-api/issues/128)) ([189e5bb](https://github.com/Frikanalen/django-api/commit/189e5bbb5a7e859761c21c1875caee7d7b110bbe))
+* **auth:** password reset by email ([#117](https://github.com/Frikanalen/django-api/issues/117)) ([ddba5f5](https://github.com/Frikanalen/django-api/commit/ddba5f591e68844ea0a2e407eef8486e99e45166))
+* **auth:** refuse breached passwords (HIBP), require 10 characters ([#123](https://github.com/Frikanalen/django-api/issues/123)) ([cba4dd4](https://github.com/Frikanalen/django-api/commit/cba4dd4e7d5fb6d197f556861b776906eaf5f4fc))
+* **email:** configure email from env, never mail errors ([#114](https://github.com/Frikanalen/django-api/issues/114)) ([477a5da](https://github.com/Frikanalen/django-api/commit/477a5dab1765792857cbe554377e3d6f2fcd27a7))
+* **live:** signal report, programme return and a lifecycle for live sources ([#113](https://github.com/Frikanalen/django-api/issues/113)) ([d374457](https://github.com/Frikanalen/django-api/commit/d374457699bf440733e6f8a57d2b74d0a4af262f))
+* **organization:** include vedtektsfestet formål in the Brreg lookup ([#127](https://github.com/Frikanalen/django-api/issues/127)) ([fddcfa6](https://github.com/Frikanalen/django-api/commit/fddcfa63976cce70af77a89c8cd4c8fff6a0bb63))
+* **organization:** look up organisasjonsnummer in Enhetsregisteret ([#122](https://github.com/Frikanalen/django-api/issues/122)) ([de29465](https://github.com/Frikanalen/django-api/commit/de29465225ce94c8cff1379954dc378a3a222392))
+* **scheduling:** pinned items, premiere-then-archive default, series slots, late refresh ([#121](https://github.com/Frikanalen/django-api/issues/121)) ([6ee4c58](https://github.com/Frikanalen/django-api/commit/6ee4c58cf96e26c1f2bd0d8ec679fc7fd0c732fc))
+* **video:** add the hls file variant for HLS playlists over the DASH media ([#126](https://github.com/Frikanalen/django-api/issues/126)) ([05bbcbf](https://github.com/Frikanalen/django-api/commit/05bbcbfb8e2a4c92bbe0438a62844f76236285da))
+
+
+### Bug Fixes
+
+* run gunicorn with threads ([#116](https://github.com/Frikanalen/django-api/issues/116)) ([b13288d](https://github.com/Frikanalen/django-api/commit/b13288d699cba2a359c3dc9f1647d2531a52e7ad))
+
+
+### Performance Improvements
+
+* **api:** fetch related rows up front in the video and organization lists ([#120](https://github.com/Frikanalen/django-api/issues/120)) ([0de0ba8](https://github.com/Frikanalen/django-api/commit/0de0ba8c00b10c4855e6ec06aa18fab502683baa))
+
 ## [3.1.0](https://github.com/Frikanalen/django-api/compare/v3.0.0...v3.1.0) (2026-11-13)
 
 
