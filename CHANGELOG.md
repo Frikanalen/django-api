@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.3.1](https://github.com/Frikanalen/django-api/compare/v3.3.0...v3.3.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* **grants:** a lock-exempt grant past its deadline goes on the schedule at once ([#132](https://github.com/Frikanalen/django-api/issues/132)) ([bda9740](https://github.com/Frikanalen/django-api/commit/bda97400efdd0977d0868b03a52ec96118e8afd0))
+
 ## [3.3.0](https://github.com/Frikanalen/django-api/compare/v3.2.0...v3.3.0) (2026-11-13)
 
 
