@@ -19,6 +19,7 @@ import api.schedule.views as schedule_views
 import api.series.views as series_views
 import api.video.views as video_views
 import api.videofile.views as videofile_views
+from api.auth import password_reset
 from fkweb.views import CsrfView
 
 from . import views
@@ -52,6 +53,16 @@ api_patterns: list[URLPattern | URLResolver] = [
     path("user/register", auth_views.UserCreate.as_view(), name="api-user-create"),
     path("user/login", auth_views.UserLogin.as_view(), name="api-user-login"),
     path("user/logout", auth_views.UserLogout.as_view(), name="api-user-logout"),
+    path(
+        "user/password-reset",
+        password_reset.PasswordResetRequest.as_view(),
+        name="api-user-password-reset",
+    ),
+    path(
+        "user/password-reset/confirm",
+        password_reset.PasswordResetConfirm.as_view(),
+        name="api-user-password-reset-confirm",
+    ),
     path("user", auth_views.UserDetail.as_view(), name="api-user-detail"),
     path("obtain-token", ObtainAuthTokenJsonOnly.as_view(), name="api-token-auth"),
     # Video

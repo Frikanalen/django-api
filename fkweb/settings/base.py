@@ -61,8 +61,9 @@ CHANNEL_ID = "frikanalen.tv"
 # Human readable channel name, higher priority first
 CHANNEL_DISPLAY_NAMES = ["Frikanalen"]
 
-# URL to the website for references in feeds (No trailing slash)
-SITE_URL = "https://frikanalen.tv"
+# URL to the website for references in feeds and links in mail (no trailing
+# slash). Staging sets its own, so its reset links lead back to staging.
+SITE_URL = env.str("SITE_URL", default="https://frikanalen.tv").rstrip("/")
 
 ########## TV-ANYTIME / NorDig EPG METADATA
 # The NorDig EPG/Event metadata exchange format (NorDig TVA Implementation
@@ -156,6 +157,25 @@ USE_TZ = True
 
 TEST_RUNNER = "django.test.runner.DiscoverRunner"
 ########## END GENERAL CONFIGURATION
+
+########## PASSWORDS
+# Django's stock validators. They apply where Django validates a password:
+# the password reset confirmation (api/auth/password_reset.py) and the admin.
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 8},
+    },
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
+# How long a password reset link works. Django's default is three days;
+# a link sitting in an inbox that long is a liability, an hour is plenty.
+# A link also stops working once it has been used, because the token is
+# derived from the password hash it replaces.
+PASSWORD_RESET_TIMEOUT = 60 * 60
+########## END PASSWORDS
 
 
 ########## MEDIA CONFIGURATION
@@ -384,6 +404,19 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_SCHEMA_CLASS": "drf_standardized_errors.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "drf_standardized_errors.handler.exception_handler",
+    # Only views that name a throttle are throttled. `anon` stays unlimited,
+    # as it has been for registration; the password reset scopes are per
+    # client address (see api/auth/password_reset.py).
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": None,
+        "user": None,
+        "password_reset": "10/hour",
+        "password_reset_confirm": "20/hour",
+    },
+    # The ingress controller is the one proxy in front of Django. Without
+    # this, DRF keys throttles on the whole X-Forwarded-For header, which a
+    # client can vary at will to get a fresh bucket per request.
+    "NUM_PROXIES": 1,
 }
 
 ########## OpenAPI CONFIGURATION
