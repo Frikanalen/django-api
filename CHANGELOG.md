@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.1.0](https://github.com/Frikanalen/django-api/compare/v3.0.0...v3.1.0) (2026-11-13)
+
+
+### Features
+
+* **live:** pulled live sources ([#104](https://github.com/Frikanalen/django-api/issues/104)) ([bb09fb6](https://github.com/Frikanalen/django-api/commit/bb09fb6e31a1d0e7dca253898b382d05d8707b42))
+* **organization:** suspend rogue members with is_rogue ([#108](https://github.com/Frikanalen/django-api/issues/108)) ([50f32ce](https://github.com/Frikanalen/django-api/commit/50f32ce3e8589bd244664a5d54ec115ad59c8a09))
+* **scheduling:** airtime and late-change requests, staff decisions over the API ([#111](https://github.com/Frikanalen/django-api/issues/111)) ([129993a](https://github.com/Frikanalen/django-api/commit/129993a6fe015107cda02919d6cd2607e3f83e51))
+* **scheduling:** jukebox slots over the API ([#112](https://github.com/Frikanalen/django-api/issues/112)) ([b225167](https://github.com/Frikanalen/django-api/commit/b22516766d0a961bd7c9dd39c6ffe17691119dce))
+* **scheduling:** staff create, move and delete recurring slots ([#110](https://github.com/Frikanalen/django-api/issues/110)) ([d66da60](https://github.com/Frikanalen/django-api/commit/d66da6049414d0ed3adb8f44fbb407f83cb6433e))
+
+
+### Bug Fixes
+
+* **deps:** upgrade dependencies, drop unused python-dateutil ([#107](https://github.com/Frikanalen/django-api/issues/107)) ([7a6995d](https://github.com/Frikanalen/django-api/commit/7a6995da3b91431ac6bf7342e137f13811f59f5a))
+* **ingest:** clear a failed job's error code when it is re-queued ([#106](https://github.com/Frikanalen/django-api/issues/106)) ([43e379e](https://github.com/Frikanalen/django-api/commit/43e379e6c530e6a8178ca983f73d4cb2d7adaf47))
+* **scheduling:** issue and compile nothing for suspended members ([#109](https://github.com/Frikanalen/django-api/issues/109)) ([4e24310](https://github.com/Frikanalen/django-api/commit/4e243104d91dabdf1278bb42a70dfd287fdace2e))
+
 ## [3.0.0](https://github.com/Frikanalen/django-api/compare/v2.1.0...v3.0.0) (2026-11-11)
 
 
