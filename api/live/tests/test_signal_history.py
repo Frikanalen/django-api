@@ -1,3 +1,4 @@
+import time
 from datetime import UTC, datetime
 
 import pytest
@@ -25,11 +26,11 @@ def source(member) -> LiveSource:
     return LiveSource.objects.create(name="Studio", organization=organization)
 
 
-def series(metric, points, **labels):
-    """A Prometheus range series: `points` maps steps before END to values."""
+def series(metric, points, end=END, **labels):
+    """A Prometheus range series: `points` maps steps before `end` to values."""
     return {
         "metric": {"__name__": metric, **labels},
-        "values": [[END - back * 30, str(value)] for back, value in sorted(points.items())],
+        "values": [[end - back * 30, str(value)] for back, value in sorted(points.items())],
     }
 
 
@@ -127,9 +128,10 @@ def get_history(user, source, **params):
 
 def test_member_reads_history(member, source, prometheus):
     path = source.contribution_path
+    end = int(time.time()) // 30 * 30
     prometheus["result"] = [
-        series("paths", {1: 1, 0: 1}, name=path, state="ready"),
-        series("paths_inbound_bytes", {1: 0, 0: 3_750_000}, name=path),
+        series("paths", {1: 1, 0: 1}, end=end, name=path, state="ready"),
+        series("paths_inbound_bytes", {1: 0, 0: 3_750_000}, end=end, name=path),
     ]
 
     response = get_history(member, source)
