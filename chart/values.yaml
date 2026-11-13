@@ -37,6 +37,12 @@ database:
 pullUrlKeys:
   secret: ""
 
+# SMTP login (EMAIL_HOST_USER, EMAIL_HOST_PASSWORD), from OpenBao via an
+# ExternalSecret. The rest of the mail settings are plain env below; Django
+# only sends for real once env sets EMAIL_BACKEND to the SMTP backend.
+email:
+  secret: ""
+
 memcached:
   image:
     repository: memcached
