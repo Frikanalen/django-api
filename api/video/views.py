@@ -391,4 +391,12 @@ class VideoList(RequireTargetOrganizationMembership, generics.ListCreateAPIView)
         # `proper_import` is VideoFilter's business now, so that it reaches
         # the OpenAPI schema like every other filter instead of being read
         # off the query string here where no generated client can find it.
-        return Video.objects.visible_to(self.request.user)
+        #
+        # Everything VideoSerializer reads off a video beyond its own columns
+        # is fetched up front, so a page costs the same handful of queries
+        # whatever its length instead of seven more per video.
+        return (
+            Video.objects.visible_to(self.request.user)
+            .select_related("creator", "organization__editor", "series", "live_transmission")
+            .prefetch_related("categories", "videofile_set")
+        )
