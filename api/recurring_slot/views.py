@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import generics, permissions
@@ -13,7 +14,9 @@ from api.recurring_slot.serializers import (
     RecurringSlotOwnershipRequestSerializer,
     RecurringSlotRequestSerializer,
     RecurringSlotSerializer,
+    SlotSeriesSerializer,
 )
+from scheduling import services
 from scheduling.models import (
     FillRule,
     RecurringSlot,
@@ -30,7 +33,7 @@ class RecurringSlotList(generics.ListCreateAPIView):
     """Every recurring slot. Public, like the schedule it produces;
     staff create them."""
 
-    queryset = RecurringSlot.objects.select_related("default_fill_rule", "organization")
+    queryset = RecurringSlot.objects.select_related("default_fill_rule__series", "organization")
     serializer_class = RecurringSlotSerializer
     pagination_class = FkDefaultPagination
     permission_classes = (IsStaffOrReadOnly,)
@@ -40,9 +43,32 @@ class RecurringSlotDetail(generics.RetrieveUpdateDestroyAPIView):
     """Staff change or delete a slot. Grants it already issued stay as
     they are, without their origin once the slot is deleted."""
 
-    queryset = RecurringSlot.objects.select_related("default_fill_rule", "organization")
+    queryset = RecurringSlot.objects.select_related("default_fill_rule__series", "organization")
     serializer_class = RecurringSlotSerializer
     permission_classes = (IsStaffOrReadOnly,)
+
+
+class RecurringSlotSeries(generics.GenericAPIView):
+    """The slot's owner (or staff) chooses what its automatic programming
+    draws from: one of their series, or everything they upload. Grants
+    already issued that still fill themselves follow."""
+
+    queryset = RecurringSlot.objects.select_related("default_fill_rule__series", "organization")
+    serializer_class = SlotSeriesSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    @extend_schema(request=SlotSeriesSerializer, responses=RecurringSlotSerializer)
+    def put(self, request, *args, **kwargs):
+        slot = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            slot = services.set_slot_series(
+                slot, serializer.validated_data["series"], user=request.user
+            )
+        except DjangoValidationError as error:
+            raise ValidationError(error.message_dict) from error
+        return Response(RecurringSlotSerializer(slot, context=self.get_serializer_context()).data)
 
 
 class FillRuleList(generics.ListAPIView):
@@ -61,7 +87,7 @@ class FillRuleList(generics.ListAPIView):
         return super().get(request, *args, **kwargs)
 
     def get_queryset(self):
-        queryset = FillRule.objects.all()
+        queryset = FillRule.objects.select_related("series")
         if not self.request.user.is_staff:
             queryset = queryset.filter(administered_organizations(self.request.user)).distinct()
         organization = self.request.query_params.get("organization")

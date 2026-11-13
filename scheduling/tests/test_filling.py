@@ -156,3 +156,39 @@ def test_another_organizations_rule_draws_from_its_own_uploads(
     rule = FillRule(organization=other, pool="organization", ordering="latest", mode="fill")
 
     assert ids(plan(rule, make_grant(START), ScheduleContext(), NOW)) == [theirs.pk]
+
+
+def test_premiere_leads_with_the_unaired_then_rotates_the_archive(
+    rule, make_grant, make_video
+) -> None:
+    often, once = make_video(20), make_video(20)
+    fresh_old, fresh_new = make_video(20), make_video(20)
+    for day, video in enumerate((often, often, once), start=1):
+        Scheduleitem.objects.create(
+            video=video, starttime=NOW - timedelta(days=day), duration=video.duration
+        )
+    rule.ordering = FillRule.Ordering.PREMIERE
+
+    picks = plan(rule, make_grant(START, minutes=80), ScheduleContext(), NOW)
+
+    assert ids(picks) == [fresh_new.pk, fresh_old.pk, once.pk, often.pk]
+
+
+def test_premiere_does_not_repeat_week_after_week(rule, make_grant, make_video) -> None:
+    a, b, c = make_video(30), make_video(30), make_video(30)
+    rule.ordering = FillRule.Ordering.PREMIERE
+    context = ScheduleContext()
+
+    first = plan(rule, make_grant(START, minutes=30), context, NOW)
+    second = plan(rule, make_grant(START + timedelta(days=7), minutes=30), context, NOW)
+    third = plan(rule, make_grant(START + timedelta(days=14), minutes=30), context, NOW)
+
+    assert ids(first + second + third) == [c.pk, b.pk, a.pk]
+
+
+def test_pinned_videos_lead_and_are_not_picked_again(rule, make_grant, make_video) -> None:
+    old, new = make_video(20), make_video(20)
+
+    picks = plan(rule, make_grant(START, minutes=60), ScheduleContext(), NOW, pinned=[old])
+
+    assert ids(picks) == [old.pk, new.pk]

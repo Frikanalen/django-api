@@ -9,8 +9,10 @@ The nightly pipeline (:func:`run_nightly`) runs four steps with one
 
 1. issue  -- each recurring slot occurrence up to the end of the week
    after next becomes a grant, with the slot's default fill rule;
-2. fill   -- every open grant with a fill rule is filled again, in
-   chronological order with one shared ScheduleContext;
+2. fill   -- every grant with a fill rule is filled again around what
+   its owner pinned, in chronological order with one shared
+   ScheduleContext. Locked and compiled ones too, until a day before
+   they air, so an upload made after the deadline still gets on;
 3. lock   -- open, non-exempt grants past their deadline lock; items
    that have become unlistable are dropped;
 4. compile -- locked grants (and exempt ones past their deadline) are
@@ -27,7 +29,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from fk.models import Organization, Scheduleitem, Video
+from fk.models import Organization, Scheduleitem, Series, Video
 from scheduling import broadcast_time
 from scheduling.filling import plan
 from scheduling.models import AirtimeGrant, FillRule, GrantItem, RecurringSlot
@@ -108,12 +110,20 @@ def validate_items(grant: AirtimeGrant, videos: Sequence[Video]) -> None:
 
 
 def set_items(
-    grant: AirtimeGrant, videos: Sequence[Video], *, user, now: datetime | None = None
+    grant: AirtimeGrant,
+    videos: Sequence[Video],
+    *,
+    user,
+    now: datetime | None = None,
+    automatic: bool = False,
 ) -> AirtimeGrant:
-    """Replace the whole list, as the organization (or staff) edits it.
+    """Save the list the organization (or staff) chose. Every video given
+    is pinned.
 
-    Editing the list clears the fill rule: the grant is now hand-made. A
-    lock-exempt grant that is already compiled is recompiled at once.
+    With `automatic`, the grant's rule fills the time the pinned videos
+    leave, now and on every later run. Without it the grant is hand-made:
+    the rule is cleared and the list stays exactly as saved. A grant that
+    is already compiled is recompiled at once.
     """
     now = now or timezone.now()
     with transaction.atomic():
@@ -121,30 +131,28 @@ def set_items(
         if not can_edit(grant, user, now):
             raise PermissionDenied("This grant can no longer be edited.")
         validate_items(grant, videos)
-        _replace_items(grant, videos)
-        grant.fill_rule = None
+        _replace_items(grant, videos, pinned=len(videos))
+        grant.fill_rule = rule_for(grant) if automatic else None
         grant.save(update_fields=["fill_rule", "updated_at"])
+        if automatic:
+            _fill(grant, _context_for([grant], now), now)
         if grant.state == State.COMPILED:
             compile_grant(grant)
     return grant
 
 
 def make_automatic(grant: AirtimeGrant, *, user, now: datetime | None = None) -> AirtimeGrant:
-    """Switch a grant back to its slot's default fill rule, and fill it now."""
-    now = now or timezone.now()
-    with transaction.atomic():
-        grant = AirtimeGrant.objects.select_for_update().get(pk=grant.pk)
-        if not can_edit(grant, user, now):
-            raise PermissionDenied("This grant can no longer be edited.")
-        rule = grant.origin_slot.default_fill_rule if grant.origin_slot else None
-        if rule is None:
-            raise ValidationError({"fill_rule": "This grant has no fill rule to go back to."})
-        grant.fill_rule = rule
-        grant.save(update_fields=["fill_rule", "updated_at"])
-        _fill(grant, _context_for([grant], now), now)
-        if grant.state == State.COMPILED:
-            compile_grant(grant)
-    return grant
+    """Unpin everything and let the grant's rule program the whole window."""
+    return set_items(grant, [], user=user, now=now, automatic=True)
+
+
+def rule_for(grant: AirtimeGrant) -> FillRule:
+    """The rule an automatic grant fills by: the one it has, else its
+    slot's, else the owner's standard one."""
+    if grant.fill_rule is not None:
+        return grant.fill_rule
+    slot_rule = grant.origin_slot.default_fill_rule if grant.origin_slot else None
+    return slot_rule or standard_fill_rule(grant.organization)
 
 
 def create_grant(
@@ -233,26 +241,82 @@ def cancel_grant(grant: AirtimeGrant, *, now: datetime | None = None) -> Airtime
 
 def default_fill_rule(organization: Organization) -> FillRule:
     """The rule a newly approved or transferred slot gets: the owner's
-    newest uploads, filling the window. Doing nothing still works."""
+    new uploads first, then their archive, least aired first, filling
+    the window. Doing nothing still works, and does not repeat weekly."""
     return FillRule.objects.create(
         organization=organization,
-        name=f"Newest from {organization.name}"[:100],
+        name=f"New, then archive, from {organization.name}"[:100],
         pool=FillRule.Pool.ORGANIZATION,
-        ordering=FillRule.Ordering.LATEST,
+        ordering=FillRule.Ordering.PREMIERE,
         mode=FillRule.Mode.FILL,
     )
 
 
 def standard_fill_rule(organization: Organization) -> FillRule:
-    """The owner's newest uploads, filling the window: an existing rule
-    like that if the organization has one, otherwise a new one."""
+    """The owner's new uploads, then their archive, filling the window:
+    an existing rule like that if the organization has one, otherwise a
+    new one."""
     existing = FillRule.objects.filter(
         organization=organization,
         pool=FillRule.Pool.ORGANIZATION,
-        ordering=FillRule.Ordering.LATEST,
+        ordering=FillRule.Ordering.PREMIERE,
         mode=FillRule.Mode.FILL,
     ).first()
     return existing or default_fill_rule(organization)
+
+
+def series_fill_rule(series: Series) -> FillRule:
+    """The series' newest episode not yet aired first, then its earlier
+    episodes, least aired first: an existing rule like that, otherwise a
+    new one."""
+    rule, _ = FillRule.objects.get_or_create(
+        organization=series.organization,
+        pool=FillRule.Pool.SERIES,
+        series=series,
+        ordering=FillRule.Ordering.PREMIERE,
+        mode=FillRule.Mode.FILL,
+        defaults={"name": f"Series: {series.name}"[:100]},
+    )
+    return rule
+
+
+def set_slot_series(
+    slot: RecurringSlot, series: Series | None, *, user, now: datetime | None = None
+) -> RecurringSlot:
+    """The owner points a slot at one of their series, or (None) back at
+    everything they upload.
+
+    The grants the slot already issued follow, as long as they still fill
+    themselves and are not past the point where automatic grants stop
+    changing; hand-made lists are left alone.
+    """
+    now = now or timezone.now()
+    owner = slot.organization
+    if owner is None or not may_act_for(user, owner):
+        raise PermissionDenied("You can't program this slot.")
+    if series is not None and series.organization_id != owner.pk:
+        raise ValidationError({"series": "The series must belong to the slot's organization."})
+    with transaction.atomic():
+        rule = series_fill_rule(series) if series else standard_fill_rule(owner)
+        slot.default_fill_rule = rule
+        slot.save(update_fields=["default_fill_rule"])
+        following = list(
+            slot.grants.filter(fill_rule__isnull=False)
+            .exclude(fill_rule=rule)
+            .filter(
+                Q(state=State.OPEN)
+                | Q(state__in=(State.LOCKED, State.COMPILED), starttime__gt=now + REFRESH_UNTIL)
+            )
+            .filter(starttime__gt=now)
+            .order_by("starttime")
+        )
+        context = _context_for(following, now)
+        for grant in following:
+            grant.fill_rule = rule
+            grant.save(update_fields=["fill_rule", "updated_at"])
+            if _fill(grant, context, now) and grant.state == State.COMPILED:
+                compile_grant(grant)
+    return slot
 
 
 def jukebox_fill_rule() -> FillRule:
@@ -407,18 +471,31 @@ def issue_grants(now: datetime) -> list[AirtimeGrant]:
     return issued
 
 
+# How long before air an automatic grant that is already locked or
+# compiled stops picking up changes: the published schedule is firm for
+# the coming day.
+REFRESH_UNTIL = timedelta(hours=24)
+
+
 def fill_grants(now: datetime) -> None:
-    """Refill every open grant that has a fill rule, oldest first, with one
-    shared context. Items change only when the answer did."""
+    """Refill every grant that has a fill rule, oldest first, with one
+    shared context: open ones, and locked or compiled ones still more
+    than REFRESH_UNTIL from air. Items change only when the answer did;
+    a compiled grant whose answer changed is recompiled."""
     grants = list(
-        AirtimeGrant.objects.filter(state=State.OPEN, fill_rule__isnull=False)
+        AirtimeGrant.objects.filter(fill_rule__isnull=False)
+        .filter(
+            Q(state=State.OPEN)
+            | Q(state__in=(State.LOCKED, State.COMPILED), starttime__gt=now + REFRESH_UNTIL)
+        )
         .select_related("fill_rule")
         .order_by("starttime")
     )
     context = _context_for(grants, now)
     for grant in grants:
         with transaction.atomic():
-            _fill(grant, context, now)
+            if _fill(grant, context, now) and grant.state == State.COMPILED:
+                compile_grant(grant)
 
 
 def lock_grants(now: datetime) -> None:
@@ -433,11 +510,11 @@ def lock_grants(now: datetime) -> None:
                 .filter(pk__in=[i.video_id for i in items])
                 .values_list("pk", flat=True)
             )
-            kept = [i.video for i in items if i.video_id in listable]
+            kept = [i for i in items if i.video_id in listable]
             if len(kept) != len(items):
                 dropped = [i.video_id for i in items if i.video_id not in listable]
                 logger.warning("Dropping unlistable videos %s from %s at lock", dropped, grant)
-                _replace_items(grant, kept)
+                _replace_items(grant, [i.video for i in kept], pinned=sum(i.pinned for i in kept))
             grant.state = State.LOCKED
             grant.save(update_fields=["state", "updated_at"])
 
@@ -544,20 +621,26 @@ class _Blocked(Exception):
         self.item = item
 
 
-def _replace_items(grant: AirtimeGrant, videos: Sequence[Video]) -> None:
+def _replace_items(grant: AirtimeGrant, videos: Sequence[Video], pinned: int = 0) -> None:
+    """Pinned items lead the list, so the first `pinned` videos are the
+    pinned ones."""
     grant.items.all().delete()
     GrantItem.objects.bulk_create(
-        GrantItem(grant=grant, position=position, video=video)
+        GrantItem(grant=grant, position=position, video=video, pinned=position < pinned)
         for position, video in enumerate(videos)
     )
 
 
-def _fill(grant: AirtimeGrant, context: ScheduleContext, now: datetime) -> None:
+def _fill(grant: AirtimeGrant, context: ScheduleContext, now: datetime) -> bool:
+    """Fill `grant` around its pinned items. Returns whether the list changed."""
     assert grant.fill_rule is not None
-    picks = plan(grant.fill_rule, grant, context, now)
-    current = list(grant.items.values_list("video_id", flat=True))
-    if [v.pk for v in picks] != current:
-        _replace_items(grant, picks)
+    items = list(grant.items.select_related("video"))
+    pinned = [item.video for item in items if item.pinned]
+    picks = plan(grant.fill_rule, grant, context, now, pinned=pinned)
+    if [v.pk for v in picks] == [item.video_id for item in items]:
+        return False
+    _replace_items(grant, picks, pinned=len(pinned))
+    return True
 
 
 def _context_for(refilling: Sequence[AirtimeGrant], now: datetime) -> ScheduleContext:
@@ -566,7 +649,9 @@ def _context_for(refilling: Sequence[AirtimeGrant], now: datetime) -> ScheduleCo
     grant's list."""
     horizon = max([broadcast_time.issue_horizon(now), *(g.endtime for g in refilling)], default=now)
     context = ScheduleContext()
-    for row in Scheduleitem.objects.overlapping(now, horizon).select_related("video"):
+    context.refilling = {g.pk for g in refilling}
+    rows = Scheduleitem.objects.overlapping(now, horizon).exclude(grant__in=context.refilling)
+    for row in rows.select_related("video"):
         context.count(row.video, row.duration, compiled=True)
     others = (
         GrantItem.objects.filter(grant__starttime__lt=horizon, grant__endtime__gt=now)

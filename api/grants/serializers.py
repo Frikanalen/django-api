@@ -48,7 +48,7 @@ class GrantItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = GrantItem
-        fields = ("position", "video")
+        fields = ("position", "video", "pinned")
         read_only_fields = fields
 
 
@@ -126,6 +126,12 @@ class GrantItemWriteSerializer(serializers.Serializer):
 
 
 class GrantItemsWriteSerializer(serializers.Serializer):
-    """The whole list, in playing order. It replaces the current one."""
+    """The videos the organization chose, in playing order. They replace
+    the current list and are pinned."""
 
     items = GrantItemWriteSerializer(many=True)
+    automatic = serializers.BooleanField(
+        default=False,
+        help_text="True: the grant's rule fills the time these videos leave, and "
+        "keeps doing so. False: the list stays exactly as given.",
+    )

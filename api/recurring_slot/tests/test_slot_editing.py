@@ -5,7 +5,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from fk.models import Organization, User
+from fk.models import Organization, Series, User
 from scheduling.models import FillRule, RecurringSlot
 
 pytestmark = pytest.mark.django_db
@@ -278,3 +278,36 @@ def test_a_jukebox_slot_needs_the_station_organization(staff_client: APIClient, 
     )
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert error_attrs(response) == {"jukebox"}
+
+
+def test_a_member_points_their_slot_at_a_series(member, member_client, organization, slot) -> None:
+    member.identity_confirmed = True
+    member.save()
+    series = Series.objects.create(organization=organization, name="Ukens program")
+    url = reverse("api-recurring-slot-series", args=[slot.pk])
+
+    response = member_client.put(url, {"series": series.pk}, format="json")
+
+    assert response.status_code == 200, response.content
+    rule = response.json()["defaultFillRule"]
+    assert (rule["pool"], rule["series"], rule["seriesName"]) == (
+        "series",
+        series.pk,
+        "Ukens program",
+    )
+
+    response = member_client.put(url, {"series": None}, format="json")
+    assert response.json()["defaultFillRule"]["pool"] == "organization"
+
+
+def test_an_outsider_cannot_point_a_slot(slot) -> None:
+    outsider = APIClient()
+    outsider.force_authenticate(
+        User.objects.create(email="outsider@example.test", identity_confirmed=True)
+    )
+
+    response = outsider.put(
+        reverse("api-recurring-slot-series", args=[slot.pk]), {"series": None}, format="json"
+    )
+
+    assert response.status_code == 403

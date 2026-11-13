@@ -7,7 +7,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
 from api.auth.permissions import can_administer_organization
-from fk.models import Organization
+from fk.models import Organization, Series
 from scheduling import broadcast_time, services
 from scheduling.models import (
     FillRule,
@@ -19,10 +19,25 @@ from scheduling.models import (
 
 
 class FillRuleSummarySerializer(serializers.ModelSerializer):
+    series_name = serializers.CharField(
+        source="series.name", read_only=True, allow_null=True, default=None
+    )
+
     class Meta:
         model = FillRule
-        fields = ("id", "name", "pool", "ordering", "mode")
+        fields = ("id", "name", "pool", "ordering", "mode", "series", "series_name")
         read_only_fields = fields
+
+
+class SlotSeriesSerializer(serializers.Serializer):
+    """What a slot's automatic programming draws from."""
+
+    series = serializers.PrimaryKeyRelatedField(
+        queryset=Series.objects.all(),
+        allow_null=True,
+        help_text="One of the owner's series: each grant leads with its newest "
+        "episode not yet aired, then earlier ones. Null: everything the owner uploads.",
+    )
 
 
 class RecurringSlotSerializer(serializers.ModelSerializer):
@@ -40,8 +55,8 @@ class RecurringSlotSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False,
         allow_null=True,
-        help_text="Leave out to use the owner's 'newest uploads, fill the window' "
-        "rule, created if needed. Null means grants don't fill themselves.",
+        help_text="Leave out to use the owner's standard rule (new uploads, then the "
+        "archive), created if needed. Null means grants don't fill themselves.",
     )
     jukebox = serializers.BooleanField(
         write_only=True,
