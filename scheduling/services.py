@@ -24,13 +24,13 @@ from collections.abc import Sequence
 from datetime import datetime, time, timedelta
 
 from django.conf import settings
+from django.core.cache import cache
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
 from fk.models import Organization, Scheduleitem, Video
-from fk.signals import clear_page_cache_after_commit
 from programming.generators import plan
 from programming.models import Recipe
 from programming.selection import ScheduleContext
@@ -587,7 +587,7 @@ def recompile_for_video(video: Video, now: datetime | None = None) -> None:
         .exclude(is_live=live)
         .update(is_live=live)
     ):
-        clear_page_cache_after_commit()
+        transaction.on_commit(cache.clear)
     for grant in grants:
         rows = list(grant.schedule_items.filter(video=video).values_list("duration", "is_live"))
         listed = grant.items.filter(video=video).count()

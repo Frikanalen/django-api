@@ -651,3 +651,30 @@ def test_a_live_video_airs_live_until_it_has_a_file(make_grant, make_video, orga
 
     row = Scheduleitem.objects.get(grant=grant)
     assert not row.is_live
+
+
+def test_a_staff_entry_changing_how_it_airs_clears_the_page_cache(
+    make_video, organization, settings, django_capture_on_commit_callbacks
+) -> None:
+    # Anonymous callers read the schedule from the page cache, and the bulk
+    # update that flips a staff entry's is_live sends no signal to clear it.
+    settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+    from django.core.cache import cache
+
+    video = make_video(30, proper_import=False)
+    LiveTransmission.objects.create(
+        video=video, source=LiveSource.objects.create(organization=organization, name="Studio")
+    )
+    Scheduleitem.objects.create(
+        video=video,
+        starttime=NOW + timedelta(days=1),
+        duration=timedelta(minutes=30),
+        is_live=True,
+    )
+    Video.objects.filter(pk=video.pk).update(proper_import=True)
+    cache.set("cached-page", "stale schedule")
+
+    with django_capture_on_commit_callbacks(execute=True):
+        services.recompile_for_video(video, now=NOW)
+
+    assert cache.get("cached-page") is None
