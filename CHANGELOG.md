@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.3.0](https://github.com/Frikanalen/django-api/compare/v3.2.0...v3.3.0) (2026-11-13)
+
+
+### Features
+
+* **grants:** airtime given directly can be set up at once ([#130](https://github.com/Frikanalen/django-api/issues/130)) ([37553e4](https://github.com/Frikanalen/django-api/commit/37553e4a46f743bee46a91dccbb8ccd4fe4f5285))
+
 ## [3.2.0](https://github.com/Frikanalen/django-api/compare/v3.1.0...v3.2.0) (2026-11-13)
 
 
