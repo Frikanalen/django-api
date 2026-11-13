@@ -124,7 +124,7 @@ class VideoFile(models.Model):
     def location(self, relative=False):
         filename = os.path.basename(self.filename)
 
-        path = "/".join((str(self.video.id), self.variant, filename))
+        path = "/".join((str(self.video_id), self.variant, filename))
 
         if relative:
             return path

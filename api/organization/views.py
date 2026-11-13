@@ -14,8 +14,10 @@ class OrganizationList(generics.ListCreateAPIView):
 
     def get_queryset(self):
         # An organization with no ansvarlig redaktor is staff-only until
-        # one is appointed; see OrganizationQuerySet.
-        return Organization.objects.visible_to(self.request.user)
+        # one is appointed; see OrganizationQuerySet. The serializer reads
+        # the editor's name, email and phone, so join it rather than fetch
+        # it once per organization.
+        return Organization.objects.visible_to(self.request.user).select_related("editor")
 
     def perform_create(self, serializer):
         serializer.save(editor=self.request.user)
