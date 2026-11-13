@@ -255,6 +255,20 @@ def standard_fill_rule(organization: Organization) -> FillRule:
     return existing or default_fill_rule(organization)
 
 
+def jukebox_fill_rule() -> FillRule:
+    """The video jukebox: a weighted draw from the filler pool, filling
+    the window. One rule, owned by the station, shared by every jukebox
+    slot."""
+    rule, _ = FillRule.objects.get_or_create(
+        organization_id=station_organization_id(),
+        pool=FillRule.Pool.FILLER,
+        ordering=FillRule.Ordering.WEIGHTED,
+        mode=FillRule.Mode.FILL,
+        defaults={"name": "Video jukebox"},
+    )
+    return rule
+
+
 # How far ahead slot_conflicts looks. Long enough to catch slots that
 # meet only every few weeks or months; short enough to stay cheap.
 CONFLICT_HORIZON = timedelta(weeks=26)
