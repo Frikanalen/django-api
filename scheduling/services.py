@@ -24,6 +24,7 @@ from collections.abc import Sequence
 from datetime import datetime, time, timedelta
 
 from django.conf import settings
+from django.core.cache import cache
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Q
@@ -580,9 +581,13 @@ def recompile_for_video(video: Video, now: datetime | None = None) -> None:
         state=State.COMPILED, starttime__gt=now, items__video=video
     ).distinct()
     # Staff entries have no grant to recompile; they only follow how it airs.
-    Scheduleitem.objects.filter(video=video, grant=None, starttime__gt=now).exclude(
-        is_live=live
-    ).update(is_live=live)
+    # .update() sends no signals, so the page cache is cleared by hand.
+    if (
+        Scheduleitem.objects.filter(video=video, grant=None, starttime__gt=now)
+        .exclude(is_live=live)
+        .update(is_live=live)
+    ):
+        transaction.on_commit(cache.clear)
     for grant in grants:
         rows = list(grant.schedule_items.filter(video=video).values_list("duration", "is_live"))
         listed = grant.items.filter(video=video).count()
