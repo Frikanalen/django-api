@@ -178,6 +178,11 @@ api_patterns: list[URLPattern | URLResolver] = [
         name="api-recurring-slot-detail",
     ),
     path(
+        "recurring-slots/<int:pk>/series",
+        recurring_slot_views.RecurringSlotSeries.as_view(),
+        name="api-recurring-slot-series",
+    ),
+    path(
         "recurring-slot-requests/creation/<int:pk>/decision",
         grant_request_views.RecurringSlotCreationRequestDecision.as_view(),
         name="api-recurring-slot-creation-request-decision",

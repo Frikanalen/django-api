@@ -43,11 +43,13 @@ class FillRule(models.Model):
     class Pool(models.TextChoices):
         ORGANIZATION = "organization", "The organization's uploads"
         PLAYLIST = "playlist", "A playlist"
+        SERIES = "series", "One of the organization's series"
         FILLER = "filler", "The filler pool"
 
     class Ordering(models.TextChoices):
         LATEST = "latest", "Newest first"
         LEAST_AIRED = "least_aired", "Least aired first"
+        PREMIERE = "premiere", "New uploads first, then the archive, least aired first"
         SHUFFLED = "shuffled", "Shuffled"
         WEIGHTED = "weighted", "Weighted draw (fresh, diverse, no repeats)"
 
@@ -72,6 +74,14 @@ class FillRule(models.Model):
         related_name="fill_rules",
         help_text="For playlist pools only.",
     )
+    series = models.ForeignKey(
+        "fk.Series",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="fill_rules",
+        help_text="For series pools only: the rule picks from its episodes.",
+    )
     ordering = models.CharField(max_length=16, choices=Ordering)
     mode = models.CharField(max_length=8, choices=Mode, default=Mode.FILL)
 
@@ -85,6 +95,13 @@ class FillRule(models.Model):
                 ),
                 name="fillrule_playlist_iff_playlist_pool",
             ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(pool="series", series__isnull=False)
+                    | (~models.Q(pool="series") & models.Q(series__isnull=True))
+                ),
+                name="fillrule_series_iff_series_pool",
+            ),
         ]
 
     def __str__(self):
@@ -96,6 +113,12 @@ class FillRule(models.Model):
             raise ValidationError({"playlist": "A playlist pool needs a playlist."})
         if self.pool != self.Pool.PLAYLIST and self.playlist is not None:
             raise ValidationError({"playlist": "Only playlist pools take a playlist."})
+        if self.pool == self.Pool.SERIES and self.series is None:
+            raise ValidationError({"series": "A series pool needs a series."})
+        if self.pool != self.Pool.SERIES and self.series is not None:
+            raise ValidationError({"series": "Only series pools take a series."})
+        if self.series is not None and self.series.organization_id != self.organization_id:
+            raise ValidationError({"series": "The series must belong to the rule's organization."})
 
 
 class RecurringSlot(models.Model):
@@ -287,7 +310,8 @@ class AirtimeGrant(models.Model):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="grants",
-        help_text="While set, the grant fills itself. Editing the list clears it.",
+        help_text="While set, the grant fills the time its pinned items leave. "
+        "Saving a hand-made list clears it.",
     )
     origin_slot = models.ForeignKey(
         RecurringSlot,
@@ -358,11 +382,18 @@ class GrantItem(models.Model):
     """One entry in a grant's list. Items play back-to-back from the
     grant's start; title and length come from the video. A live
     programme is a video with a live transmission and a length set by
-    hand, so it is listed like any other."""
+    hand, so it is listed like any other.
+
+    A pinned item is one the owner chose: it stays, at the head of the
+    list, while the grant's fill rule programs the time left."""
 
     grant = models.ForeignKey(AirtimeGrant, on_delete=models.CASCADE, related_name="items")
     position = models.PositiveIntegerField()
     video = models.ForeignKey("fk.Video", on_delete=models.PROTECT, related_name="grant_items")
+    pinned = models.BooleanField(
+        default=False,
+        help_text="Chosen by the owner. Automatic filling keeps it and fills around it.",
+    )
 
     class Meta:
         ordering = ("grant", "position")

@@ -112,13 +112,19 @@ class AirtimeGrantViewSet(
     @extend_schema(request=GrantItemsWriteSerializer, responses=AirtimeGrantSerializer)
     @action(detail=True, methods=["put"])
     def items(self, request, pk=None):
-        """Replace the whole list. Positions follow the order given."""
+        """Save the chosen videos, pinned, in the order given. With
+        `automatic`, the grant's rule fills the time they leave."""
         grant = self.get_object()
         serializer = GrantItemsWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         videos = [item["video"] for item in serializer.validated_data["items"]]
         try:
-            grant = services.set_items(grant, videos, user=request.user)
+            grant = services.set_items(
+                grant,
+                videos,
+                user=request.user,
+                automatic=serializer.validated_data["automatic"],
+            )
         except DjangoValidationError as error:
             raise _drf(error) from error
         return self._respond(grant)
@@ -126,7 +132,7 @@ class AirtimeGrantViewSet(
     @extend_schema(request=None, responses=AirtimeGrantSerializer)
     @action(detail=True, methods=["post"])
     def automatic(self, request, pk=None):
-        """Switch the grant back to its slot's fill rule, and fill it now."""
+        """Unpin everything and let the grant's rule program the whole window."""
         grant = self.get_object()
         try:
             grant = services.make_automatic(grant, user=request.user)

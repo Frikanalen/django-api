@@ -53,6 +53,9 @@ class ScheduleContext:
         self.times_played: Counter[int] = Counter()
         self.compiled_plays: Counter[int] = Counter()
         self.last_video_id: int | None = None
+        # The grants this run fills. What they compiled before is not
+        # counted: the run decides it again.
+        self.refilling: set[int] = set()
 
     def count(
         self, video: Video | None, duration: datetime.timedelta, compiled: bool = False

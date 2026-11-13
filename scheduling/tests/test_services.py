@@ -8,7 +8,15 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.test import override_settings
 
-from fk.models import LiveSource, LiveTransmission, Organization, Scheduleitem, User, Video
+from fk.models import (
+    LiveSource,
+    LiveTransmission,
+    Organization,
+    Scheduleitem,
+    Series,
+    User,
+    Video,
+)
 from scheduling import broadcast_time, services
 from scheduling.models import AirtimeGrant, GrantItem, RecurringSlot
 
@@ -374,9 +382,156 @@ def test_make_automatic_restores_the_slots_rule_and_fills(weekly_slot, make_vide
     assert items(open_) == [newest.pk]
 
 
-def test_make_automatic_needs_a_slot(make_grant, editor) -> None:
-    with pytest.raises(ValidationError, match="no fill rule"):
-        services.make_automatic(make_grant(OPEN_WEEK), user=editor, now=NOW)
+def test_make_automatic_without_a_slot_uses_the_owners_standard_rule(
+    make_grant, make_video, editor, organization
+) -> None:
+    video = make_video(10)
+    grant = make_grant(OPEN_WEEK)
+
+    services.make_automatic(grant, user=editor, now=NOW)
+
+    grant.refresh_from_db()
+    assert grant.fill_rule == services.standard_fill_rule(organization)
+    assert items(grant) == [video.pk]
+
+
+# -- Pinned items --------------------------------------------------------------
+
+
+def test_pinned_items_lead_and_the_rule_fills_the_rest(weekly_slot, make_video, editor) -> None:
+    old, new = make_video(20), make_video(20)
+    chosen = make_video(30, created_time=datetime.datetime(2020, 1, 1, tzinfo=OSLO))
+    services.issue_grants(NOW)
+    open_ = AirtimeGrant.objects.get(starttime=OPEN_WEEK)
+
+    services.set_items(open_, [chosen], user=editor, now=NOW, automatic=True)
+
+    open_.refresh_from_db()
+    assert open_.fill_rule == weekly_slot.default_fill_rule
+    assert items(open_) == [chosen.pk, new.pk]  # 30 + 20; `old` no longer fits
+    assert list(open_.items.values_list("pinned", flat=True)) == [True, False]
+
+    # A later run keeps the pin and still follows new uploads around it.
+    newer = make_video(20)
+    services.fill_grants(NOW)
+    assert items(open_) == [chosen.pk, newer.pk]
+    assert old.pk not in items(open_)
+
+
+def test_a_pinned_video_is_not_picked_again(weekly_slot, make_video, editor) -> None:
+    only = make_video(10)
+    services.issue_grants(NOW)
+    open_ = AirtimeGrant.objects.get(starttime=OPEN_WEEK)
+
+    services.set_items(open_, [only], user=editor, now=NOW, automatic=True)
+
+    assert items(open_) == [only.pk]
+
+
+def test_make_automatic_unpins(weekly_slot, make_video, editor) -> None:
+    newest = make_video(10)
+    chosen = make_video(10, created_time=datetime.datetime(2020, 1, 1, tzinfo=OSLO))
+    services.issue_grants(NOW)
+    open_ = AirtimeGrant.objects.get(starttime=OPEN_WEEK)
+    services.set_items(open_, [chosen], user=editor, now=NOW, automatic=True)
+
+    services.make_automatic(open_, user=editor, now=NOW)
+
+    assert items(open_) == [newest.pk, chosen.pk]
+    assert not open_.items.filter(pinned=True).exists()
+
+
+# -- Staying fresh after the deadline ----------------------------------------
+
+
+def test_a_compiled_automatic_grant_picks_up_a_late_upload(weekly_slot, make_video) -> None:
+    make_video(25)
+    services.run_nightly(NOW)
+    next_week = AirtimeGrant.objects.get(starttime=NEXT_WEEK)
+    assert next_week.state == State.COMPILED
+
+    late = make_video(25)
+    services.run_nightly(NOW + timedelta(days=1))
+
+    assert schedule(next_week)[0][0] == late.pk
+
+
+def test_a_grant_within_a_day_of_air_is_left_alone(weekly_slot, make_video) -> None:
+    make_video(25)
+    services.run_nightly(NOW)
+    this_week = AirtimeGrant.objects.get(starttime=THIS_WEEK)
+    before = schedule(this_week)
+
+    make_video(25)
+    services.run_nightly(THIS_WEEK - timedelta(hours=12))
+
+    assert schedule(this_week) == before
+
+
+def test_a_hand_made_compiled_grant_is_never_refilled(weekly_slot, make_video) -> None:
+    staff = User.objects.create(email="staff@example.test", is_superuser=True)
+    chosen = make_video(25)
+    services.run_nightly(NOW)
+    next_week = AirtimeGrant.objects.get(starttime=NEXT_WEEK)
+    services.set_items(next_week, [chosen], user=staff, now=NOW)
+
+    make_video(25)
+    services.run_nightly(NOW + timedelta(days=1))
+
+    assert [row[0] for row in schedule(next_week)] == [chosen.pk]
+
+
+# -- A slot that follows a series ----------------------------------------------
+
+
+def test_a_slot_pointed_at_a_series_leads_with_its_newest_unaired_episode(
+    weekly_slot, make_video, editor, organization
+) -> None:
+    series = Series.objects.create(organization=organization, name="Ukens program")
+    make_video(30)  # newer, but not in the series
+    first, second = make_video(30, series=series), make_video(30, series=series)
+    make_video(30)
+    services.run_nightly(NOW)
+
+    services.set_slot_series(weekly_slot, series, user=editor, now=NOW)
+
+    weekly_slot.refresh_from_db()
+    assert weekly_slot.default_fill_rule.series == series
+    grants = AirtimeGrant.objects.filter(origin_slot=weekly_slot).order_by("starttime")
+    # The first week leads with the newest episode; once both have been
+    # on, they rotate least aired first, the older one breaking the tie.
+    assert [items(g) for g in grants] == [
+        [second.pk, first.pk],
+        [first.pk, second.pk],
+        [first.pk, second.pk],
+    ]
+    compiled = grants.filter(state=State.COMPILED)[0]
+    assert [row[0] for row in schedule(compiled)] == items(compiled)
+
+
+def test_only_the_owner_points_a_slot_and_only_at_its_own_series(
+    weekly_slot, make_video, editor
+) -> None:
+    other = Organization.objects.create(name="Other", fkmember=True)
+    theirs = Series.objects.create(organization=other, name="Theirs")
+    stranger = User.objects.create(email="stranger@example.test", identity_confirmed=True)
+
+    with pytest.raises(ValidationError, match="must belong"):
+        services.set_slot_series(weekly_slot, theirs, user=editor, now=NOW)
+    with pytest.raises(PermissionDenied):
+        services.set_slot_series(weekly_slot, None, user=stranger, now=NOW)
+
+
+def test_a_slot_goes_back_to_everything_the_owner_uploads(
+    weekly_slot, make_video, editor, organization
+) -> None:
+    series = Series.objects.create(organization=organization, name="Ukens program")
+    services.set_slot_series(weekly_slot, series, user=editor, now=NOW)
+
+    services.set_slot_series(weekly_slot, None, user=editor, now=NOW)
+
+    weekly_slot.refresh_from_db()
+    assert weekly_slot.default_fill_rule == services.standard_fill_rule(organization)
 
 
 def test_create_grant_defaults_the_deadline(organization) -> None:

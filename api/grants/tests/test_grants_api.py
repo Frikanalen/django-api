@@ -246,3 +246,29 @@ def test_staff_exempt_and_cancel(staff, open_grant) -> None:
     assert exempted.json()["lockExempt"] is True
     assert cancelled.json()["state"] == "cancelled"
     assert cancelled.json()["canEdit"] is False
+
+
+def test_put_items_automatic_pins_them_and_fills_the_rest(
+    member, organization, open_grant, video
+) -> None:
+    chosen = Video.objects.create(
+        name="Chosen",
+        creator=member,
+        organization=organization,
+        duration=timedelta(minutes=10),
+        proper_import=True,
+    )
+
+    response = client_for(member).put(
+        items_url(open_grant),
+        {"items": [{"video": chosen.pk}], "automatic": True},
+        format="json",
+    )
+
+    assert response.status_code == 200, response.content
+    body = response.json()
+    assert [(i["video"]["id"], i["pinned"]) for i in body["items"]] == [
+        (chosen.pk, True),
+        (video.pk, False),
+    ]
+    assert body["fillRule"] is not None

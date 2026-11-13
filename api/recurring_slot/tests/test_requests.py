@@ -134,11 +134,11 @@ def test_admin_approval_creates_a_weekly_slot_with_a_default_rule_and_records_au
     assert slot.organization == organization
     assert slot.frequency == RecurringSlot.Frequency.WEEKLY
     assert slot.weekdays == [4]
-    # Doing nothing works: the owner's newest uploads fill the window.
+    # Doing nothing works: new uploads, then the archive, fill the window.
     rule = slot.default_fill_rule
     assert rule is not None
     assert rule.organization == organization
-    assert (rule.pool, rule.ordering, rule.mode) == ("organization", "latest", "fill")
+    assert (rule.pool, rule.ordering, rule.mode) == ("organization", "premiere", "fill")
     assert slot.start_time == time(20, 30)
     assert slot.duration == timedelta(hours=1, minutes=30)
     assert slot_request.reviewed_by == staff
