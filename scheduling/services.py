@@ -191,8 +191,11 @@ def create_grant(
     locks_at: datetime | None = None,
     lock_exempt: bool = False,
     recipe: Recipe | None = None,
+    videos: Sequence[Video] = (),
 ) -> AirtimeGrant:
-    """Staff gives an organization a window directly."""
+    """Staff gives an organization a window directly, optionally with the
+    videos it plays already in it (pinned, in order). Everything happens
+    together: if the videos don't fit, no grant is made."""
     if organization.is_rogue:
         raise ValidationError({"organization": "This organization is suspended."})
     grant = AirtimeGrant(
@@ -206,6 +209,9 @@ def create_grant(
     grant.full_clean()
     with transaction.atomic():
         grant.save()
+        if videos:
+            validate_items(grant, videos)
+            _replace_items(grant, videos, pinned=len(videos))
         _publish_if_due(grant)
     return grant
 
