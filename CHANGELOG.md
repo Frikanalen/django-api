@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.4.0](https://github.com/Frikanalen/django-api/compare/v3.3.1...v3.4.0) (2026-11-14)
+
+
+### Features
+
+* **grants:** staff create a grant with its videos already in it ([#136](https://github.com/Frikanalen/django-api/issues/136)) ([950cbe2](https://github.com/Frikanalen/django-api/commit/950cbe22c49c856549cd1d2ef3cdf03577655379))
+
+
+### Bug Fixes
+
+* **schedule:** clear the page cache when a staff entry's is_live flips ([#134](https://github.com/Frikanalen/django-api/issues/134)) ([a22b114](https://github.com/Frikanalen/django-api/commit/a22b1147b328677798467dde716285c77ae26ac7))
+
 ## [3.3.1](https://github.com/Frikanalen/django-api/compare/v3.3.0...v3.3.1) (2026-11-13)
 
 
