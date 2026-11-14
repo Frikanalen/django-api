@@ -6,7 +6,7 @@ from rest_framework import serializers
 from api.programming.serializers import RecipeSerializer
 from fk.models import LiveSource, Organization, Video
 from scheduling import services
-from scheduling.models import AirtimeGrant, GrantItem
+from scheduling.models import AirtimeGrant, GrantItem, Poster
 
 OSLO = ZoneInfo("Europe/Oslo")
 
@@ -44,12 +44,22 @@ class GrantItemVideoSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class GrantItemPosterSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Poster
+        fields = ("id", "template", "heading", "text", "duration")
+        read_only_fields = fields
+
+
 class GrantItemSerializer(serializers.ModelSerializer):
-    video = GrantItemVideoSerializer(read_only=True)
+    video = GrantItemVideoSerializer(read_only=True, allow_null=True)
+    poster = GrantItemPosterSerializer(
+        read_only=True, allow_null=True, help_text="Set instead of `video` for a text poster."
+    )
 
     class Meta:
         model = GrantItem
-        fields = ("position", "video", "pinned")
+        fields = ("position", "video", "poster", "pinned")
         read_only_fields = fields
 
 
@@ -59,7 +69,17 @@ class AirtimeGrantSerializer(serializers.ModelSerializer):
     endtime = serializers.DateTimeField(default_timezone=OSLO, read_only=True)
     locks_at = serializers.DateTimeField(default_timezone=OSLO, read_only=True)
     items = GrantItemSerializer(many=True, read_only=True)
-    items_duration = serializers.DurationField(read_only=True)
+    items_duration = serializers.DurationField(
+        read_only=True,
+        help_text="From the grant's start to the end of the list, with the gaps that "
+        "start each programme on the five-minute grid.",
+    )
+    padded = serializers.BooleanField(
+        read_only=True,
+        help_text="Whether programmes start on the five-minute grid, at least 30 s "
+        "after the programme before. Posters follow whatever is before them. "
+        "False for a jukebox grant, which plays back to back.",
+    )
     can_edit = serializers.SerializerMethodField()
     recipe = RecipeSerializer(
         read_only=True,
@@ -81,6 +101,7 @@ class AirtimeGrantSerializer(serializers.ModelSerializer):
             "origin_slot",
             "items",
             "items_duration",
+            "padded",
             "can_edit",
         )
         read_only_fields = fields
@@ -96,7 +117,20 @@ class AirtimeGrantSerializer(serializers.ModelSerializer):
 
 
 class GrantItemWriteSerializer(serializers.Serializer):
-    video = serializers.PrimaryKeyRelatedField(queryset=Video.objects.all())
+    """A video or a text poster: exactly one of the two."""
+
+    video = serializers.PrimaryKeyRelatedField(queryset=Video.objects.all(), required=False)
+    poster = serializers.PrimaryKeyRelatedField(queryset=Poster.objects.all(), required=False)
+
+    def validate(self, attrs):
+        if ("video" in attrs) == ("poster" in attrs):
+            raise serializers.ValidationError("Give either a video or a poster.")
+        return attrs
+
+
+def entries(items) -> list:
+    """The videos and posters a written list names, in order."""
+    return [item.get("video") or item["poster"] for item in items]
 
 
 class AirtimeGrantCreateSerializer(serializers.ModelSerializer):

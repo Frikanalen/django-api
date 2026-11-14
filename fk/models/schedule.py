@@ -59,6 +59,17 @@ class Scheduleitem(models.Model):
         related_name="schedule_items",
     )
 
+    # A member's text poster, aired with the graphics template instead of
+    # a video. Not a programme: the public schedule and the EPG leave
+    # these rows out (see ScheduleitemQuerySet.programmes).
+    poster = models.ForeignKey(
+        "scheduling.Poster",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="schedule_items",
+    )
+
     # Published as <Live> in the TV-Anytime feed. A property of the
     # transmission, not of the video, which is why it sits here: the same
     # recording can go out live once and as a repeat afterwards, and a live

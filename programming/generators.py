@@ -30,9 +30,14 @@ from programming.selection import ScheduleContext, Selector, WeightedSelector, d
 
 class Window(Protocol):
     pk: int
+    starttime: datetime
+    endtime: datetime
 
     @property
     def duration(self) -> timedelta: ...
+
+    @property
+    def padded(self) -> bool: ...
 
 
 # -- Candidates: which videos a recipe may use --------------------------------
@@ -168,23 +173,41 @@ def plan(
     window: Window,
     context: ScheduleContext,
     now: datetime,
-    pinned: Sequence[Video] = (),
-) -> list[Video]:
-    """What `window` lists under `recipe`: the `pinned` videos its owner
-    chose, in their order, then whatever the recipe picks for the time
-    left, back-to-back from the start. A pinned video is never picked a
-    second time."""
-    for video in pinned:
+    pinned: Sequence = (),
+) -> list:
+    """What `window` lists under `recipe`: the `pinned` entries its owner
+    chose (videos and posters), in their order, then whatever videos the
+    recipe picks for the time left, laid out as they will air (see
+    :mod:`scheduling.layout`). A pinned video is never picked a second
+    time."""
+    from scheduling import layout
+
+    videos = [entry for entry in pinned if isinstance(entry, Video)]
+    for video in videos:
         context.record(video)
-    chosen = {video.pk for video in pinned}
+    chosen = {video.pk for video in videos}
     pool = [video for video in candidates(recipe, now) if video.pk not in chosen]
     selector = KINDS[recipe.kind].selector(pool, window, context, now)
-    picks: list[Video] = list(pinned)
-    remaining = window.duration - sum((v.duration for v in pinned), timedelta(0))
-    while remaining > timedelta(0):
+    picks: list = list(pinned)
+    cursor = layout.end_of(window.starttime, picks, padded=window.padded)
+    while True:
+        # Every pick is a programme, so where the next one would start
+        # does not depend on which it is.
+        previous = picks[-1] if picks else None
+        start = layout.next_start(cursor, previous, _PROGRAMME, padded=window.padded)
+        remaining = window.endtime - start
+        if remaining <= timedelta(0):
+            break
         pick = selector.pick(remaining)
         if pick is None:
             break
         picks.append(pick)
-        remaining -= pick.duration
+        cursor = start + pick.duration
     return picks
+
+
+class _Programme:
+    """Stands in for "some video" when asking where the next one starts."""
+
+
+_PROGRAMME = _Programme()
