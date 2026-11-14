@@ -95,6 +95,10 @@ class AirtimeGrantSerializer(serializers.ModelSerializer):
         return request is not None and services.can_edit(grant, request.user)
 
 
+class GrantItemWriteSerializer(serializers.Serializer):
+    video = serializers.PrimaryKeyRelatedField(queryset=Video.objects.all())
+
+
 class AirtimeGrantCreateSerializer(serializers.ModelSerializer):
     """Staff gives an organization a window of airtime directly."""
 
@@ -107,10 +111,24 @@ class AirtimeGrantCreateSerializer(serializers.ModelSerializer):
         help_text="Defaults to the Monday 00:00 before the grant's week airs.",
     )
     recipe = RecipeSerializer(required=False, allow_null=True)
+    items = GrantItemWriteSerializer(
+        many=True,
+        required=False,
+        help_text="Videos already in the grant, pinned, in playing order. They must fit "
+        "the window; otherwise no grant is made.",
+    )
 
     class Meta:
         model = AirtimeGrant
-        fields = ("organization", "starttime", "endtime", "locks_at", "lock_exempt", "recipe")
+        fields = (
+            "organization",
+            "starttime",
+            "endtime",
+            "locks_at",
+            "lock_exempt",
+            "recipe",
+            "items",
+        )
 
 
 class AirtimeGrantUpdateSerializer(serializers.Serializer):
@@ -123,10 +141,6 @@ class AirtimeGrantUpdateSerializer(serializers.Serializer):
     )
     locks_at = serializers.DateTimeField(default_timezone=OSLO, required=False)
     lock_exempt = serializers.BooleanField(required=False)
-
-
-class GrantItemWriteSerializer(serializers.Serializer):
-    video = serializers.PrimaryKeyRelatedField(queryset=Video.objects.all())
 
 
 class GrantItemsWriteSerializer(serializers.Serializer):

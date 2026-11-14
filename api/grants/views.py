@@ -96,6 +96,7 @@ class AirtimeGrantViewSet(
         serializer = AirtimeGrantCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
+        data["videos"] = [item["video"] for item in data.pop("items", [])]
         if data.get("recipe"):
             data["recipe"] = build_recipe(
                 data["recipe"], organization=data["organization"], user=request.user

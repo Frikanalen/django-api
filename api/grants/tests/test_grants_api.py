@@ -243,6 +243,50 @@ def test_staff_cannot_give_airtime_in_the_past_or_to_a_suspended_organization(
     assert response.json()["errors"][0]["attr"] == "organization"
 
 
+def test_staff_set_up_one_video_for_an_organization(staff, organization, video) -> None:
+    start = in_days(2)
+
+    response = client_for(staff).post(
+        reverse("api-grant-list"),
+        {
+            "organization": organization.pk,
+            "starttime": start.isoformat(),
+            "endtime": (start + video.duration).isoformat(),
+            "recipe": None,
+            "items": [{"video": video.pk}],
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201, response.content
+    body = response.json()
+    assert [item["video"]["id"] for item in body["items"]] == [video.pk]
+    assert body["items"][0]["pinned"] is True
+    assert body["recipe"] is None
+    # Past its usual deadline, so it is on the schedule at once.
+    grant = AirtimeGrant.objects.get()
+    assert list(grant.schedule_items.values_list("video_id", flat=True)) == [video.pk]
+
+
+def test_a_grant_whose_videos_do_not_fit_is_not_made(staff, organization, video) -> None:
+    start = in_days(12)
+
+    response = client_for(staff).post(
+        reverse("api-grant-list"),
+        {
+            "organization": organization.pk,
+            "starttime": start.isoformat(),
+            "endtime": (start + timedelta(minutes=10)).isoformat(),
+            "items": [{"video": video.pk}],
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["attr"] == "items"
+    assert not AirtimeGrant.objects.exists()
+
+
 def test_staff_cannot_create_an_overlapping_grant(staff, organization, open_grant) -> None:
     response = client_for(staff).post(
         reverse("api-grant-list"),
