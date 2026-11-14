@@ -131,7 +131,10 @@ def test_put_items_replaces_the_list(member, open_grant, video) -> None:
     ]
     assert body["items"][0]["video"]["pendingUpload"] is True
     assert body["items"][0]["video"]["liveSource"] is None
-    assert body["itemsDuration"] == "00:30:00"
+    # The 10-minute pending upload, then the 20-minute video on the
+    # five-minute grid at least 30 s later: 0:10:30 rounds up to 0:15.
+    assert body["itemsDuration"] == "00:35:00"
+    assert body["padded"] is True
 
 
 def test_put_items_refuses_an_overrun(member, open_grant, video) -> None:

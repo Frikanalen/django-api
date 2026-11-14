@@ -284,6 +284,7 @@ def test_list_serializes_nested_video_details(
                     }
                 ],
             },
+            "poster": None,
             "schedulereason": Scheduleitem.REASON_LEGACY,
             "starttime": "2015-01-02T10:00:00+01:00",
             "endtime": "2015-01-02T11:00:00+01:00",
@@ -339,6 +340,7 @@ def test_list_serializes_named_programming_without_a_video(
             "id": item.pk,
             "default_name": "Direct broadcast",
             "video": None,
+            "poster": None,
             "schedulereason": Scheduleitem.REASON_ADMIN,
             "starttime": "2015-01-02T12:00:00+01:00",
             "endtime": "2015-01-02T12:30:00+01:00",

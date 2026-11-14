@@ -24,6 +24,8 @@ class ScheduleitemViewSet(viewsets.ModelViewSet):
 
     `surrounding`: Include event before and after the window.
 
+    `include_posters`: Include members' text posters (for playout).
+
     `ordering`: Field to order by. Prefix '-' for desc. Defaults to 'starttime'.
     """
 
@@ -31,7 +33,7 @@ class ScheduleitemViewSet(viewsets.ModelViewSet):
     # The files themselves still need prefetching; their format does not,
     # now that it is a column on the row rather than a table to join.
     queryset = Scheduleitem.objects.select_related(
-        "video__organization", "video__live_transmission__source"
+        "video__organization", "video__live_transmission__source", "poster__organization"
     ).prefetch_related(
         "video__categories",
         "video__videofile_set",

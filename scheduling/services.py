@@ -35,8 +35,8 @@ from programming.generators import plan
 from programming.models import Recipe
 from programming.selection import ScheduleContext
 from programming.services import uploads_recipe
-from scheduling import broadcast_time
-from scheduling.models import AirtimeGrant, GrantItem, RecurringSlot
+from scheduling import broadcast_time, layout
+from scheduling.models import AirtimeGrant, GrantItem, Poster, RecurringSlot
 
 logger = logging.getLogger(__name__)
 
@@ -89,9 +89,20 @@ def can_edit(grant: AirtimeGrant, user, now: datetime | None = None) -> bool:
 # -- Editing a grant ---------------------------------------------------------
 
 
-def validate_items(grant: AirtimeGrant, videos: Sequence[Video]) -> None:
+# What a grant lists: videos, and the owner's text posters.
+Entry = Video | Poster
+
+
+def validate_items(grant: AirtimeGrant, entries: Sequence[Entry]) -> None:
     """Local to the grant: it owns its window, so there are no airtime
-    conflicts to check -- only that everything is listable and fits."""
+    conflicts to check -- only that everything is listable and fits,
+    laid out as it will air (see :mod:`scheduling.layout`)."""
+    videos = [e for e in entries if isinstance(e, Video)]
+    foreign = [
+        e for e in entries if isinstance(e, Poster) and e.organization_id != grant.organization_id
+    ]
+    if foreign:
+        raise ValidationError({"items": "A poster can only air in its own organization's airtime."})
     listable = set(
         Video.objects.listable().filter(pk__in=[v.pk for v in videos]).values_list("pk", flat=True)
     )
@@ -105,10 +116,14 @@ def validate_items(grant: AirtimeGrant, videos: Sequence[Video]) -> None:
                 "that will follow)."
             }
         )
-    total = sum((v.duration for v in videos), timedelta(0))
-    if total > grant.duration:
+    end = layout.end_of(grant.starttime, entries, padded=grant.padded)
+    if end > grant.endtime:
+        total = end - grant.starttime
         raise ValidationError(
-            {"items": f"The list runs {total}, which is longer than the window ({grant.duration})."}
+            {
+                "items": f"The list runs {total} with the breaks between programmes, "
+                f"which is longer than the window ({grant.duration})."
+            }
         )
 
 
@@ -121,7 +136,7 @@ KEEP = _Keep()
 
 def set_items(
     grant: AirtimeGrant,
-    videos: Sequence[Video],
+    videos: Sequence[Entry],
     *,
     user,
     now: datetime | None = None,
@@ -129,8 +144,8 @@ def set_items(
     recipe: Recipe | _Keep = KEEP,
     whole_slot: bool = False,
 ) -> AirtimeGrant:
-    """Save the list the organization (or staff) chose. Every video given
-    is pinned.
+    """Save the list the organization (or staff) chose: videos and
+    posters, in order. Every entry given is pinned.
 
     With `automatic`, a recipe fills the time the pinned videos leave,
     now and on every later run: `recipe` if given, otherwise the one the
@@ -191,7 +206,7 @@ def create_grant(
     locks_at: datetime | None = None,
     lock_exempt: bool = False,
     recipe: Recipe | None = None,
-    videos: Sequence[Video] = (),
+    videos: Sequence[Entry] = (),
 ) -> AirtimeGrant:
     """Staff gives an organization a window directly, optionally with the
     videos it plays already in it (pinned, in order). Everything happens
@@ -415,6 +430,90 @@ def transfer_slot(slot: RecurringSlot, organization: Organization) -> None:
     slot.save(update_fields=["organization", "recipe"])
 
 
+# -- Text posters ------------------------------------------------------------
+
+
+def create_poster(*, organization: Organization, user, **fields) -> Poster:
+    """A member (or staff) makes a text poster for their organization."""
+    if not may_act_for(user, organization):
+        raise PermissionDenied("You can't make posters for this organization.")
+    poster = Poster(organization=organization, **fields)
+    if "duration" not in fields:
+        poster.duration = max(poster.duration, poster.minimum_duration)
+    poster.full_clean()
+    poster.save()
+    return poster
+
+
+def _coming_grants(poster: Poster, now: datetime):
+    """The grants yet to end that list `poster`."""
+    return (
+        AirtimeGrant.objects.active()
+        .filter(items__poster=poster, endtime__gt=now)
+        .distinct()
+        .order_by("starttime")
+    )
+
+
+def update_poster(poster: Poster, *, user, now: datetime | None = None, **changes) -> Poster:
+    """Change a poster's text, template or length.
+
+    The text can be corrected until it airs, in every grant that lists
+    it, as long as it can still be read in the poster's length. Its length changes the schedule, so it can only change where the
+    user could edit the list too, and only if the list still fits; the
+    compiled grants that list it are recompiled at once, which also tells
+    playout to show the new text.
+    """
+    now = now or timezone.now()
+    if not may_act_for(user, poster.organization):
+        raise PermissionDenied("You can't change this poster.")
+    with transaction.atomic():
+        poster = Poster.objects.select_for_update().get(pk=poster.pk)
+        old_duration = poster.duration
+        for field, value in changes.items():
+            setattr(poster, field, value)
+        poster.full_clean()
+        grants = list(_coming_grants(poster, now).filter(starttime__gt=now))
+        if poster.duration != old_duration:
+            for grant in grants:
+                if not can_edit(grant, user, now):
+                    raise ValidationError(
+                        {
+                            "duration": "The poster is in a list that is locked "
+                            f"({_when(grant)}), so its length can't change."
+                        }
+                    )
+                entries = [
+                    poster if item.poster_id == poster.pk else item.entry
+                    for item in grant.items.select_related("video", "poster")
+                ]
+                validate_items(grant, entries)
+        poster.save()
+        for grant in grants:
+            if _on_schedule(grant, now):
+                compile_grant(grant)
+    return poster
+
+
+def delete_poster(poster: Poster, *, user, now: datetime | None = None) -> None:
+    """Delete a poster nothing coming lists. Lists that have aired forget it."""
+    now = now or timezone.now()
+    if not may_act_for(user, poster.organization):
+        raise PermissionDenied("You can't delete this poster.")
+    with transaction.atomic():
+        coming = _coming_grants(poster, now).first()
+        if coming is not None:
+            raise ValidationError(
+                f"The poster is in the airtime {_when(coming)}. Take it out of that list first."
+            )
+        GrantItem.objects.filter(poster=poster).delete()
+        poster.delete()
+
+
+def _when(grant: AirtimeGrant) -> str:
+    return f"{grant.starttime.astimezone(broadcast_time.TZ):%Y-%m-%d %H:%M}"
+
+
 # -- The nightly pipeline ----------------------------------------------------
 
 
@@ -505,17 +604,17 @@ def lock_grants(now: datetime) -> None:
     due = AirtimeGrant.objects.filter(state=State.OPEN, lock_exempt=False, locks_at__lte=now)
     for grant in due:
         with transaction.atomic():
-            items = list(grant.items.select_related("video"))
+            items = list(grant.items.select_related("video", "poster"))
             listable = set(
                 Video.objects.listable()
-                .filter(pk__in=[i.video_id for i in items])
+                .filter(pk__in=[i.video_id for i in items if i.video_id])
                 .values_list("pk", flat=True)
             )
-            kept = [i for i in items if i.video_id in listable]
+            kept = [i for i in items if i.poster_id or i.video_id in listable]
             if len(kept) != len(items):
-                dropped = [i.video_id for i in items if i.video_id not in listable]
+                dropped = [i.video_id for i in items if i not in kept]
                 logger.warning("Dropping unlistable videos %s from %s at lock", dropped, grant)
-                _replace_items(grant, [i.video for i in kept], pinned=sum(i.pinned for i in kept))
+                _replace_items(grant, [i.entry for i in kept], pinned=sum(i.pinned for i in kept))
             grant.state = State.LOCKED
             grant.save(update_fields=["state", "updated_at"])
 
@@ -529,8 +628,9 @@ def compile_grants(now: datetime) -> None:
 
 
 def compile_grant(grant: AirtimeGrant) -> bool:
-    """Write the grant's items to Scheduleitem back-to-back from its start,
-    replacing whatever it compiled before. Returns whether it did.
+    """Write the grant's items to Scheduleitem as :mod:`scheduling.layout`
+    places them, replacing whatever it compiled before. Returns whether
+    it did.
 
     A grant owns its window, so normally nothing else is there. If
     something is -- a staff entry, or a row from before the cut-over --
@@ -550,22 +650,31 @@ def compile_grant(grant: AirtimeGrant) -> bool:
             blocking = Scheduleitem.objects.overlapping(grant.starttime, grant.endtime).first()
             if blocking is not None:
                 raise _Blocked(blocking)
-            cursor = grant.starttime
-            for item in grant.items.select_related("video__live_transmission"):
-                length = item.video.duration
-                if length <= timedelta(0) or cursor + length > grant.endtime:
+            items = list(grant.items.select_related("video__live_transmission", "poster"))
+            padded = grant.padded
+            kept = _fitting(grant, items, padded=padded)
+            if len(kept) < len(items) and padded:
+                # A list saved before programmes were padded may only fit
+                # back to back. Better that than leaving a programme out.
+                unpadded = _fitting(grant, items, padded=False)
+                if len(unpadded) > len(kept):
+                    logger.warning("%s only fits back to back; not padding it", grant)
+                    kept, padded = unpadded, False
+            for item in items:
+                if item not in kept:
                     logger.warning(
-                        "Leaving %s out of %s: it no longer fits the window", item.video, grant
+                        "Leaving %s out of %s: it no longer fits the window", item.entry, grant
                     )
-                    continue
+            placed = layout.lay_out(grant.starttime, [i.entry for i in kept], padded=padded)
+            for item, where in zip(kept, placed, strict=True):
                 Scheduleitem.objects.create(
                     video=item.video,
-                    starttime=cursor,
-                    duration=length,
+                    poster=item.poster,
+                    starttime=where.start,
+                    duration=where.end - where.start,
                     grant=grant,
-                    is_live=airs_live(item.video),
+                    is_live=item.video is not None and airs_live(item.video),
                 )
-                cursor += length
             grant.state = State.COMPILED
             grant.save(update_fields=["state", "updated_at"])
     except _Blocked as blocked:
@@ -626,23 +735,45 @@ class _Blocked(Exception):
         self.item = item
 
 
-def _replace_items(grant: AirtimeGrant, videos: Sequence[Video], pinned: int = 0) -> None:
-    """Pinned items lead the list, so the first `pinned` videos are the
+def _replace_items(grant: AirtimeGrant, entries: Sequence[Entry], pinned: int = 0) -> None:
+    """Pinned items lead the list, so the first `pinned` entries are the
     pinned ones."""
     grant.items.all().delete()
     GrantItem.objects.bulk_create(
-        GrantItem(grant=grant, position=position, video=video, pinned=position < pinned)
-        for position, video in enumerate(videos)
+        GrantItem(
+            grant=grant,
+            position=position,
+            video=entry if isinstance(entry, Video) else None,
+            poster=entry if isinstance(entry, Poster) else None,
+            pinned=position < pinned,
+        )
+        for position, entry in enumerate(entries)
     )
+
+
+def _fitting(grant: AirtimeGrant, items: Sequence[GrantItem], *, padded: bool) -> list[GrantItem]:
+    """The items that fit the window, in order, laid out without the ones
+    that don't, so an entry left out leaves no hole."""
+    kept: list[GrantItem] = []
+    for item in items:
+        entry = item.entry
+        placed = layout.lay_out(grant.starttime, [i.entry for i in kept] + [entry], padded=padded)
+        if entry.duration > timedelta(0) and placed[-1].end <= grant.endtime:
+            kept.append(item)
+    return kept
+
+
+def _key(entry: Entry) -> tuple[str, int]:
+    return ("poster" if isinstance(entry, Poster) else "video", entry.pk)
 
 
 def _fill(grant: AirtimeGrant, context: ScheduleContext, now: datetime) -> bool:
     """Fill `grant` around its pinned items. Returns whether the list changed."""
     assert grant.recipe is not None
-    items = list(grant.items.select_related("video"))
-    pinned = [item.video for item in items if item.pinned]
+    items = list(grant.items.select_related("video", "poster"))
+    pinned = [item.entry for item in items if item.pinned]
     picks = plan(grant.recipe, grant, context, now, pinned=pinned)
-    if [v.pk for v in picks] == [item.video_id for item in items]:
+    if [_key(e) for e in picks] == [_key(item.entry) for item in items]:
         return False
     _replace_items(grant, picks, pinned=len(pinned))
     return True
@@ -659,7 +790,9 @@ def _context_for(refilling: Sequence[AirtimeGrant], now: datetime) -> ScheduleCo
     for row in rows.select_related("video"):
         context.count(row.video, row.duration, compiled=True)
     others = (
-        GrantItem.objects.filter(grant__starttime__lt=horizon, grant__endtime__gt=now)
+        GrantItem.objects.filter(
+            grant__starttime__lt=horizon, grant__endtime__gt=now, video__isnull=False
+        )
         .exclude(grant__state__in=(State.CANCELLED, State.COMPILED))
         .exclude(grant__in=[g.pk for g in refilling])
         .select_related("video")

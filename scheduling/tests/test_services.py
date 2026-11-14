@@ -18,9 +18,9 @@ from fk.models import (
     User,
     Video,
 )
-from programming.services import series_of, series_recipe, uploads_recipe
+from programming.services import jukebox_recipe, series_of, series_recipe, uploads_recipe
 from scheduling import broadcast_time, services
-from scheduling.models import AirtimeGrant, GrantItem, RecurringSlot
+from scheduling.models import AirtimeGrant, GrantItem, Poster, RecurringSlot
 
 from .conftest import NOW, OSLO
 
@@ -164,9 +164,59 @@ def test_the_pipeline_compiles_locked_weeks_and_leaves_the_open_week_open(
     assert set(Scheduleitem.objects.values_list("schedulereason", flat=True)) == {None}
 
 
-def test_compile_plays_items_back_to_back_from_the_start(make_grant, make_video) -> None:
+def test_compile_starts_each_programme_on_the_five_minute_grid(make_grant, make_video) -> None:
+    a, b, c = make_video(20), make_video(15), make_video(9.75)
+    grant = make_grant(OPEN_WEEK, state=State.LOCKED)
+    services._replace_items(grant, [a, b, c])
+
+    assert services.compile_grant(grant)
+
+    # b would start right as a ends; it gets a breather and the next
+    # grid point. c's start (19:40:30) rounds up to 19:45.
+    assert schedule(grant) == [
+        (a.pk, OPEN_WEEK, timedelta(minutes=20)),
+        (b.pk, OPEN_WEEK + timedelta(minutes=25), timedelta(minutes=15)),
+        (c.pk, OPEN_WEEK + timedelta(minutes=45), timedelta(minutes=9.75)),
+    ]
+
+
+def test_a_poster_follows_the_programme_before_it(make_grant, make_video, organization) -> None:
+    a, b = make_video(20.5), make_video(15)
+    poster = Poster.objects.create(
+        organization=organization, heading="Neste: debatt", duration=timedelta(seconds=40)
+    )
+    grant = make_grant(OPEN_WEEK, state=State.LOCKED)
+    services._replace_items(grant, [a, poster, b])
+
+    assert services.compile_grant(grant)
+
+    rows = list(Scheduleitem.objects.filter(grant=grant).order_by("starttime"))
+    assert [(r.video_id, r.poster_id, r.starttime, r.duration) for r in rows] == [
+        (a.pk, None, OPEN_WEEK, timedelta(minutes=20.5)),
+        (None, poster.pk, OPEN_WEEK + timedelta(minutes=20.5), timedelta(seconds=40)),
+        # The poster ends 19:21:10; b takes the next grid point, no breather.
+        (b.pk, None, OPEN_WEEK + timedelta(minutes=25), timedelta(minutes=15)),
+    ]
+
+
+def test_a_list_from_before_padding_still_airs_in_full(make_grant, make_video) -> None:
+    a, b = make_video(30), make_video(30)
+    grant = make_grant(OPEN_WEEK, state=State.LOCKED)
+    services._replace_items(grant, [a, b])  # saved when lists played back to back
+
+    assert services.compile_grant(grant)
+
+    assert schedule(grant) == [
+        (a.pk, OPEN_WEEK, timedelta(minutes=30)),
+        (b.pk, OPEN_WEEK + timedelta(minutes=30), timedelta(minutes=30)),
+    ]
+
+
+def test_a_jukebox_grant_plays_back_to_back(make_grant, make_video, organization) -> None:
     a, b = make_video(20), make_video(15)
     grant = make_grant(OPEN_WEEK, state=State.LOCKED)
+    grant.recipe = jukebox_recipe(organization)
+    grant.save()
     services._replace_items(grant, [a, b])
 
     assert services.compile_grant(grant)
@@ -175,6 +225,14 @@ def test_compile_plays_items_back_to_back_from_the_start(make_grant, make_video)
         (a.pk, OPEN_WEEK, timedelta(minutes=20)),
         (b.pk, OPEN_WEEK + timedelta(minutes=20), timedelta(minutes=15)),
     ]
+
+
+def test_the_list_must_fit_with_the_gaps(make_grant, make_video, editor) -> None:
+    grant = make_grant(OPEN_WEEK)
+    # 30 + 30 minutes add up to the hour, but the second needs a breather.
+    with pytest.raises(ValidationError, match="breaks between programmes"):
+        services.set_items(grant, [make_video(30), make_video(30)], user=editor, now=NOW)
+    services.set_items(grant, [make_video(29), make_video(30)], user=editor, now=NOW)
 
 
 def test_compile_refuses_a_window_something_else_occupies(make_grant, make_video) -> None:
@@ -538,9 +596,10 @@ def test_a_slot_pointed_at_a_series_leads_with_its_newest_unaired_episode(
     weekly_slot, make_video, editor, organization
 ) -> None:
     series = Series.objects.create(organization=organization, name="Ukens program")
-    make_video(30)  # newer, but not in the series
-    first, second = make_video(30, series=series), make_video(30, series=series)
-    make_video(30)
+    make_video(29)  # newer, but not in the series
+    # Two fit the hour with the break between them.
+    first, second = make_video(29, series=series), make_video(29, series=series)
+    make_video(29)
     services.run_nightly(NOW)
 
     services.set_slot_recipe(weekly_slot, series_recipe(series), user=editor, now=NOW)

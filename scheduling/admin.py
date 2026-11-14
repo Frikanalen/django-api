@@ -4,7 +4,6 @@ Grant edits go through the service layer, so the admin cannot bypass
 the rules: the items must fit, and a compiled grant is recompiled.
 """
 
-from datetime import timedelta
 from typing import ClassVar
 
 from django import forms
@@ -12,12 +11,13 @@ from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.forms.models import BaseInlineFormSet
 
-from scheduling import broadcast_time, services
+from scheduling import broadcast_time, layout, services
 from scheduling.models import (
     AirtimeGrant,
     AirtimeGrantRequest,
     GrantExemptionRequest,
     GrantItem,
+    Poster,
     RecurringSlot,
     RecurringSlotCreationRequest,
     RecurringSlotOwnershipRequest,
@@ -31,24 +31,31 @@ class GrantItemFormSet(BaseInlineFormSet):
         grant = self.instance
         if not grant.starttime or not grant.endtime:
             return
-        videos = [
-            form.cleaned_data["video"]
-            for form in self.forms
-            if form.cleaned_data
-            and not form.cleaned_data.get("DELETE")
-            and form.cleaned_data.get("video")
-        ]
-        total = sum((v.duration for v in videos), timedelta(0))
-        if total > grant.endtime - grant.starttime:
-            raise ValidationError(f"The items run {total}, longer than the window.")
+        rows = sorted(
+            (
+                form.cleaned_data
+                for form in self.forms
+                if form.cleaned_data
+                and not form.cleaned_data.get("DELETE")
+                and (form.cleaned_data.get("video") or form.cleaned_data.get("poster"))
+            ),
+            key=lambda row: row.get("position") or 0,
+        )
+        entries = [row.get("video") or row.get("poster") for row in rows]
+        end = layout.end_of(grant.starttime, entries, padded=grant.padded)
+        if end > grant.endtime:
+            raise ValidationError(
+                f"The items run {end - grant.starttime} with the breaks between "
+                "programmes, longer than the window."
+            )
 
 
 class GrantItemInline(admin.TabularInline):
     model = GrantItem
     formset = GrantItemFormSet
     extra = 1
-    fields = ("position", "video")
-    autocomplete_fields = ("video",)
+    fields = ("position", "video", "poster")
+    autocomplete_fields = ("video", "poster")
     ordering = ("position",)
 
 
@@ -269,3 +276,11 @@ admin.site.register(AirtimeGrantRequest, AirtimeGrantRequestAdmin)
 admin.site.register(GrantExemptionRequest, GrantExemptionRequestAdmin)
 admin.site.register(RecurringSlotCreationRequest, RecurringSlotCreationRequestAdmin)
 admin.site.register(RecurringSlotOwnershipRequest, RecurringSlotOwnershipRequestAdmin)
+
+
+@admin.register(Poster)
+class PosterAdmin(admin.ModelAdmin):
+    list_display = ("heading", "organization", "template", "duration", "updated_at")
+    list_filter = ("template",)
+    search_fields = ("heading", "text", "organization__name")
+    raw_id_fields = ("organization",)

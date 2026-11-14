@@ -17,7 +17,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
-from scheduling import broadcast_time
+from scheduling import broadcast_time, posters
 
 
 class RecurringSlot(models.Model):
@@ -156,6 +156,10 @@ class RecurringSlot(models.Model):
 
 _WEEKDAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
+# How long a poster may stay on screen.
+POSTER_SHORTEST = posters.SHORTEST
+POSTER_LONGEST = posters.LONGEST
+
 
 class AirtimeGrantQuerySet(models.QuerySet):
     def active(self):
@@ -259,7 +263,20 @@ class AirtimeGrant(models.Model):
 
     @property
     def items_duration(self) -> timedelta:
-        return sum((item.video.duration for item in self.items.all()), timedelta(0))
+        """How long the list runs, from the grant's start to the end of its
+        last entry, gaps between programmes included."""
+        from scheduling import layout
+
+        entries = [item.entry for item in self.items.all()]
+        return layout.end_of(self.starttime, entries, padded=self.padded) - self.starttime
+
+    @property
+    def padded(self) -> bool:
+        """Whether programmes start on the five-minute grid (see
+        :mod:`scheduling.layout`). Not in a jukebox grant."""
+        from programming.models import Recipe
+
+        return self.recipe is None or self.recipe.kind != Recipe.Kind.JUKEBOX
 
     def clean(self):
         super().clean()
@@ -276,18 +293,92 @@ class AirtimeGrant(models.Model):
                 raise ValidationError(f"Overlaps the grant {overlapping}.")
 
 
+class Poster(models.Model):
+    """A text poster an organization makes from one of the on-air graphics
+    templates, to air in its grants: in the gap after a programme, say,
+    or as a notice of its own. It is listed in a grant like a video and
+    airs for its `duration`; playout shows it with the graphics template
+    named by `template`, light by day and dark by night. A blank line in
+    the text starts a new slide, and `duration` is at least the time it
+    takes to read them all once (:mod:`scheduling.posters`)."""
+
+    class Template(models.TextChoices):
+        STANDARD = "standard", "Vanlig"
+        NOTICE = "notice", "Viktig melding"
+
+    organization = models.ForeignKey(
+        "fk.Organization", on_delete=models.CASCADE, related_name="posters"
+    )
+    template = models.CharField(max_length=16, choices=Template, default=Template.STANDARD)
+    heading = models.CharField(max_length=80)
+    text = models.TextField(max_length=posters.MOST_SLIDES * (posters.SLIDE_LENGTH + 2), blank=True)
+    duration = models.DurationField(
+        default=timedelta(seconds=30),
+        validators=[
+            MinValueValidator(POSTER_SHORTEST),
+            MaxValueValidator(POSTER_LONGEST),
+        ],
+        help_text="How long it is on screen each time it airs.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-updated_at", "-id")
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(duration__gte=POSTER_SHORTEST)
+                & models.Q(duration__lte=POSTER_LONGEST),
+                name="poster_duration_in_range",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.heading} ({self.organization})"
+
+    @property
+    def minimum_duration(self) -> timedelta:
+        return posters.minimum_duration(self.heading, self.text)
+
+    def clean(self):
+        slides = posters.slides(self.text)
+        if len(slides) > posters.MOST_SLIDES:
+            raise ValidationError({"text": f"A poster has at most {posters.MOST_SLIDES} slides."})
+        if any(len(slide) > posters.SLIDE_LENGTH for slide in slides):
+            raise ValidationError(
+                {
+                    "text": f"A slide holds at most {posters.SLIDE_LENGTH} characters. "
+                    "A blank line starts a new slide."
+                }
+            )
+        if self.duration is not None and self.duration < self.minimum_duration:
+            seconds = int(self.minimum_duration.total_seconds())
+            raise ValidationError(
+                {
+                    "duration": f"The text takes {seconds} s to read, "
+                    "so the poster must be on at least that long."
+                }
+            )
+
+
 class GrantItem(models.Model):
-    """One entry in a grant's list. Items play back-to-back from the
-    grant's start; title and length come from the video. A live
-    programme is a video with a live transmission and a length set by
-    hand, so it is listed like any other.
+    """One entry in a grant's list: a video or a text poster. Title and
+    length come from it. Where each entry plays is worked out by
+    :mod:`scheduling.layout`. A live programme is a video with a live
+    transmission and a length set by hand, so it is listed like any
+    other.
 
     A pinned item is one the owner chose: it stays, at the head of the
     list, while the grant's recipe programs the time left."""
 
     grant = models.ForeignKey(AirtimeGrant, on_delete=models.CASCADE, related_name="items")
     position = models.PositiveIntegerField()
-    video = models.ForeignKey("fk.Video", on_delete=models.PROTECT, related_name="grant_items")
+    video = models.ForeignKey(
+        "fk.Video", null=True, blank=True, on_delete=models.PROTECT, related_name="grant_items"
+    )
+    poster = models.ForeignKey(
+        Poster, null=True, blank=True, on_delete=models.PROTECT, related_name="grant_items"
+    )
     pinned = models.BooleanField(
         default=False,
         help_text="Chosen by the owner. Automatic filling keeps it and fills around it.",
@@ -301,10 +392,20 @@ class GrantItem(models.Model):
                 name="grantitem_unique_position",
                 deferrable=models.Deferrable.DEFERRED,
             ),
+            models.CheckConstraint(
+                condition=models.Q(video__isnull=False, poster__isnull=True)
+                | models.Q(video__isnull=True, poster__isnull=False),
+                name="grantitem_video_or_poster",
+            ),
         ]
 
     def __str__(self):
-        return f"{self.grant} #{self.position}: {self.video}"
+        return f"{self.grant} #{self.position}: {self.entry}"
+
+    @property
+    def entry(self):
+        """What plays: the video or the poster."""
+        return self.video if self.video_id is not None else self.poster
 
 
 # The request models live in their own module; importing them here

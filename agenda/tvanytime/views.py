@@ -58,13 +58,17 @@ def schedule_queryset():
     organization has an active ansvarlig redaktør decides if its videos
     may be offered on demand.
     """
-    return Scheduleitem.objects.select_related(
-        "video__organization__editor",
-        "video__series",
-    ).prefetch_related(
-        "video__categories",
-        "video__images",
-        "video__videofile_set",
+    return (
+        Scheduleitem.objects.programmes()
+        .select_related(
+            "video__organization__editor",
+            "video__series",
+        )
+        .prefetch_related(
+            "video__categories",
+            "video__images",
+            "video__videofile_set",
+        )
     )
 
 
