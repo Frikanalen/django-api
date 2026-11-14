@@ -17,7 +17,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
-from scheduling import broadcast_time
+from scheduling import broadcast_time, posters
 
 
 class RecurringSlot(models.Model):
@@ -157,8 +157,8 @@ class RecurringSlot(models.Model):
 _WEEKDAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 # How long a poster may stay on screen.
-POSTER_SHORTEST = timedelta(seconds=5)
-POSTER_LONGEST = timedelta(minutes=10)
+POSTER_SHORTEST = posters.SHORTEST
+POSTER_LONGEST = posters.LONGEST
 
 
 class AirtimeGrantQuerySet(models.QuerySet):
@@ -298,19 +298,20 @@ class Poster(models.Model):
     templates, to air in its grants: in the gap after a programme, say,
     or as a notice of its own. It is listed in a grant like a video and
     airs for its `duration`; playout shows it with the graphics template
-    named by `template`."""
+    named by `template`, light by day and dark by night. A blank line in
+    the text starts a new slide, and `duration` is at least the time it
+    takes to read them all once (:mod:`scheduling.posters`)."""
 
     class Template(models.TextChoices):
-        PAPER = "paper", "Lys"
-        STAGE = "stage", "Mørk"
-        NOTICE = "notice", "Viktig"
+        STANDARD = "standard", "Vanlig"
+        NOTICE = "notice", "Viktig melding"
 
     organization = models.ForeignKey(
         "fk.Organization", on_delete=models.CASCADE, related_name="posters"
     )
-    template = models.CharField(max_length=16, choices=Template, default=Template.PAPER)
+    template = models.CharField(max_length=16, choices=Template, default=Template.STANDARD)
     heading = models.CharField(max_length=80)
-    text = models.TextField(max_length=400, blank=True)
+    text = models.TextField(max_length=posters.MOST_SLIDES * (posters.SLIDE_LENGTH + 2), blank=True)
     duration = models.DurationField(
         default=timedelta(seconds=30),
         validators=[
@@ -334,6 +335,30 @@ class Poster(models.Model):
 
     def __str__(self):
         return f"{self.heading} ({self.organization})"
+
+    @property
+    def minimum_duration(self) -> timedelta:
+        return posters.minimum_duration(self.heading, self.text)
+
+    def clean(self):
+        slides = posters.slides(self.text)
+        if len(slides) > posters.MOST_SLIDES:
+            raise ValidationError({"text": f"A poster has at most {posters.MOST_SLIDES} slides."})
+        if any(len(slide) > posters.SLIDE_LENGTH for slide in slides):
+            raise ValidationError(
+                {
+                    "text": f"A slide holds at most {posters.SLIDE_LENGTH} characters. "
+                    "A blank line starts a new slide."
+                }
+            )
+        if self.duration is not None and self.duration < self.minimum_duration:
+            seconds = int(self.minimum_duration.total_seconds())
+            raise ValidationError(
+                {
+                    "duration": f"The text takes {seconds} s to read, "
+                    "so the poster must be on at least that long."
+                }
+            )
 
 
 class GrantItem(models.Model):

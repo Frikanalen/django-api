@@ -41,16 +41,15 @@ class Migration(migrations.Migration):
                     "template",
                     models.CharField(
                         choices=[
-                            ("paper", "Lys"),
-                            ("stage", "Mørk"),
-                            ("notice", "Viktig"),
+                            ("standard", "Vanlig"),
+                            ("notice", "Viktig melding"),
                         ],
-                        default="paper",
+                        default="standard",
                         max_length=16,
                     ),
                 ),
                 ("heading", models.CharField(max_length=80)),
-                ("text", models.TextField(blank=True, max_length=400)),
+                ("text", models.TextField(blank=True, max_length=2412)),
                 (
                     "duration",
                     models.DurationField(

@@ -70,6 +70,65 @@ def test_a_poster_must_be_short_enough_to_read(member, organization) -> None:
     assert response.status_code == 400
 
 
+TWENTY_WORDS = " ".join(["ord"] * 20)
+
+
+def test_a_poster_is_on_long_enough_to_read_every_slide_once(member, organization) -> None:
+    # Two slides: 3 s + 2 heading words + 20 words, then 3 s + 20 words,
+    # at 0.4 s a word: 11.8 s + 11 s, so 23 s.
+    fields = {
+        "organizationId": organization.pk,
+        "heading": "To ord",
+        "text": f"{TWENTY_WORDS}\n\n{TWENTY_WORDS}",
+    }
+
+    too_short = client_for(member).post(LIST, dict(fields, duration="00:00:22"), format="json")
+    long_enough = client_for(member).post(LIST, dict(fields, duration="00:00:23"), format="json")
+
+    assert too_short.status_code == 400
+    assert "23 s" in str(too_short.json())
+    assert long_enough.status_code == 201, long_enough.content
+    assert long_enough.json()["minimumDuration"] == "00:00:23"
+
+
+def test_a_poster_without_a_length_gets_one_that_can_be_read(member, organization) -> None:
+    text = "\n\n".join([" ".join(["ord"] * 60)] * 2)
+
+    response = client_for(member).post(
+        LIST, {"organizationId": organization.pk, "heading": "Hei", "text": text}, format="json"
+    )
+
+    assert response.status_code == 201, response.content
+    assert response.json()["duration"] == response.json()["minimumDuration"] == "00:00:55"
+
+
+def test_longer_text_must_still_be_readable_in_the_posters_length(member, poster) -> None:
+    response = client_for(member).patch(
+        detail(poster), {"text": " ".join(["ord"] * 100)}, format="json"
+    )
+
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["attr"] == "duration"
+
+
+def test_a_slide_is_short_and_a_poster_has_few(member, organization) -> None:
+    def make(text):
+        return client_for(member).post(
+            LIST,
+            {
+                "organizationId": organization.pk,
+                "heading": "Hei",
+                "text": text,
+                "duration": "00:05:00",
+            },
+            format="json",
+        )
+
+    assert make("x" * 401).status_code == 400
+    assert make("\n\n".join(["x" * 400] * 2)).status_code == 201
+    assert make("\n\n".join(["kort"] * 7)).status_code == 400
+
+
 def test_members_see_their_own_posters_only(member, poster) -> None:
     Poster.objects.create(
         organization=Organization.objects.create(name="Other"), heading="Ikke din"
@@ -139,7 +198,7 @@ def test_playout_asks_for_posters_and_the_public_schedule_leaves_them_out(
         None,
         "Neste: debatt",
     ]
-    assert playout[1]["poster"]["template"] == "paper"
+    assert playout[1]["poster"]["template"] == "standard"
     assert playout[1]["poster"]["organization"]["name"] == "Grant org"
 
 

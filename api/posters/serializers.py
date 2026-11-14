@@ -15,6 +15,11 @@ class PosterSerializer(serializers.ModelSerializer):
         write_only=True,
         help_text="The organization the poster is for. Only when creating one.",
     )
+    minimum_duration = serializers.DurationField(
+        read_only=True,
+        help_text="The time it takes to read every slide once: the shortest "
+        "`duration` allowed. A blank line in `text` starts a new slide.",
+    )
 
     class Meta:
         model = Poster
@@ -26,10 +31,11 @@ class PosterSerializer(serializers.ModelSerializer):
             "heading",
             "text",
             "duration",
+            "minimum_duration",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("id", "organization", "created_at", "updated_at")
+        read_only_fields = ("id", "organization", "minimum_duration", "created_at", "updated_at")
 
 
 class PosterUpdateSerializer(serializers.ModelSerializer):

@@ -120,8 +120,8 @@ class ScheduleitemPosterSerializer(serializers.ModelSerializer):
     # playout built against an older schema reject the whole schedule.
     template = serializers.CharField(
         read_only=True,
-        help_text="The on-air graphics template it is shown with: paper, stage or "
-        "notice, or one added since. Anything unknown is shown as paper.",
+        help_text="The on-air graphics template it is shown with: standard or "
+        "notice, or one added since. Anything unknown is shown as standard.",
     )
 
     class Meta:

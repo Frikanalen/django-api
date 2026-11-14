@@ -438,6 +438,8 @@ def create_poster(*, organization: Organization, user, **fields) -> Poster:
     if not may_act_for(user, organization):
         raise PermissionDenied("You can't make posters for this organization.")
     poster = Poster(organization=organization, **fields)
+    if "duration" not in fields:
+        poster.duration = max(poster.duration, poster.minimum_duration)
     poster.full_clean()
     poster.save()
     return poster
@@ -457,7 +459,7 @@ def update_poster(poster: Poster, *, user, now: datetime | None = None, **change
     """Change a poster's text, template or length.
 
     The text can be corrected until it airs, in every grant that lists
-    it. Its length changes the schedule, so it can only change where the
+    it, as long as it can still be read in the poster's length. Its length changes the schedule, so it can only change where the
     user could edit the list too, and only if the list still fits; the
     compiled grants that list it are recompiled at once, which also tells
     playout to show the new text.
