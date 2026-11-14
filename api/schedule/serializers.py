@@ -132,9 +132,12 @@ class ScheduleitemPosterSerializer(serializers.ModelSerializer):
 
 class ScheduleitemReadSerializer(serializers.ModelSerializer):
     video = ScheduleitemVideoSerializer(allow_null=True)
+    # Not required in the schema, so a playout built against this schema
+    # still reads a schedule from an API that predates posters, and the
+    # other way round.
     poster = ScheduleitemPosterSerializer(
         allow_null=True,
-        read_only=True,
+        required=False,
         help_text="Set for a member's text poster (only with include_posters): "
         "playout airs it with the graphics template.",
     )
