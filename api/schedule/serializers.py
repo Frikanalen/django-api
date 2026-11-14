@@ -116,6 +116,13 @@ class ScheduleitemLiveSourceSerializer(serializers.ModelSerializer):
 
 class ScheduleitemPosterSerializer(serializers.ModelSerializer):
     organization = ScheduleitemOrganizationSerializer(read_only=True)
+    # A plain string, not an enum: a template added here must not make a
+    # playout built against an older schema reject the whole schedule.
+    template = serializers.CharField(
+        read_only=True,
+        help_text="The on-air graphics template it is shown with: paper, stage or "
+        "notice, or one added since. Anything unknown is shown as paper.",
+    )
 
     class Meta:
         model = Poster
