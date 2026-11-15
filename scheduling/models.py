@@ -299,8 +299,9 @@ class Poster(models.Model):
     or as a notice of its own. It is listed in a grant like a video and
     airs for its `duration`; playout shows it with the graphics template
     named by `template`, light by day and dark by night. A blank line in
-    the text starts a new slide, and `duration` is at least the time it
-    takes to read them all once (:mod:`scheduling.posters`)."""
+    the text starts a new slide, a long text is paged by itself, and
+    `duration` is at least the time it takes to read every slide once
+    (:mod:`scheduling.posters`)."""
 
     class Template(models.TextChoices):
         STANDARD = "standard", "Vanlig"
@@ -311,7 +312,7 @@ class Poster(models.Model):
     )
     template = models.CharField(max_length=16, choices=Template, default=Template.STANDARD)
     heading = models.CharField(max_length=80)
-    text = models.TextField(max_length=posters.MOST_SLIDES * (posters.SLIDE_LENGTH + 2), blank=True)
+    text = models.TextField(max_length=posters.TEXT_LENGTH, blank=True)
     duration = models.DurationField(
         default=timedelta(seconds=30),
         validators=[
@@ -344,13 +345,6 @@ class Poster(models.Model):
         slides = posters.slides(self.text)
         if len(slides) > posters.MOST_SLIDES:
             raise ValidationError({"text": f"A poster has at most {posters.MOST_SLIDES} slides."})
-        if any(len(slide) > posters.SLIDE_LENGTH for slide in slides):
-            raise ValidationError(
-                {
-                    "text": f"A slide holds at most {posters.SLIDE_LENGTH} characters. "
-                    "A blank line starts a new slide."
-                }
-            )
         if self.duration is not None and self.duration < self.minimum_duration:
             seconds = int(self.minimum_duration.total_seconds())
             raise ValidationError(

@@ -111,7 +111,7 @@ def test_longer_text_must_still_be_readable_in_the_posters_length(member, poster
     assert response.json()["errors"][0]["attr"] == "duration"
 
 
-def test_a_slide_is_short_and_a_poster_has_few(member, organization) -> None:
+def test_a_long_slide_is_paged_and_a_poster_has_few(member, organization) -> None:
     def make(text):
         return client_for(member).post(
             LIST,
@@ -124,9 +124,13 @@ def test_a_slide_is_short_and_a_poster_has_few(member, organization) -> None:
             format="json",
         )
 
-    assert make("x" * 401).status_code == 400
+    # A long slide is paged by itself, so only the number of slides is capped.
+    long = make("x" * 401)
+    assert long.status_code == 201
+    assert long.json()["minimumDuration"] == "00:00:08"
     assert make("\n\n".join(["x" * 400] * 2)).status_code == 201
     assert make("\n\n".join(["kort"] * 7)).status_code == 400
+    assert make("\n\n".join(["x" * 400] * 4)).status_code == 400
 
 
 def test_members_see_their_own_posters_only(member, poster) -> None:

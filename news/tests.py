@@ -11,11 +11,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from fk.models import User
 from news.models import Bulletin
+from scheduling import posters
 
 pytestmark = pytest.mark.django_db
 
@@ -47,7 +49,11 @@ def test_bulletins_are_listed_newest_first() -> None:
     assert response.status_code == status.HTTP_200_OK
     # Paginated like every other collection, and the timestamp is called
     # `createdTime` here as it is everywhere else.
-    assert response.json()["results"] == [
+    results = response.json()["results"]
+    assert [
+        {key: item[key] for key in ("id", "heading", "text", "createdTime", "isPublished")}
+        for item in results
+    ] == [
         {
             "id": newer.pk,
             "heading": "Newer",
@@ -63,6 +69,12 @@ def test_bulletins_are_listed_newest_first() -> None:
             "isPublished": True,
         },
     ]
+    # What the screens need to show it: the pages and how long they take.
+    assert results[0]["template"] == "standard"
+    assert results[0]["pages"] == ["Text of Newer"]
+    assert results[0]["pageSeconds"] == [4.6]
+    assert results[0]["readingSeconds"] == 5
+    assert results[0]["isCurrent"] is True
 
 
 def test_the_bulletin_list_has_no_trailing_slash() -> None:
@@ -152,3 +164,94 @@ def test_staff_can_update_and_delete() -> None:
     delete_response = client.delete(url)
     assert delete_response.status_code == status.HTTP_204_NO_CONTENT
     assert not Bulletin.objects.exists()
+
+
+def test_a_higher_priority_comes_first() -> None:
+    make_bulletin("Newest", CREATED + timedelta(days=2))
+    make_bulletin("Important", CREATED, priority=5)
+
+    response = APIClient().get(reverse("news:bulletin-list"))
+
+    assert [item["heading"] for item in response.json()["results"]] == ["Important", "Newest"]
+
+
+def test_a_placement_lists_only_what_is_showing_there_now() -> None:
+    now = timezone.now()
+    make_bulletin("Everywhere")
+    make_bulletin("Air only", on_infographics=False)
+    make_bulletin("Infographics only", on_air=False)
+    make_bulletin("Not yet", starts_at=now + timedelta(hours=1))
+    make_bulletin("Run out", ends_at=now - timedelta(minutes=1))
+    make_bulletin("Running", starts_at=now - timedelta(hours=1), ends_at=now + timedelta(hours=1))
+    make_bulletin("Draft", is_published=False)
+
+    def showing(placement: str, client: APIClient) -> set[str]:
+        response = client.get(reverse("news:bulletin-list"), {"placement": placement})
+        assert response.status_code == status.HTTP_200_OK
+        return {item["heading"] for item in response.json()["results"]}
+
+    assert showing("air", APIClient()) == {"Everywhere", "Air only", "Running"}
+    assert showing("infographics", APIClient()) == {"Everywhere", "Infographics only", "Running"}
+    # Staff get the same answer there: it is what the screen shows.
+    assert showing("air", staff_client()) == {"Everywhere", "Air only", "Running"}
+
+    listed = APIClient().get(reverse("news:bulletin-list")).json()["results"]
+    current = {item["heading"]: item["isCurrent"] for item in listed}
+    assert current["Run out"] is False and current["Not yet"] is False
+    assert current["Running"] is True
+
+
+def test_an_unknown_placement_is_refused() -> None:
+    response = APIClient().get(reverse("news:bulletin-list"), {"placement": "website"})
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+def test_the_list_is_never_served_from_a_cache() -> None:
+    response = APIClient().get(reverse("news:bulletin-list"))
+    assert "no-cache" in response["Cache-Control"]
+
+
+def test_a_long_text_is_paged_in_the_answer() -> None:
+    sentence = "Dette er en setning som er akkurat passe lang til å fylle litt av en side. "
+    response = staff_client().post(
+        reverse("news:bulletin-list"),
+        {"heading": "Lang melding", "text": sentence * 8},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    body = response.json()
+    assert len(body["pages"]) == 3
+    assert all(len(page) <= posters.PAGE_LENGTH for page in body["pages"])
+    assert " ".join(body["pages"]) == (sentence * 8).strip()
+    assert len(body["pageSeconds"]) == 3
+
+
+def test_a_text_with_too_many_pages_is_refused() -> None:
+    client = staff_client()
+    response = client.post(
+        reverse("news:bulletin-list"),
+        {"heading": "For lang", "text": "\n\n".join(["En side."] * 7)},
+        format="json",
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert not Bulletin.objects.exists()
+
+    bulletin = make_bulletin("Passe")
+    response = client.patch(
+        reverse("news:bulletin-detail", args=[bulletin.pk]),
+        {"text": "\n\n".join(["En side."] * 7)},
+        format="json",
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+def test_it_has_to_end_after_it_starts() -> None:
+    now = timezone.now()
+    bulletin = make_bulletin("Datoer", starts_at=now)
+    response = staff_client().patch(
+        reverse("news:bulletin-detail", args=[bulletin.pk]),
+        {"ends_at": (now - timedelta(hours=1)).isoformat()},
+        format="json",
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
