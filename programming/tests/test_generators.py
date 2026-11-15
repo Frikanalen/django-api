@@ -54,10 +54,19 @@ def test_zero_length_and_unaccountable_videos_are_never_candidates(uploads, make
     assert ids(candidates(uploads, NOW)) == [good.pk]
 
 
-def test_uploads_may_pick_a_pending_upload(uploads, make_video) -> None:
-    pending = make_video(10, proper_import=False)
+def test_uploads_never_pick_a_pending_upload(uploads, make_video) -> None:
+    ready = make_video(10)
+    make_video(10, proper_import=False)
 
-    assert ids(candidates(uploads, NOW)) == [pending.pk]
+    assert ids(candidates(uploads, NOW)) == [ready.pk]
+
+
+def test_a_series_never_picks_a_pending_upload(organization, make_video) -> None:
+    series = Series.objects.create(name="Serie", organization=organization)
+    ready = make_video(10, series=series)
+    make_video(10, series=series, proper_import=False)
+
+    assert ids(candidates(series_recipe(series), NOW)) == [ready.pk]
 
 
 def test_another_organizations_recipe_draws_on_its_own_uploads(uploads, make_video) -> None:

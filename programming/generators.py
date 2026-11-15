@@ -41,16 +41,20 @@ class Window(Protocol):
 
 
 # -- Candidates: which videos a recipe may use --------------------------------
+#
+# A recipe only picks videos whose file is processed (``airable``). A
+# pending upload may still be listed by hand and wait for its file, but
+# nothing schedules it automatically.
 
 
 def _uploads(recipe: Recipe, now: datetime) -> QuerySet[Video]:
-    return Video.objects.listable().filter(organization=recipe.organization_id)
+    return Video.objects.airable().filter(organization=recipe.organization_id)
 
 
 def _series(recipe: Recipe, now: datetime) -> QuerySet[Video]:
     if not hasattr(recipe, "series_source"):  # the series was deleted
         return _uploads(recipe, now)
-    return Video.objects.listable().filter(series=recipe.series_source.series_id)
+    return Video.objects.airable().filter(series=recipe.series_source.series_id)
 
 
 def _playlist(recipe: Recipe, now: datetime) -> QuerySet[Video]:
