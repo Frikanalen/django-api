@@ -198,3 +198,13 @@ def test_the_jukebox_draw_repeats_for_the_same_window(organization, make_video) 
     assert ids(first) == ids(again)
     assert ids(first) != ids(other)
     assert sum((v.duration for v in first), timedelta(0)) == timedelta(hours=1)
+
+
+def test_a_padded_window_leaves_the_breaks_between_programmes(uploads, make_video) -> None:
+    # 29 + 29 minutes: the second starts at 0:30 and ends 0:59. A third
+    # of any length would start past the hour.
+    make_video(29), make_video(29), make_video(1)
+
+    picks = plan(uploads, Window(padded=True), ScheduleContext(), NOW)
+
+    assert len(picks) == 2

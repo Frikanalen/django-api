@@ -1,6 +1,6 @@
 import datetime
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 
@@ -18,6 +18,13 @@ class Window:
 
     pk: int = 1
     duration: timedelta = timedelta(hours=1)
+    # Back to back unless a test asks for the five-minute grid.
+    padded: bool = False
+    starttime: datetime.datetime = field(default_factory=lambda: NOW)
+
+    @property
+    def endtime(self) -> datetime.datetime:
+        return self.starttime + self.duration
 
 
 @pytest.fixture

@@ -14,6 +14,7 @@ from fk.models import (
     VideoFile,
     VideoFileVariant,
 )
+from scheduling.models import Poster
 from scheduling.services import airs_live
 
 OSLO = ZoneInfo("Europe/Oslo")
@@ -113,8 +114,33 @@ class ScheduleitemLiveSourceSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class ScheduleitemPosterSerializer(serializers.ModelSerializer):
+    organization = ScheduleitemOrganizationSerializer(read_only=True)
+    # A plain string, not an enum: a template added here must not make a
+    # playout built against an older schema reject the whole schedule.
+    template = serializers.CharField(
+        read_only=True,
+        help_text="The on-air graphics template it is shown with: standard or "
+        "notice, or one added since. Anything unknown is shown as standard.",
+    )
+
+    class Meta:
+        model = Poster
+        fields = ("id", "template", "heading", "text", "organization", "updated_at")
+        read_only_fields = fields
+
+
 class ScheduleitemReadSerializer(serializers.ModelSerializer):
     video = ScheduleitemVideoSerializer(allow_null=True)
+    # Not required in the schema, so a playout built against this schema
+    # still reads a schedule from an API that predates posters, and the
+    # other way round.
+    poster = ScheduleitemPosterSerializer(
+        allow_null=True,
+        required=False,
+        help_text="Set for a member's text poster (only with include_posters): "
+        "playout airs it with the graphics template.",
+    )
     starttime = serializers.DateTimeField(default_timezone=OSLO)
     endtime = serializers.DateTimeField(default_timezone=OSLO, read_only=True)
     live_source = serializers.SerializerMethodField()
@@ -125,6 +151,7 @@ class ScheduleitemReadSerializer(serializers.ModelSerializer):
             "id",
             "default_name",
             "video",
+            "poster",
             "schedulereason",
             "starttime",
             "endtime",

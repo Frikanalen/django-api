@@ -14,6 +14,7 @@ import api.live.views as live_views
 import api.mediamtx as mediamtx_views
 import api.organization.views as organization_views
 import api.playout.views as playout_views
+import api.posters.views as poster_views
 import api.program_image.views as program_image_views
 import api.recurring_slot.views as recurring_slot_views
 import api.schedule.views as schedule_views
@@ -32,6 +33,7 @@ router.register(r"asrun", views.AsRunViewSet, "asrun")
 router.register(r"categories", views.CategoryViewSet)
 router.register(r"scheduleitems", schedule_views.ScheduleitemViewSet, "api-scheduleitem")
 router.register(r"grants", grant_views.AirtimeGrantViewSet, "api-grant")
+router.register(r"posters", poster_views.PosterViewSet, "api-poster")
 router.register(r"videofiles", videofile_views.VideoFileViewSet, "api-videofile")
 
 

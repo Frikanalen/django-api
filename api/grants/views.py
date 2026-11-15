@@ -14,6 +14,7 @@ from api.grants.serializers import (
     AirtimeGrantSerializer,
     AirtimeGrantUpdateSerializer,
     GrantItemsWriteSerializer,
+    entries,
 )
 from api.pagination import FkDefaultPagination
 from api.programming.serializers import build_recipe
@@ -66,7 +67,7 @@ class AirtimeGrantViewSet(
             Prefetch(
                 "items",
                 queryset=GrantItem.objects.select_related(
-                    "video__organization", "video__live_transmission__source"
+                    "video__organization", "video__live_transmission__source", "poster"
                 ),
             )
         )
@@ -96,7 +97,7 @@ class AirtimeGrantViewSet(
         serializer = AirtimeGrantCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
-        data["videos"] = [item["video"] for item in data.pop("items", [])]
+        data["videos"] = entries(data.pop("items", []))
         if data.get("recipe"):
             data["recipe"] = build_recipe(
                 data["recipe"], organization=data["organization"], user=request.user
@@ -137,7 +138,7 @@ class AirtimeGrantViewSet(
         grant = self.get_object()
         serializer = GrantItemsWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        videos = [item["video"] for item in serializer.validated_data["items"]]
+        videos = entries(serializer.validated_data["items"])
         choice = serializer.validated_data.get("recipe")
         try:
             grant = services.set_items(
