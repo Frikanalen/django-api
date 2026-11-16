@@ -148,8 +148,11 @@ class ScheduleitemReadSerializer(serializers.ModelSerializer):
         help_text="Set for a member's text poster (only with include_fillers): "
         "playout airs it with the graphics template.",
     )
+    # Not required either: a playout from before graphics, or ahead of them,
+    # must not drop the whole schedule over it.
     graphic = ScheduleitemGraphicSerializer(
         allow_null=True,
+        required=False,
         help_text="Set for a staff graphic (only with include_fillers): playout "
         "airs its page for the row's duration.",
     )
