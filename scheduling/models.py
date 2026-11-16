@@ -8,6 +8,7 @@ ADR "Airtime grants replace member scheduling".
 """
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from django.contrib.postgres.constraints import ExclusionConstraint
@@ -355,9 +356,56 @@ class Poster(models.Model):
             )
 
 
+class Graphic(models.Model):
+    """An HTML page staff can put on air for as long as they like, such as
+    the infographics. Playout shows it in CasparCG with filler music under
+    it, the same way as the graphics between programmes. Not a programme:
+    the public schedule and the EPG leave it out."""
+
+    name = models.CharField(max_length=100, unique=True)
+    url = models.CharField(
+        max_length=500,
+        help_text="Where CasparCG loads it from: a full address, or a path on the "
+        "site such as /infographics/ (add ?page=<id> to hold one page). Playout "
+        "adds ?duration=<ms>.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("name",)
+
+    def __str__(self):
+        return self.name
+
+
+@dataclass(frozen=True)
+class Showing:
+    """A graphic for a length of time: how a graphic stands in a grant's
+    list. A graphic has no length of its own; the list gives it one."""
+
+    graphic: Graphic
+    duration: timedelta
+
+    @property
+    def pk(self) -> int:
+        return self.graphic.pk
+
+    @property
+    def name(self) -> str:
+        return self.graphic.name
+
+    def __str__(self):
+        return f"{self.graphic} ({self.duration})"
+
+
+GRAPHIC_SHORTEST = timedelta(seconds=5)
+
+
 class GrantItem(models.Model):
-    """One entry in a grant's list: a video or a text poster. Title and
-    length come from it. Where each entry plays is worked out by
+    """One entry in a grant's list: a video, a text poster or (staff only)
+    a graphic. Title and length come from a video or poster; a graphic's
+    length is the entry's `duration`. Where each entry plays is worked out by
     :mod:`scheduling.layout`. A live programme is a video with a live
     transmission and a length set by hand, so it is listed like any
     other.
@@ -373,6 +421,14 @@ class GrantItem(models.Model):
     poster = models.ForeignKey(
         Poster, null=True, blank=True, on_delete=models.PROTECT, related_name="grant_items"
     )
+    graphic = models.ForeignKey(
+        Graphic, null=True, blank=True, on_delete=models.PROTECT, related_name="grant_items"
+    )
+    duration = models.DurationField(
+        null=True,
+        blank=True,
+        help_text="How long the graphic is on. Only for a graphic.",
+    )
     pinned = models.BooleanField(
         default=False,
         help_text="Chosen by the owner. Automatic filling keeps it and fills around it.",
@@ -387,9 +443,15 @@ class GrantItem(models.Model):
                 deferrable=models.Deferrable.DEFERRED,
             ),
             models.CheckConstraint(
-                condition=models.Q(video__isnull=False, poster__isnull=True)
-                | models.Q(video__isnull=True, poster__isnull=False),
-                name="grantitem_video_or_poster",
+                condition=models.Q(video__isnull=False, poster__isnull=True, graphic__isnull=True)
+                | models.Q(video__isnull=True, poster__isnull=False, graphic__isnull=True)
+                | models.Q(video__isnull=True, poster__isnull=True, graphic__isnull=False),
+                name="grantitem_one_entry",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(graphic__isnull=True, duration__isnull=True)
+                | models.Q(graphic__isnull=False, duration__gte=GRAPHIC_SHORTEST),
+                name="grantitem_graphic_duration",
             ),
         ]
 
@@ -398,8 +460,12 @@ class GrantItem(models.Model):
 
     @property
     def entry(self):
-        """What plays: the video or the poster."""
-        return self.video if self.video_id is not None else self.poster
+        """What plays: the video, the poster, or the graphic for its length."""
+        if self.video_id is not None:
+            return self.video
+        if self.poster_id is not None:
+            return self.poster
+        return Showing(self.graphic, self.duration)
 
 
 # The request models live in their own module; importing them here

@@ -14,9 +14,9 @@ class ScheduleitemQuerySet(models.QuerySet):
     TZ = ZoneInfo("Europe/Oslo")
 
     def programmes(self) -> models.QuerySet:
-        """Everything but text posters, which fill gaps rather than being
-        programmes of their own."""
-        return self.filter(poster__isnull=True)
+        """Everything but text posters and graphics, which fill time
+        rather than being programmes of their own."""
+        return self.filter(poster__isnull=True, graphic__isnull=True)
 
     def normalize_date(self, value: str | date | datetime | None) -> date | None:
         """

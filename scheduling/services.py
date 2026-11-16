@@ -36,7 +36,14 @@ from programming.models import Recipe
 from programming.selection import ScheduleContext
 from programming.services import uploads_recipe
 from scheduling import broadcast_time, layout
-from scheduling.models import AirtimeGrant, GrantItem, Poster, RecurringSlot
+from scheduling.models import (
+    GRAPHIC_SHORTEST,
+    AirtimeGrant,
+    GrantItem,
+    Poster,
+    RecurringSlot,
+    Showing,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -93,8 +100,9 @@ def can_edit(grant: AirtimeGrant, user, now: datetime | None = None) -> bool:
 # -- Editing a grant ---------------------------------------------------------
 
 
-# What a grant lists: videos, and the owner's text posters.
-Entry = Video | Poster
+# What a grant lists: videos, the owner's text posters, and (put there by
+# staff) graphics for a length of time.
+Entry = Video | Poster | Showing
 
 
 # What starts this soon is treated as already on air: playout has cued it,
@@ -111,14 +119,16 @@ def started_rows(grant: AirtimeGrant, now: datetime | None = None) -> list[Sched
         return []
     return list(
         grant.schedule_items.filter(starttime__lte=now + ON_AIR_MARGIN)
-        .select_related("video", "poster")
+        .select_related("video", "poster", "graphic")
         .order_by("starttime")
     )
 
 
 def _row_entry(row: Scheduleitem) -> Entry:
+    if row.graphic_id is not None:
+        return Showing(row.graphic, row.duration)
     entry = row.video if row.video_id is not None else row.poster
-    assert entry is not None  # a grant compiles videos and posters only
+    assert entry is not None  # a grant compiles videos, posters and graphics only
     return entry
 
 
@@ -178,6 +188,17 @@ def _take_off_air(grant: AirtimeGrant, entries: Sequence[Entry], now: datetime) 
     return stored + rest
 
 
+def _check_graphics(grant: AirtimeGrant, entries: Sequence[Entry], user) -> None:
+    """Only staff put graphics on the air. A list that keeps the graphics
+    it has, unchanged, is anyone's to save."""
+    if getattr(user, "is_staff", False):
+        return
+    had = [(i.graphic_id, i.duration) for i in grant.items.filter(graphic__isnull=False)]
+    has = [(e.pk, e.duration) for e in entries if isinstance(e, Showing)]
+    if has != had:
+        raise PermissionDenied("Only staff can put graphics in a list.")
+
+
 def validate_items(
     grant: AirtimeGrant, entries: Sequence[Entry], now: datetime | None = None
 ) -> None:
@@ -190,6 +211,9 @@ def validate_items(
     ]
     if foreign:
         raise ValidationError({"items": "A poster can only air in its own organization's airtime."})
+    if any(isinstance(e, Showing) and e.duration < GRAPHIC_SHORTEST for e in entries):
+        seconds = int(GRAPHIC_SHORTEST.total_seconds())
+        raise ValidationError({"items": f"A graphic is on for at least {seconds} s."})
     listable = set(
         Video.objects.listable().filter(pk__in=[v.pk for v in videos]).values_list("pk", flat=True)
     )
@@ -253,6 +277,7 @@ def set_items(
         grant = AirtimeGrant.objects.select_for_update().get(pk=grant.pk)
         if not can_edit(grant, user, now):
             raise PermissionDenied("This grant can no longer be edited.")
+        _check_graphics(grant, videos, user)
         videos = _take_off_air(grant, videos, now)
         validate_items(grant, videos, now)
         if isinstance(recipe, Recipe) and recipe.organization_id != grant.organization_id:
@@ -435,7 +460,7 @@ def _refit(grant: AirtimeGrant, now: datetime) -> None:
     aired stays), refill a self-filling grant that hasn't started, and
     put the result on the schedule."""
     started = started_rows(grant, now)
-    items = list(grant.items.select_related("video", "poster"))
+    items = list(grant.items.select_related("video", "poster", "graphic"))
     head, tail = items[: len(started)], items[len(started) :]
     start, previous = _tail_origin(grant, started, now)
     kept = head + _fitting(grant, tail, padded=grant.padded, start=start, previous=previous)
@@ -662,7 +687,7 @@ def update_poster(poster: Poster, *, user, now: datetime | None = None, **change
                     )
                 entries = [
                     poster if item.poster_id == poster.pk else item.entry
-                    for item in grant.items.select_related("video", "poster")
+                    for item in grant.items.select_related("video", "poster", "graphic")
                 ]
                 validate_items(grant, entries)
         poster.save()
@@ -781,13 +806,13 @@ def lock_grants(now: datetime) -> None:
     due = AirtimeGrant.objects.filter(state=State.OPEN, lock_exempt=False, locks_at__lte=now)
     for grant in due:
         with transaction.atomic():
-            items = list(grant.items.select_related("video", "poster"))
+            items = list(grant.items.select_related("video", "poster", "graphic"))
             listable = set(
                 Video.objects.listable()
                 .filter(pk__in=[i.video_id for i in items if i.video_id])
                 .values_list("pk", flat=True)
             )
-            kept = [i for i in items if i.poster_id or i.video_id in listable]
+            kept = [i for i in items if i.poster_id or i.graphic_id or i.video_id in listable]
             if len(kept) != len(items):
                 dropped = [i.video_id for i in items if i not in kept]
                 logger.warning("Dropping unlistable videos %s from %s at lock", dropped, grant)
@@ -837,7 +862,9 @@ def compile_grant(grant: AirtimeGrant, now: datetime | None = None) -> bool:
             )
             if blocking is not None:
                 raise _Blocked(blocking)
-            items = list(grant.items.select_related("video__live_transmission", "poster"))
+            items = list(
+                grant.items.select_related("video__live_transmission", "poster", "graphic")
+            )
             heads = [_key(_row_entry(r)) for r in started]
             if [_key(i.entry) for i in items[: len(started)]] != heads:
                 logger.warning("%s: the list no longer starts with what has aired", grant)
@@ -864,6 +891,7 @@ def compile_grant(grant: AirtimeGrant, now: datetime | None = None) -> bool:
                 Scheduleitem.objects.create(
                     video=item.video,
                     poster=item.poster,
+                    graphic=item.graphic,
                     starttime=where.start,
                     duration=where.end - where.start,
                     grant=grant,
@@ -939,6 +967,8 @@ def _replace_items(grant: AirtimeGrant, entries: Sequence[Entry], pinned: int = 
             position=position,
             video=entry if isinstance(entry, Video) else None,
             poster=entry if isinstance(entry, Poster) else None,
+            graphic=entry.graphic if isinstance(entry, Showing) else None,
+            duration=entry.duration if isinstance(entry, Showing) else None,
             pinned=position < pinned,
         )
         for position, entry in enumerate(entries)
@@ -969,13 +999,15 @@ def _fitting(
 
 
 def _key(entry: Entry) -> tuple[str, int]:
+    if isinstance(entry, Showing):
+        return ("graphic", entry.pk)
     return ("poster" if isinstance(entry, Poster) else "video", entry.pk)
 
 
 def _fill(grant: AirtimeGrant, context: ScheduleContext, now: datetime) -> bool:
     """Fill `grant` around its pinned items. Returns whether the list changed."""
     assert grant.recipe is not None
-    items = list(grant.items.select_related("video", "poster"))
+    items = list(grant.items.select_related("video", "poster", "graphic"))
     pinned = [item.entry for item in items if item.pinned]
     picks = plan(grant.recipe, grant, context, now, pinned=pinned)
     if [_key(e) for e in picks] == [_key(item.entry) for item in items]:

@@ -7,7 +7,7 @@ from rest_framework import serializers
 from api.programming.serializers import RecipeSerializer
 from fk.models import LiveSource, Organization, Video
 from scheduling import services
-from scheduling.models import AirtimeGrant, GrantItem, Poster
+from scheduling.models import GRAPHIC_SHORTEST, AirtimeGrant, GrantItem, Graphic, Poster, Showing
 
 OSLO = ZoneInfo("Europe/Oslo")
 
@@ -52,15 +52,30 @@ class GrantItemPosterSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class GrantItemGraphicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Graphic
+        fields = ("id", "name", "url")
+        read_only_fields = fields
+
+
 class GrantItemSerializer(serializers.ModelSerializer):
     video = GrantItemVideoSerializer(read_only=True, allow_null=True)
     poster = GrantItemPosterSerializer(
         read_only=True, allow_null=True, help_text="Set instead of `video` for a text poster."
     )
+    graphic = GrantItemGraphicSerializer(
+        read_only=True,
+        allow_null=True,
+        help_text="Set instead of `video` for a staff graphic, on for `duration`.",
+    )
+    duration = serializers.DurationField(
+        read_only=True, allow_null=True, help_text="How long the graphic is on. Only for a graphic."
+    )
 
     class Meta:
         model = GrantItem
-        fields = ("position", "video", "poster", "pinned")
+        fields = ("position", "video", "poster", "graphic", "duration", "pinned")
         read_only_fields = fields
 
 
@@ -143,20 +158,33 @@ class AirtimeGrantSerializer(serializers.ModelSerializer):
 
 
 class GrantItemWriteSerializer(serializers.Serializer):
-    """A video or a text poster: exactly one of the two."""
+    """A video, a text poster, or a graphic with its duration: exactly one."""
 
     video = serializers.PrimaryKeyRelatedField(queryset=Video.objects.all(), required=False)
     poster = serializers.PrimaryKeyRelatedField(queryset=Poster.objects.all(), required=False)
+    graphic = serializers.PrimaryKeyRelatedField(
+        queryset=Graphic.objects.all(), required=False, help_text="Staff only."
+    )
+    duration = serializers.DurationField(
+        required=False, min_value=GRAPHIC_SHORTEST, help_text="With `graphic`: how long it is on."
+    )
 
     def validate(self, attrs):
-        if ("video" in attrs) == ("poster" in attrs):
-            raise serializers.ValidationError("Give either a video or a poster.")
+        if sum(key in attrs for key in ("video", "poster", "graphic")) != 1:
+            raise serializers.ValidationError("Give one of a video, a poster or a graphic.")
+        if ("graphic" in attrs) != ("duration" in attrs):
+            raise serializers.ValidationError("A graphic takes a duration, and only a graphic.")
         return attrs
 
 
 def entries(items) -> list:
-    """The videos and posters a written list names, in order."""
-    return [item.get("video") or item["poster"] for item in items]
+    """The videos, posters and graphics a written list names, in order."""
+    return [
+        Showing(item["graphic"], item["duration"])
+        if "graphic" in item
+        else item.get("video") or item["poster"]
+        for item in items
+    ]
 
 
 class AirtimeGrantCreateSerializer(serializers.ModelSerializer):
