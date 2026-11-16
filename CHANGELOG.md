@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.8.0](https://github.com/Frikanalen/django-api/compare/v3.7.0...v3.8.0) (2026-11-16)
+
+
+### Features
+
+* **grants:** running edits from the week page: start now, cut on cancel, move the start ([#148](https://github.com/Frikanalen/django-api/issues/148)) ([6caa5fa](https://github.com/Frikanalen/django-api/commit/6caa5fabc510859cad5654bae88b1e2f80c42884))
+* **scheduling:** the database keeps a grant's rows inside its window ([#146](https://github.com/Frikanalen/django-api/issues/146)) ([cdf083d](https://github.com/Frikanalen/django-api/commit/cdf083d205e9f571f626687dd9f4def9f9b38243))
+
 ## [3.7.0](https://github.com/Frikanalen/django-api/compare/v3.6.0...v3.7.0) (2026-11-16)
 
 
