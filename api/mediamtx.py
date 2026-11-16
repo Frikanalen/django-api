@@ -19,7 +19,6 @@ from api.auth.permissions import can_administer_organization
 from fk import preview_tokens, receiver
 from fk.models import LiveSource, StreamCredential
 
-
 # Protocols CasparCG may read a contribution over with the playout credential.
 PLAYOUT_PROTOCOLS = ("rtsp", "srt")
 
