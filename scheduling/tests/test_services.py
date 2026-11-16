@@ -545,6 +545,31 @@ def test_ending_a_grant_early_cuts_the_programme_on_air(on_air) -> None:
         services.update_grant(grant, endtime=AT_1910 - timedelta(minutes=1), now=AT_1910)
 
 
+def test_cancelling_a_grant_on_air_cuts_the_programme_now(on_air) -> None:
+    grant, (a, _b, _c), _a_row, _ = on_air
+
+    services.cancel_grant(grant, now=AT_1910)
+
+    assert schedule(grant) == [(a.pk, OPEN_WEEK, timedelta(minutes=10))]
+
+
+def test_staff_move_the_start_of_a_grant_before_air(make_grant, make_video) -> None:
+    grant = make_grant(OPEN_WEEK, state=State.LOCKED)
+    a, b = make_video(20), make_video(30)
+    services._replace_items(grant, [a, b])
+    services.compile_grant(grant, NOW)
+    later = OPEN_WEEK + timedelta(minutes=20)
+
+    services.update_grant(grant, starttime=later, now=NOW)
+
+    grant.refresh_from_db()
+    assert grant.starttime == later
+    assert items(grant) == [a.pk]  # b no longer fits the 40 minutes left
+    assert schedule(grant) == [(a.pk, later, timedelta(minutes=20))]
+    with pytest.raises(ValidationError, match="on air"):
+        services.update_grant(grant, starttime=OPEN_WEEK, now=later + timedelta(minutes=1))
+
+
 def test_lengthening_a_grant_needs_free_time(on_air, make_grant) -> None:
     grant, *_ = on_air
     make_grant(OPEN_WEEK + timedelta(minutes=90))

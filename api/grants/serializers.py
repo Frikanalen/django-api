@@ -201,11 +201,18 @@ class AirtimeGrantUpdateSerializer(serializers.Serializer):
     )
     locks_at = serializers.DateTimeField(default_timezone=OSLO, required=False)
     lock_exempt = serializers.BooleanField(required=False)
+    starttime = serializers.DateTimeField(
+        default_timezone=OSLO,
+        required=False,
+        help_text="Move the start, until the grant is on air. A start that has passed "
+        "means now. Entries that no longer fit come off the list; an earlier start "
+        "needs the extra time to be free.",
+    )
     endtime = serializers.DateTimeField(
         default_timezone=OSLO,
         required=False,
-        help_text="Move the end, even while the grant is on air, but not before the end "
-        "of what is on air. Entries that no longer fit come off the list. A later end "
+        help_text="Move the end, even while the grant is on air: what is on air past it "
+        "is cut short there. Entries that no longer fit come off the list. A later end "
         "needs the extra time to be free.",
     )
 

@@ -380,25 +380,71 @@ def approve_airtime(airtime_request) -> AirtimeGrant:
 
 
 def update_grant(grant: AirtimeGrant, *, now: datetime | None = None, **changes) -> AirtimeGrant:
-    """Staff changes a grant's deadline, lock exemption or end.
+    """Staff changes a grant's deadline, lock exemption, start or end.
 
-    A new end may shorten the grant, even on air, down to the end of
-    what is on air: the entries that no longer fit come off the list and
-    the schedule. Lengthening it needs the extra time to be free."""
-    allowed = {"locks_at", "lock_exempt", "endtime"}
+    A new end may shorten the grant, even on air: what is on air past it
+    is cut short there, and the entries that no longer fit come off the
+    list and the schedule. Lengthening it needs the extra time to be
+    free. The start can move until the grant goes on air; a start that
+    has passed means now."""
+    allowed = {"locks_at", "lock_exempt", "starttime", "endtime"}
     unknown = set(changes) - allowed
     if unknown:
         raise ValidationError({field: "Cannot be changed." for field in unknown})
     now = now or timezone.now()
     with transaction.atomic():
         grant = AirtimeGrant.objects.select_for_update().get(pk=grant.pk)
+        starttime = changes.pop("starttime", None)
         endtime = changes.pop("endtime", None)
         for field, value in changes.items():
             setattr(grant, field, value)
         grant.save(update_fields=[*changes, "updated_at"])
+        if starttime is not None and starttime != grant.starttime:
+            _move_start(grant, max(starttime, now), endtime or grant.endtime, now)
         if endtime is not None and endtime != grant.endtime:
             _move_end(grant, endtime, now)
     return grant
+
+
+def _move_start(grant: AirtimeGrant, starttime: datetime, endtime: datetime, now: datetime) -> None:
+    if grant.state == State.CANCELLED:
+        raise ValidationError({"starttime": "This grant is cancelled."})
+    if grant.starttime <= now:
+        raise ValidationError({"starttime": "This grant is on air; its start can't move."})
+    if starttime >= endtime:
+        raise ValidationError({"starttime": "The grant must start before it ends."})
+    if starttime < grant.starttime:
+        blocking = (
+            Scheduleitem.objects.overlapping(starttime, grant.starttime)
+            .exclude(grant=grant)
+            .first()
+        )
+        if blocking is not None:
+            raise ValidationError({"starttime": f"The extra time is taken by {blocking}."})
+    grant.starttime = starttime
+    try:
+        with transaction.atomic():
+            grant.save(update_fields=["starttime", "updated_at"])
+    except IntegrityError as error:
+        raise ValidationError({"starttime": "The new time overlaps another grant."}) from error
+    _refit(grant, now)
+
+
+def _refit(grant: AirtimeGrant, now: datetime) -> None:
+    """After the window moved: drop what no longer fits (the head that has
+    aired stays), refill a self-filling grant that hasn't started, and
+    put the result on the schedule."""
+    started = started_rows(grant, now)
+    items = list(grant.items.select_related("video", "poster"))
+    head, tail = items[: len(started)], items[len(started) :]
+    start, previous = _tail_origin(grant, started, now)
+    kept = head + _fitting(grant, tail, padded=grant.padded, start=start, previous=previous)
+    if len(kept) < len(items):
+        _replace_items(grant, [i.entry for i in kept], pinned=sum(i.pinned for i in kept))
+    if grant.recipe is not None and not started:
+        _fill(grant, _context_for([grant], now), now)
+    if _on_schedule(grant, now):
+        compile_grant(grant, now)
 
 
 def _move_end(grant: AirtimeGrant, endtime: datetime, now: datetime) -> None:
@@ -414,7 +460,6 @@ def _move_end(grant: AirtimeGrant, endtime: datetime, now: datetime) -> None:
     for row in started_rows(grant, now):
         if row.endtime > endtime:
             _cut(row, endtime)
-    started = started_rows(grant, now)
     if endtime > grant.endtime:
         blocking = (
             Scheduleitem.objects.overlapping(grant.endtime, endtime).exclude(grant=grant).first()
@@ -427,26 +472,18 @@ def _move_end(grant: AirtimeGrant, endtime: datetime, now: datetime) -> None:
             grant.save(update_fields=["endtime", "updated_at"])
     except IntegrityError as error:
         raise ValidationError({"endtime": "The extra time overlaps another grant."}) from error
-    # Drop what no longer fits: the head that has aired stays, the rest
-    # is laid out after it as the schedule will be.
-    items = list(grant.items.select_related("video", "poster"))
-    head, tail = items[: len(started)], items[len(started) :]
-    start, previous = _tail_origin(grant, started, now)
-    kept = head + _fitting(grant, tail, padded=grant.padded, start=start, previous=previous)
-    if len(kept) < len(items):
-        _replace_items(grant, [i.entry for i in kept], pinned=sum(i.pinned for i in kept))
-    if grant.recipe is not None and not started:
-        _fill(grant, _context_for([grant], now), now)
-    if _on_schedule(grant, now):
-        compile_grant(grant, now)
+    _refit(grant, now)
 
 
 def cancel_grant(grant: AirtimeGrant, *, now: datetime | None = None) -> AirtimeGrant:
     """Withdraw a grant, freeing its window. Whatever it compiled that has
-    not aired yet comes off the schedule."""
+    not aired yet comes off the schedule; what is on air is cut short now."""
     now = now or timezone.now()
     with transaction.atomic():
         grant = AirtimeGrant.objects.select_for_update().get(pk=grant.pk)
+        for row in grant.schedule_items.filter(starttime__lt=now):
+            if row.endtime > now:
+                _cut(row, now)
         grant.schedule_items.filter(starttime__gte=now).delete()
         grant.state = State.CANCELLED
         grant.save(update_fields=["state", "updated_at"])

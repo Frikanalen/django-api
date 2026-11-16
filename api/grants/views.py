@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Prefetch, Q
 from django.utils import timezone
@@ -103,8 +105,11 @@ class AirtimeGrantViewSet(
                 data["recipe"], organization=data["organization"], user=request.user
             )
         now = timezone.now()
-        if data["starttime"] <= now:
-            raise ValidationError({"starttime": "This time has already started."})
+        if data["endtime"] <= now:
+            raise ValidationError({"endtime": "This time has already passed."})
+        if data["starttime"] < now:
+            # Staff fitting something in under the playhead: it starts now.
+            data["starttime"] = now.replace(microsecond=0) + timedelta(seconds=1)
         # Given after its usual deadline, the airtime stays open until air,
         # so the organization can still set it up.
         if "locks_at" not in data and "lock_exempt" not in data:
