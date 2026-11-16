@@ -410,7 +410,7 @@ def test_cancel_takes_compiled_rows_off_the_schedule(make_grant, make_video) -> 
 # -- Editing -----------------------------------------------------------------
 
 
-def test_members_edit_while_open_and_staff_until_air(make_grant, editor) -> None:
+def test_members_edit_while_open_and_staff_until_the_grant_ends(make_grant, editor) -> None:
     staff = User.objects.create(email="staff@example.test", is_superuser=True)
     grant = make_grant(OPEN_WEEK)
     assert services.can_edit(grant, editor, NOW)
@@ -421,7 +421,9 @@ def test_members_edit_while_open_and_staff_until_air(make_grant, editor) -> None
     assert services.can_edit(grant, staff, past_deadline)
     grant.state = State.COMPILED
     assert services.can_edit(grant, staff, past_deadline)
-    assert not services.can_edit(grant, staff, grant.starttime)
+    assert services.can_edit(grant, staff, grant.starttime)
+    assert not services.can_edit(grant, staff, grant.endtime)
+    assert not services.can_edit(grant, editor, grant.starttime)
     grant.state = State.CANCELLED
     assert not services.can_edit(grant, staff, past_deadline)
 
@@ -438,6 +440,87 @@ def test_staff_editing_a_compiled_grant_recompiles_it(make_grant, make_video) ->
     services.set_items(grant, [other], user=staff, now=NOW)
 
     assert schedule(grant) == [(other.pk, OPEN_WEEK, timedelta(minutes=20))]
+
+
+@pytest.fixture
+def on_air(make_grant, make_video):
+    """A compiled 19:00-20:00 grant playing a (19:00-19:20), b (19:25-19:35)
+    and c (19:40-19:50); at 19:10, a is on air."""
+    grant = make_grant(OPEN_WEEK, state=State.LOCKED)
+    a, b, c = make_video(20), make_video(10), make_video(10)
+    services._replace_items(grant, [a, b, c])
+    services.compile_grant(grant, NOW)
+    staff = User.objects.create(email="staff@example.test", is_superuser=True)
+    a_row = Scheduleitem.objects.get(grant=grant, video=a)
+    return grant, (a, b, c), a_row, staff
+
+
+AT_1910 = OPEN_WEEK + timedelta(minutes=10)
+
+
+def test_staff_edit_what_comes_after_the_programme_on_air(on_air, make_video) -> None:
+    grant, (a, _b, c), a_row, staff = on_air
+    d = make_video(5)
+
+    services.set_items(grant, [a, c, d], user=staff, now=AT_1910)
+
+    minutes = timedelta(minutes=1)
+    assert schedule(grant) == [
+        (a.pk, OPEN_WEEK, 20 * minutes),
+        (c.pk, OPEN_WEEK + 25 * minutes, 10 * minutes),
+        (d.pk, OPEN_WEEK + 40 * minutes, 5 * minutes),
+    ]
+    # The row on air is left alone, so playout keeps playing it.
+    assert Scheduleitem.objects.filter(pk=a_row.pk, starttime=OPEN_WEEK).exists()
+
+
+def test_what_has_started_must_stay_at_the_head(on_air) -> None:
+    grant, (a, b, c), _, staff = on_air
+
+    for changed in ([b, c], [b, a, c], []):
+        with pytest.raises(ValidationError, match="already aired or is on air"):
+            services.set_items(grant, changed, user=staff, now=AT_1910)
+
+
+def test_a_programme_about_to_start_counts_as_on_air(on_air) -> None:
+    grant, (_a, b, _c), _, staff = on_air
+
+    with pytest.raises(ValidationError, match="already aired or is on air"):
+        services.set_items(grant, [b], user=staff, now=OPEN_WEEK - timedelta(seconds=15))
+    services.set_items(grant, [b], user=staff, now=OPEN_WEEK - timedelta(minutes=1))
+
+
+def test_staff_shorten_a_grant_on_air(on_air) -> None:
+    grant, (a, b, _c), a_row, _ = on_air
+
+    services.update_grant(grant, endtime=OPEN_WEEK + timedelta(minutes=36), now=AT_1910)
+
+    grant.refresh_from_db()
+    assert grant.endtime == OPEN_WEEK + timedelta(minutes=36)
+    assert items(grant) == [a.pk, b.pk]
+    assert [row[0] for row in schedule(grant)] == [a.pk, b.pk]
+    assert Scheduleitem.objects.filter(pk=a_row.pk).exists()
+
+
+def test_a_grant_cannot_end_before_the_programme_on_air(on_air) -> None:
+    grant, *_ = on_air
+
+    with pytest.raises(ValidationError, match="on air until 19:20:00"):
+        services.update_grant(grant, endtime=OPEN_WEEK + timedelta(minutes=15), now=AT_1910)
+    with pytest.raises(ValidationError, match="in the past"):
+        services.update_grant(grant, endtime=AT_1910 - timedelta(minutes=1), now=AT_1910)
+
+
+def test_lengthening_a_grant_needs_free_time(on_air, make_grant) -> None:
+    grant, *_ = on_air
+    make_grant(OPEN_WEEK + timedelta(minutes=90))
+
+    with pytest.raises(ValidationError, match="overlaps another grant"):
+        services.update_grant(grant, endtime=OPEN_WEEK + timedelta(minutes=100), now=AT_1910)
+    services.update_grant(grant, endtime=OPEN_WEEK + timedelta(minutes=90), now=AT_1910)
+
+    grant.refresh_from_db()
+    assert grant.endtime == OPEN_WEEK + timedelta(minutes=90)
 
 
 def test_outsiders_and_unapproved_members_cannot_edit(make_grant, organization, editor) -> None:

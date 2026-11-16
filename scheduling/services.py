@@ -75,13 +75,16 @@ def can_edit(grant: AirtimeGrant, user, now: datetime | None = None) -> bool:
     """Whether `user` may replace `grant`'s list right now.
 
     Members: while open and before the deadline, or until air on a
-    lock-exempt grant. Staff: until air, whatever the state; saving a
-    compiled grant recompiles it.
+    lock-exempt grant. Staff: until the grant ends, whatever the state;
+    saving a compiled grant recompiles it. Once it is on air, what has
+    started stays as it is (see :func:`started_rows`).
     """
     now = now or timezone.now()
     if grant.state == State.CANCELLED or not may_act_for(user, grant.organization):
         return False
-    if grant.lock_exempt or user.is_staff:
+    if user.is_staff:
+        return grant.endtime > now
+    if grant.lock_exempt:
         return grant.starttime > now
     return grant.state == State.OPEN and grant.locks_at > now
 
@@ -91,6 +94,46 @@ def can_edit(grant: AirtimeGrant, user, now: datetime | None = None) -> bool:
 
 # What a grant lists: videos, and the owner's text posters.
 Entry = Video | Poster
+
+
+# What starts this soon is treated as already on air: playout has cued it,
+# and moving a programme in its last seconds can leave the screen black.
+ON_AIR_MARGIN = timedelta(seconds=30)
+
+
+def started_rows(grant: AirtimeGrant, now: datetime | None = None) -> list[Scheduleitem]:
+    """The rows `grant` compiled that have aired, are on air or start
+    within :data:`ON_AIR_MARGIN`, in order. They are history: editing a
+    grant on air keeps them, and changes only what comes after."""
+    now = now or timezone.now()
+    if grant.starttime > now + ON_AIR_MARGIN:
+        return []
+    return list(
+        grant.schedule_items.filter(starttime__lte=now + ON_AIR_MARGIN)
+        .select_related("video", "poster")
+        .order_by("starttime")
+    )
+
+
+def _row_entry(row: Scheduleitem) -> Entry:
+    entry = row.video if row.video_id is not None else row.poster
+    assert entry is not None  # a grant compiles videos and posters only
+    return entry
+
+
+def _title(entry: Entry) -> str:
+    return entry.name if isinstance(entry, Video) else entry.heading
+
+
+def _check_started_kept(grant: AirtimeGrant, entries: Sequence[Entry], now: datetime) -> None:
+    started = started_rows(grant, now)
+    if [_key(e) for e in entries[: len(started)]] != [_key(_row_entry(r)) for r in started]:
+        raise ValidationError(
+            {
+                "items": "What has already aired or is on air must stay at the head "
+                "of the list, as it is."
+            }
+        )
 
 
 def validate_items(grant: AirtimeGrant, entries: Sequence[Entry]) -> None:
@@ -162,6 +205,7 @@ def set_items(
         grant = AirtimeGrant.objects.select_for_update().get(pk=grant.pk)
         if not can_edit(grant, user, now):
             raise PermissionDenied("This grant can no longer be edited.")
+        _check_started_kept(grant, videos, now)
         validate_items(grant, videos)
         if isinstance(recipe, Recipe) and recipe.organization_id != grant.organization_id:
             raise ValidationError({"recipe": "The recipe must belong to the grant's organization."})
@@ -176,7 +220,7 @@ def set_items(
         if automatic:
             _fill(grant, _context_for([grant], now), now)
         if _on_schedule(grant, now):
-            compile_grant(grant)
+            compile_grant(grant, now)
         if automatic and whole_slot and isinstance(recipe, Recipe):
             if grant.origin_slot is None:
                 raise ValidationError({"whole_slot": "This broadcast has no recurring slot."})
@@ -250,7 +294,7 @@ def _publish_if_due(grant: AirtimeGrant, now: datetime | None = None) -> None:
         return
     if grant.recipe is not None:
         _fill(grant, _context_for([grant], now), now)
-    compile_grant(grant)
+    compile_grant(grant, now)
 
 
 def approve_airtime(airtime_request) -> AirtimeGrant:
@@ -287,18 +331,72 @@ def approve_airtime(airtime_request) -> AirtimeGrant:
         raise ValidationError({"starttime": "Someone else got this airtime first."}) from error
 
 
-def update_grant(grant: AirtimeGrant, **changes) -> AirtimeGrant:
-    """Staff changes a grant's deadline or lock exemption."""
-    allowed = {"locks_at", "lock_exempt"}
+def update_grant(grant: AirtimeGrant, *, now: datetime | None = None, **changes) -> AirtimeGrant:
+    """Staff changes a grant's deadline, lock exemption or end.
+
+    A new end may shorten the grant, even on air, down to the end of
+    what is on air: the entries that no longer fit come off the list and
+    the schedule. Lengthening it needs the extra time to be free."""
+    allowed = {"locks_at", "lock_exempt", "endtime"}
     unknown = set(changes) - allowed
     if unknown:
         raise ValidationError({field: "Cannot be changed." for field in unknown})
+    now = now or timezone.now()
     with transaction.atomic():
         grant = AirtimeGrant.objects.select_for_update().get(pk=grant.pk)
+        endtime = changes.pop("endtime", None)
         for field, value in changes.items():
             setattr(grant, field, value)
         grant.save(update_fields=[*changes, "updated_at"])
+        if endtime is not None and endtime != grant.endtime:
+            _move_end(grant, endtime, now)
     return grant
+
+
+def _move_end(grant: AirtimeGrant, endtime: datetime, now: datetime) -> None:
+    if grant.state == State.CANCELLED:
+        raise ValidationError({"endtime": "This grant is cancelled."})
+    if grant.endtime <= now:
+        raise ValidationError({"endtime": "This grant has already aired."})
+    if endtime <= grant.starttime:
+        raise ValidationError({"endtime": "The grant must end after it starts."})
+    if endtime <= now:
+        raise ValidationError({"endtime": "The grant can't end in the past."})
+    started = started_rows(grant, now)
+    if started and started[-1].endtime > endtime:
+        on_air = _row_entry(started[-1])
+        until = started[-1].endtime.astimezone(broadcast_time.TZ)
+        raise ValidationError(
+            {
+                "endtime": f"'{_title(on_air)}' is on air "
+                f"until {until:%H:%M:%S}; the grant can't end before that."
+            }
+        )
+    if endtime > grant.endtime:
+        blocking = (
+            Scheduleitem.objects.overlapping(grant.endtime, endtime).exclude(grant=grant).first()
+        )
+        if blocking is not None:
+            raise ValidationError({"endtime": f"The extra time is taken by {blocking}."})
+    grant.endtime = endtime
+    try:
+        with transaction.atomic():
+            grant.save(update_fields=["endtime", "updated_at"])
+    except IntegrityError as error:
+        raise ValidationError({"endtime": "The extra time overlaps another grant."}) from error
+    # Drop what no longer fits: the head that has aired stays, the rest
+    # is laid out after it as the schedule will be.
+    items = list(grant.items.select_related("video", "poster"))
+    head, tail = items[: len(started)], items[len(started) :]
+    start = started[-1].endtime if started else grant.starttime
+    previous = _row_entry(started[-1]) if started else None
+    kept = head + _fitting(grant, tail, padded=grant.padded, start=start, previous=previous)
+    if len(kept) < len(items):
+        _replace_items(grant, [i.entry for i in kept], pinned=sum(i.pinned for i in kept))
+    if grant.recipe is not None and not started:
+        _fill(grant, _context_for([grant], now), now)
+    if _on_schedule(grant, now):
+        compile_grant(grant, now)
 
 
 def cancel_grant(grant: AirtimeGrant, *, now: datetime | None = None) -> AirtimeGrant:
@@ -346,7 +444,7 @@ def set_slot_recipe(
             grant.recipe = recipe
             grant.save(update_fields=["recipe", "updated_at"])
             if _fill(grant, context, now) and grant.state == State.COMPILED:
-                compile_grant(grant)
+                compile_grant(grant, now)
     return slot
 
 
@@ -491,7 +589,7 @@ def update_poster(poster: Poster, *, user, now: datetime | None = None, **change
         poster.save()
         for grant in grants:
             if _on_schedule(grant, now):
-                compile_grant(grant)
+                compile_grant(grant, now)
     return poster
 
 
@@ -595,7 +693,7 @@ def fill_grants(now: datetime) -> None:
     for grant in grants:
         with transaction.atomic():
             if _fill(grant, context, now) and grant.state == State.COMPILED:
-                compile_grant(grant)
+                compile_grant(grant, now)
 
 
 def lock_grants(now: datetime) -> None:
@@ -624,13 +722,17 @@ def compile_grants(now: datetime) -> None:
         Q(state=State.LOCKED) | Q(state=State.OPEN, lock_exempt=True, locks_at__lte=now)
     ).order_by("starttime")
     for grant in due:
-        compile_grant(grant)
+        compile_grant(grant, now)
 
 
-def compile_grant(grant: AirtimeGrant) -> bool:
+def compile_grant(grant: AirtimeGrant, now: datetime | None = None) -> bool:
     """Write the grant's items to Scheduleitem as :mod:`scheduling.layout`
     places them, replacing whatever it compiled before. Returns whether
     it did.
+
+    On air, the rows that have started (see :func:`started_rows`) stay
+    as they are, untouched, and stand for the head of the list; only
+    what comes after them is rewritten, laid out from where they end.
 
     A grant owns its window, so normally nothing else is there. If
     something is -- a staff entry, or a row from before the cut-over --
@@ -640,23 +742,35 @@ def compile_grant(grant: AirtimeGrant) -> bool:
     put on the schedule and has not aired yet comes off, and the grant
     is left in its state.
     """
+    now = now or timezone.now()
     if grant.organization.is_rogue:
-        grant.schedule_items.filter(starttime__gt=timezone.now()).delete()
+        grant.schedule_items.filter(starttime__gt=now).delete()
         logger.warning("Not compiling %s: %s is suspended", grant, grant.organization)
         return False
     try:
         with transaction.atomic():
-            grant.schedule_items.all().delete()
-            blocking = Scheduleitem.objects.overlapping(grant.starttime, grant.endtime).first()
+            started = started_rows(grant, now)
+            grant.schedule_items.exclude(pk__in=[r.pk for r in started]).delete()
+            blocking = (
+                Scheduleitem.objects.overlapping(grant.starttime, grant.endtime)
+                .exclude(grant=grant)
+                .first()
+            )
             if blocking is not None:
                 raise _Blocked(blocking)
             items = list(grant.items.select_related("video__live_transmission", "poster"))
+            heads = [_key(_row_entry(r)) for r in started]
+            if [_key(i.entry) for i in items[: len(started)]] != heads:
+                logger.warning("%s: the list no longer starts with what has aired", grant)
+            items = items[len(started) :]
+            start = started[-1].endtime if started else grant.starttime
+            previous = _row_entry(started[-1]) if started else None
             padded = grant.padded
-            kept = _fitting(grant, items, padded=padded)
+            kept = _fitting(grant, items, padded=padded, start=start, previous=previous)
             if len(kept) < len(items) and padded:
                 # A list saved before programmes were padded may only fit
                 # back to back. Better that than leaving a programme out.
-                unpadded = _fitting(grant, items, padded=False)
+                unpadded = _fitting(grant, items, padded=False, start=start, previous=previous)
                 if len(unpadded) > len(kept):
                     logger.warning("%s only fits back to back; not padding it", grant)
                     kept, padded = unpadded, False
@@ -665,7 +779,9 @@ def compile_grant(grant: AirtimeGrant) -> bool:
                     logger.warning(
                         "Leaving %s out of %s: it no longer fits the window", item.entry, grant
                     )
-            placed = layout.lay_out(grant.starttime, [i.entry for i in kept], padded=padded)
+            placed = layout.lay_out(
+                start, [i.entry for i in kept], padded=padded, previous=previous
+            )
             for item, where in zip(kept, placed, strict=True):
                 Scheduleitem.objects.create(
                     video=item.video,
@@ -707,7 +823,7 @@ def recompile_for_video(video: Video, now: datetime | None = None) -> None:
         rows = list(grant.schedule_items.filter(video=video).values_list("duration", "is_live"))
         listed = grant.items.filter(video=video).count()
         if len(rows) != listed or any(d != video.duration or l != live for d, l in rows):
-            compile_grant(grant)
+            compile_grant(grant, now)
 
 
 def cut_over(at: datetime) -> int:
@@ -751,13 +867,24 @@ def _replace_items(grant: AirtimeGrant, entries: Sequence[Entry], pinned: int = 
     )
 
 
-def _fitting(grant: AirtimeGrant, items: Sequence[GrantItem], *, padded: bool) -> list[GrantItem]:
+def _fitting(
+    grant: AirtimeGrant,
+    items: Sequence[GrantItem],
+    *,
+    padded: bool,
+    start: datetime | None = None,
+    previous: Entry | None = None,
+) -> list[GrantItem]:
     """The items that fit the window, in order, laid out without the ones
-    that don't, so an entry left out leaves no hole."""
+    that don't, so an entry left out leaves no hole. They follow
+    `previous`, ending at `start` (the grant's start by default)."""
     kept: list[GrantItem] = []
+    start = start or grant.starttime
     for item in items:
         entry = item.entry
-        placed = layout.lay_out(grant.starttime, [i.entry for i in kept] + [entry], padded=padded)
+        placed = layout.lay_out(
+            start, [i.entry for i in kept] + [entry], padded=padded, previous=previous
+        )
         if entry.duration > timedelta(0) and placed[-1].end <= grant.endtime:
             kept.append(item)
     return kept

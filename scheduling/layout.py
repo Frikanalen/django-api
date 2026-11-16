@@ -54,12 +54,12 @@ def next_start(cursor: datetime, previous, entry, *, padded: bool) -> datetime:
     return _up_to_grid(earliest)
 
 
-def lay_out(start: datetime, entries: Sequence, *, padded: bool) -> list[Placed]:
+def lay_out(start: datetime, entries: Sequence, *, padded: bool, previous=None) -> list[Placed]:
     """When each of `entries` (videos and posters, anything with a
-    `duration`) plays, from `start`."""
+    `duration`) plays, from `start`. With `previous`, they follow that
+    entry, which ended at `start`."""
     placed = []
     cursor = start
-    previous = None
     for entry in entries:
         begin = next_start(cursor, previous, entry, padded=padded)
         cursor = begin + entry.duration
