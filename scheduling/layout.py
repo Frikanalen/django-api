@@ -32,7 +32,7 @@ class Placed:
     end: datetime
 
 
-def _up_to_grid(instant: datetime) -> datetime:
+def up_to_grid(instant: datetime) -> datetime:
     """The first grid point at or after `instant`. Oslo is a whole number
     of hours off UTC, so the UTC grid is Oslo's grid too."""
     offset = (instant - _EPOCH) % GRID
@@ -51,7 +51,7 @@ def next_start(cursor: datetime, previous, entry, *, padded: bool) -> datetime:
     if not padded or previous is None or not is_programme(entry):
         return cursor
     earliest = cursor + BREATHER if is_programme(previous) else cursor
-    return _up_to_grid(earliest)
+    return up_to_grid(earliest)
 
 
 def lay_out(start: datetime, entries: Sequence, *, padded: bool, previous=None) -> list[Placed]:

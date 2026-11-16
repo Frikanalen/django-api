@@ -125,6 +125,25 @@ def _title(entry: Entry) -> str:
     return entry.name if isinstance(entry, Video) else entry.heading
 
 
+def _tail_origin(
+    grant: AirtimeGrant, started: Sequence[Scheduleitem], now: datetime
+) -> tuple[datetime, Entry | None]:
+    """Where the list after `started` begins, and what it follows. Before
+    air, that is the grant's start. On air, it is where the started rows
+    end -- or, if that has passed (graphics are showing), the first time
+    far enough ahead to change, on the grid for a padded grant. A grant
+    that has ended is laid out as it was, from its start."""
+    if grant.starttime > now + ON_AIR_MARGIN or grant.endtime <= now:
+        return grant.starttime, None
+    start = started[-1].endtime if started else grant.starttime
+    previous = _row_entry(started[-1]) if started else None
+    earliest = now + ON_AIR_MARGIN
+    if start < earliest:
+        start = layout.up_to_grid(earliest) if grant.padded else earliest
+        previous = None
+    return start, previous
+
+
 def _check_started_kept(grant: AirtimeGrant, entries: Sequence[Entry], now: datetime) -> None:
     started = started_rows(grant, now)
     if [_key(e) for e in entries[: len(started)]] != [_key(_row_entry(r)) for r in started]:
@@ -136,7 +155,9 @@ def _check_started_kept(grant: AirtimeGrant, entries: Sequence[Entry], now: date
         )
 
 
-def validate_items(grant: AirtimeGrant, entries: Sequence[Entry]) -> None:
+def validate_items(
+    grant: AirtimeGrant, entries: Sequence[Entry], now: datetime | None = None
+) -> None:
     """Local to the grant: it owns its window, so there are no airtime
     conflicts to check -- only that everything is listable and fits,
     laid out as it will air (see :mod:`scheduling.layout`)."""
@@ -159,7 +180,11 @@ def validate_items(grant: AirtimeGrant, entries: Sequence[Entry]) -> None:
                 "that will follow)."
             }
         )
-    end = layout.end_of(grant.starttime, entries, padded=grant.padded)
+    started = started_rows(grant, now)
+    start, previous = _tail_origin(grant, started, now or timezone.now())
+    tail = entries[len(started) :]
+    placed = layout.lay_out(start, tail, padded=grant.padded, previous=previous)
+    end = placed[-1].end if placed else start
     if end > grant.endtime:
         total = end - grant.starttime
         raise ValidationError(
@@ -206,7 +231,7 @@ def set_items(
         if not can_edit(grant, user, now):
             raise PermissionDenied("This grant can no longer be edited.")
         _check_started_kept(grant, videos, now)
-        validate_items(grant, videos)
+        validate_items(grant, videos, now)
         if isinstance(recipe, Recipe) and recipe.organization_id != grant.organization_id:
             raise ValidationError({"recipe": "The recipe must belong to the grant's organization."})
         _replace_items(grant, videos, pinned=len(videos))
@@ -388,8 +413,7 @@ def _move_end(grant: AirtimeGrant, endtime: datetime, now: datetime) -> None:
     # is laid out after it as the schedule will be.
     items = list(grant.items.select_related("video", "poster"))
     head, tail = items[: len(started)], items[len(started) :]
-    start = started[-1].endtime if started else grant.starttime
-    previous = _row_entry(started[-1]) if started else None
+    start, previous = _tail_origin(grant, started, now)
     kept = head + _fitting(grant, tail, padded=grant.padded, start=start, previous=previous)
     if len(kept) < len(items):
         _replace_items(grant, [i.entry for i in kept], pinned=sum(i.pinned for i in kept))
@@ -763,8 +787,7 @@ def compile_grant(grant: AirtimeGrant, now: datetime | None = None) -> bool:
             if [_key(i.entry) for i in items[: len(started)]] != heads:
                 logger.warning("%s: the list no longer starts with what has aired", grant)
             items = items[len(started) :]
-            start = started[-1].endtime if started else grant.starttime
-            previous = _row_entry(started[-1]) if started else None
+            start, previous = _tail_origin(grant, started, now)
             padded = grant.padded
             kept = _fitting(grant, items, padded=padded, start=start, previous=previous)
             if len(kept) < len(items) and padded:

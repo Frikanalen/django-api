@@ -474,6 +474,17 @@ def test_staff_edit_what_comes_after_the_programme_on_air(on_air, make_video) ->
     assert Scheduleitem.objects.filter(pk=a_row.pk, starttime=OPEN_WEEK).exists()
 
 
+def test_added_while_graphics_show_airs_from_now_not_the_past(on_air) -> None:
+    grant, (a, _b, c), _, staff = on_air
+    at_1930 = OPEN_WEEK + timedelta(minutes=30)
+    # Only a is left; at 19:30 it has aired and graphics show.
+    services.set_items(grant, [a], user=staff, now=OPEN_WEEK + timedelta(minutes=10))
+
+    services.set_items(grant, [a, c], user=staff, now=at_1930)
+
+    assert schedule(grant)[-1] == (c.pk, at_1930 + timedelta(minutes=5), timedelta(minutes=10))
+
+
 def test_what_has_started_must_stay_at_the_head(on_air) -> None:
     grant, (a, b, c), _, staff = on_air
 
