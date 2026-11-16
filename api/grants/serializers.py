@@ -81,6 +81,7 @@ class AirtimeGrantSerializer(serializers.ModelSerializer):
         "False for a jukebox grant, which plays back to back.",
     )
     can_edit = serializers.SerializerMethodField()
+    started_items = serializers.SerializerMethodField()
     recipe = RecipeSerializer(
         read_only=True,
         allow_null=True,
@@ -103,6 +104,7 @@ class AirtimeGrantSerializer(serializers.ModelSerializer):
             "items_duration",
             "padded",
             "can_edit",
+            "started_items",
         )
         read_only_fields = fields
 
@@ -114,6 +116,16 @@ class AirtimeGrantSerializer(serializers.ModelSerializer):
     def get_can_edit(self, grant) -> bool:
         request = self.context.get("request")
         return request is not None and services.can_edit(grant, request.user)
+
+    @extend_schema_field(
+        serializers.IntegerField(
+            help_text="How many entries at the head of the list have aired, are on air "
+            "or start within seconds. An edit must keep them first, as they are; "
+            "staff may change the rest, and move the end, while the grant is on air."
+        )
+    )
+    def get_started_items(self, grant) -> int:
+        return len(services.started_rows(grant))
 
 
 class GrantItemWriteSerializer(serializers.Serializer):
@@ -166,7 +178,7 @@ class AirtimeGrantCreateSerializer(serializers.ModelSerializer):
 
 
 class AirtimeGrantUpdateSerializer(serializers.Serializer):
-    """Staff cancels a grant, moves its deadline or exempts it from locking."""
+    """Staff cancels a grant, moves its deadline or end, or exempts it from locking."""
 
     state = serializers.ChoiceField(
         choices=[AirtimeGrant.State.CANCELLED],
@@ -175,6 +187,13 @@ class AirtimeGrantUpdateSerializer(serializers.Serializer):
     )
     locks_at = serializers.DateTimeField(default_timezone=OSLO, required=False)
     lock_exempt = serializers.BooleanField(required=False)
+    endtime = serializers.DateTimeField(
+        default_timezone=OSLO,
+        required=False,
+        help_text="Move the end, even while the grant is on air, but not before the end "
+        "of what is on air. Entries that no longer fit come off the list. A later end "
+        "needs the extra time to be free.",
+    )
 
 
 class GrantItemsWriteSerializer(serializers.Serializer):

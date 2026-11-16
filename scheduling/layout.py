@@ -32,7 +32,7 @@ class Placed:
     end: datetime
 
 
-def _up_to_grid(instant: datetime) -> datetime:
+def up_to_grid(instant: datetime) -> datetime:
     """The first grid point at or after `instant`. Oslo is a whole number
     of hours off UTC, so the UTC grid is Oslo's grid too."""
     offset = (instant - _EPOCH) % GRID
@@ -51,15 +51,15 @@ def next_start(cursor: datetime, previous, entry, *, padded: bool) -> datetime:
     if not padded or previous is None or not is_programme(entry):
         return cursor
     earliest = cursor + BREATHER if is_programme(previous) else cursor
-    return _up_to_grid(earliest)
+    return up_to_grid(earliest)
 
 
-def lay_out(start: datetime, entries: Sequence, *, padded: bool) -> list[Placed]:
+def lay_out(start: datetime, entries: Sequence, *, padded: bool, previous=None) -> list[Placed]:
     """When each of `entries` (videos and posters, anything with a
-    `duration`) plays, from `start`."""
+    `duration`) plays, from `start`. With `previous`, they follow that
+    entry, which ended at `start`."""
     placed = []
     cursor = start
-    previous = None
     for entry in entries:
         begin = next_start(cursor, previous, entry, padded=padded)
         cursor = begin + entry.duration

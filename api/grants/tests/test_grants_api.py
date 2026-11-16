@@ -336,6 +336,23 @@ def test_staff_exempt_and_cancel(staff, open_grant) -> None:
     assert cancelled.json()["canEdit"] is False
 
 
+def test_staff_move_the_end_of_a_grant(staff, member, open_grant) -> None:
+    url = reverse("api-grant-detail", args=[open_grant.pk])
+    earlier = open_grant.starttime + timedelta(minutes=30)
+
+    refused = client_for(member).patch(url, {"endtime": earlier.isoformat()}, format="json")
+    moved = client_for(staff).patch(url, {"endtime": earlier.isoformat()}, format="json")
+    before_start = client_for(staff).patch(
+        url, {"endtime": open_grant.starttime.isoformat()}, format="json"
+    )
+
+    assert refused.status_code == 403
+    assert moved.status_code == 200
+    assert moved.json()["endtime"] == earlier.astimezone(OSLO).isoformat()
+    assert before_start.status_code == 400
+    assert before_start.json()["errors"][0]["attr"] == "endtime"
+
+
 def test_put_items_automatic_pins_them_and_fills_the_rest(
     member, organization, open_grant, video
 ) -> None:
