@@ -1,5 +1,6 @@
 from zoneinfo import ZoneInfo
 
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
@@ -82,6 +83,7 @@ class AirtimeGrantSerializer(serializers.ModelSerializer):
     )
     can_edit = serializers.SerializerMethodField()
     started_items = serializers.SerializerMethodField()
+    aired_items = serializers.SerializerMethodField()
     recipe = RecipeSerializer(
         read_only=True,
         allow_null=True,
@@ -105,6 +107,7 @@ class AirtimeGrantSerializer(serializers.ModelSerializer):
             "padded",
             "can_edit",
             "started_items",
+            "aired_items",
         )
         read_only_fields = fields
 
@@ -120,12 +123,23 @@ class AirtimeGrantSerializer(serializers.ModelSerializer):
     @extend_schema_field(
         serializers.IntegerField(
             help_text="How many entries at the head of the list have aired, are on air "
-            "or start within seconds. An edit must keep them first, as they are; "
-            "staff may change the rest, and move the end, while the grant is on air."
+            "or start within seconds. Staff may change what follows them, and move "
+            "the end, while the grant is on air."
         )
     )
     def get_started_items(self, grant) -> int:
         return len(services.started_rows(grant))
+
+    @extend_schema_field(
+        serializers.IntegerField(
+            help_text="How many entries at the head of the list have finished airing. "
+            "An edit must keep them first, as they are. Staff may leave out the ones "
+            "between this and `startedItems`: that takes them off the air at once."
+        )
+    )
+    def get_aired_items(self, grant) -> int:
+        now = timezone.now()
+        return sum(1 for row in services.started_rows(grant, now) if row.endtime <= now)
 
 
 class GrantItemWriteSerializer(serializers.Serializer):

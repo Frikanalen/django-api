@@ -77,7 +77,8 @@ def can_edit(grant: AirtimeGrant, user, now: datetime | None = None) -> bool:
     Members: while open and before the deadline, or until air on a
     lock-exempt grant. Staff: until the grant ends, whatever the state;
     saving a compiled grant recompiles it. Once it is on air, what has
-    started stays as it is (see :func:`started_rows`).
+    aired stays as it is; what is on air can be taken off (see
+    :func:`_take_off_air`).
     """
     now = now or timezone.now()
     if grant.state == State.CANCELLED or not may_act_for(user, grant.organization):
@@ -103,8 +104,8 @@ ON_AIR_MARGIN = timedelta(seconds=30)
 
 def started_rows(grant: AirtimeGrant, now: datetime | None = None) -> list[Scheduleitem]:
     """The rows `grant` compiled that have aired, are on air or start
-    within :data:`ON_AIR_MARGIN`, in order. They are history: editing a
-    grant on air keeps them, and changes only what comes after."""
+    within :data:`ON_AIR_MARGIN`, in order. Compiling keeps them as they
+    are; only an explicit cut (:func:`_cut`) changes them."""
     now = now or timezone.now()
     if grant.starttime > now + ON_AIR_MARGIN:
         return []
@@ -119,10 +120,6 @@ def _row_entry(row: Scheduleitem) -> Entry:
     entry = row.video if row.video_id is not None else row.poster
     assert entry is not None  # a grant compiles videos and posters only
     return entry
-
-
-def _title(entry: Entry) -> str:
-    return entry.name if isinstance(entry, Video) else entry.heading
 
 
 def _tail_origin(
@@ -144,15 +141,41 @@ def _tail_origin(
     return start, previous
 
 
-def _check_started_kept(grant: AirtimeGrant, entries: Sequence[Entry], now: datetime) -> None:
+def _cut(row: Scheduleitem, at: datetime) -> None:
+    """Take `row` off the air at `at`: what has already played of it stays
+    on the schedule, as history; if it hasn't begun, it goes."""
+    if row.starttime >= at:
+        row.delete()
+    else:
+        row.duration = at - row.starttime
+        row.save(update_fields=["duration"])
+    transaction.on_commit(cache.clear)
+
+
+def _take_off_air(grant: AirtimeGrant, entries: Sequence[Entry], now: datetime) -> list[Entry]:
+    """Apply a staff edit to a grant on air, returning the list to store.
+
+    What has aired must stay at the head of `entries`. The programme on
+    air (and anything about to start) stays on air while it follows them
+    in `entries`; left out, it is taken off the air now. Cut short, it
+    stays listed, so the list still tells what aired."""
     started = started_rows(grant, now)
-    if [_key(e) for e in entries[: len(started)]] != [_key(_row_entry(r)) for r in started]:
+    aired = [r for r in started if r.endtime <= now]
+    if [_key(e) for e in entries[: len(aired)]] != [_key(_row_entry(r)) for r in aired]:
         raise ValidationError(
-            {
-                "items": "What has already aired or is on air must stay at the head "
-                "of the list, as it is."
-            }
+            {"items": "What has already aired must stay at the head of the list, as it is."}
         )
+    stored = [_row_entry(r) for r in aired]
+    rest = list(entries[len(aired) :])
+    live = started[len(aired) :]
+    while live and rest and _key(rest[0]) == _key(_row_entry(live[0])):
+        stored.append(rest.pop(0))
+        live.pop(0)
+    for row in live:
+        _cut(row, now)
+        if row.starttime < now:
+            stored.append(_row_entry(row))
+    return stored + rest
 
 
 def validate_items(
@@ -230,7 +253,7 @@ def set_items(
         grant = AirtimeGrant.objects.select_for_update().get(pk=grant.pk)
         if not can_edit(grant, user, now):
             raise PermissionDenied("This grant can no longer be edited.")
-        _check_started_kept(grant, videos, now)
+        videos = _take_off_air(grant, videos, now)
         validate_items(grant, videos, now)
         if isinstance(recipe, Recipe) and recipe.organization_id != grant.organization_id:
             raise ValidationError({"recipe": "The recipe must belong to the grant's organization."})
@@ -387,16 +410,11 @@ def _move_end(grant: AirtimeGrant, endtime: datetime, now: datetime) -> None:
         raise ValidationError({"endtime": "The grant must end after it starts."})
     if endtime <= now:
         raise ValidationError({"endtime": "The grant can't end in the past."})
+    # Ending before what is on air finishes cuts it short at the new end.
+    for row in started_rows(grant, now):
+        if row.endtime > endtime:
+            _cut(row, endtime)
     started = started_rows(grant, now)
-    if started and started[-1].endtime > endtime:
-        on_air = _row_entry(started[-1])
-        until = started[-1].endtime.astimezone(broadcast_time.TZ)
-        raise ValidationError(
-            {
-                "endtime": f"'{_title(on_air)}' is on air "
-                f"until {until:%H:%M:%S}; the grant can't end before that."
-            }
-        )
     if endtime > grant.endtime:
         blocking = (
             Scheduleitem.objects.overlapping(grant.endtime, endtime).exclude(grant=grant).first()
