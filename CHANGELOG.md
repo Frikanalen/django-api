@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.7.0](https://github.com/Frikanalen/django-api/compare/v3.6.0...v3.7.0) (2026-11-16)
+
+
+### Features
+
+* **grants:** let staff take the programme on air off the air ([#144](https://github.com/Frikanalen/django-api/issues/144)) ([7d84e93](https://github.com/Frikanalen/django-api/commit/7d84e938bc5688d57ef8177b99b4fa21f493e30d))
+
 ## [3.6.0](https://github.com/Frikanalen/django-api/compare/v3.5.0...v3.6.0) (2026-11-16)
 
 
