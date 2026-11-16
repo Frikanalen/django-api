@@ -258,14 +258,19 @@ def test_playout_reads_every_enabled_sources_contribution(playout):
     [
         {"action": "publish"},
         {"protocol": "webrtc"},
-        {"protocol": "srt"},
+        {"protocol": "rtmp"},
         {"action": "playback"},
         {"action": "api"},
     ],
 )
-def test_playout_only_reads_over_rtsp(playout, overrides):
+def test_playout_only_reads_over_rtsp_or_srt(playout, overrides):
     credential, secret, sources = playout
     assert read_as_playout(credential, secret, sources[0].contribution_path, **overrides) == 401
+
+
+def test_playout_reads_over_srt(playout):
+    credential, secret, sources = playout
+    assert read_as_playout(credential, secret, sources[0].contribution_path, protocol="srt") == 204
 
 
 def test_playout_cannot_read_previews_unknown_or_disabled_sources(playout):
@@ -371,3 +376,12 @@ def test_loopback_converter_cannot_touch_unknown_or_disabled_sources(playout):
     source.save()
     assert as_local_converter("read", source.contribution_path) == 401
     assert as_local_converter("publish", source.preview_path) == 401
+
+
+def test_loopback_srt_publish_is_only_for_a_pulled_sources_original(playout):
+    _, _, sources = playout
+    pushed = sources[0]
+    assert not pushed.is_pulled
+    assert as_local_converter("publish", pushed.contribution_path, protocol="srt") == 401
+    assert as_local_converter("publish", pushed.preview_path, protocol="srt") == 401
+    assert as_local_converter("read", pushed.contribution_path, protocol="srt") == 401

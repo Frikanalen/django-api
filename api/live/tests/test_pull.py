@@ -296,6 +296,20 @@ def test_the_local_relay_may_publish_a_pulled_source(pulled):
     assert response.status_code == 204
 
 
+def test_the_local_relay_may_publish_a_pulled_source_over_srt(pulled):
+    response = mediamtx_auth(
+        ip="127.0.0.1", action="publish", path=pulled.contribution_path, protocol="srt"
+    )
+    assert response.status_code == 204
+
+
+def test_only_loopback_may_publish_a_pulled_source_over_srt(pulled):
+    response = mediamtx_auth(
+        ip="192.0.2.1", action="publish", path=pulled.contribution_path, protocol="srt"
+    )
+    assert response.status_code == 401
+
+
 def test_the_local_relay_may_not_publish_a_pushed_source(organization):
     pushed = LiveSource.objects.create(name="Studio", organization=organization)
     response = mediamtx_auth(
