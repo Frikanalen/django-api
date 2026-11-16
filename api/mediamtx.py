@@ -19,6 +19,9 @@ from api.auth.permissions import can_administer_organization
 from fk import preview_tokens, receiver
 from fk.models import LiveSource, StreamCredential
 
+# Protocols CasparCG may read a contribution over with the playout credential.
+PLAYOUT_PROTOCOLS = ("rtsp", "srt")
+
 
 @csrf_exempt
 @require_POST
@@ -75,10 +78,13 @@ def authenticate(request):
     path = payload.get("path")
     if credential.action == StreamCredential.Action.PLAYOUT:
         # Playout reads only the original contribution of an enabled source,
-        # over RTSP from CasparCG: never previews, never publishing.
+        # from CasparCG over RTSP or SRT: never previews, never publishing.
+        # SRT keeps picture and sound on the source's shared timestamps;
+        # MediaMTX's RTSP output re-times each track by arrival, which can
+        # put them hundreds of milliseconds apart.
         allowed = (
             action == "read"
-            and payload.get("protocol") == "rtsp"
+            and payload.get("protocol") in PLAYOUT_PROTOCOLS
             and _is_enabled_source_path(path, "contribution_path")
         )
         return _grant(credential, password) if allowed else HttpResponse(status=401)
@@ -176,10 +182,16 @@ def authenticate_local_converter(payload):
     # RTSP, and nothing else.
     #
     # The pull relay, an FFmpeg MediaMTX starts the same way when someone
-    # reads a pulled source, may also publish that source's original.
+    # reads a pulled source, may also publish that source's original, over
+    # RTSP or SRT (SRT/MPEG-TS keeps its picture and sound in step).
     action = payload.get("action")
     path = payload.get("path")
-    if payload.get("protocol") != "rtsp":
+    protocol = payload.get("protocol")
+    if action == "publish" and protocol == "srt":
+        pulled = _enabled_source_at(path, "contribution_path")
+        allowed = pulled is not None and pulled.is_pulled
+        return HttpResponse(status=204 if allowed else 401)
+    if protocol != "rtsp":
         return HttpResponse(status=401)
     if action == "read":
         allowed = _is_enabled_source_path(path, "contribution_path")

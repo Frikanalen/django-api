@@ -179,8 +179,12 @@ source. Instead, issue one **Playout reader (all enabled sources)** credential,
 leaving **Source** empty, and give it to playout as
 `LIVE_READER_CREDENTIAL=<username>:<password>`.
 
-It can only read `contrib/live/<UUID>` of an enabled source, and only over
-RTSP, since CasparCG reads the contribution that way. It cannot publish, read
+It can only read `contrib/live/<UUID>` of an enabled source, over RTSP or SRT,
+the two ways CasparCG reads the contribution. SRT is preferred: MediaMTX's
+RTSP output stamps each track's timing on arrival, which can put picture and
+sound hundreds of milliseconds apart, while SRT (MPEG-TS) keeps them on the
+source's shared timestamps. An SRT read names the credential in the stream ID:
+`srt://<host>:8890?streamid=read:contrib/live/<UUID>:<username>:<password>`. It cannot publish, read
 previews, read disabled sources or use administrative actions. Expiry and
 revocation apply as usual. Every other credential type still requires a source,
 which a database constraint enforces.
@@ -200,5 +204,7 @@ original over local RTSP and publishes the Opus preview back. It has no
 credential. Instead, the callback accepts an RTSP request with no password from
 a loopback address (`127.0.0.1` or `::1`). Such a request may read
 `contrib/live/<UUID>` or publish `contrib/preview/<UUID>` of an enabled source,
-and nothing else. Only a process in the MediaMTX pod can connect from loopback,
+and nothing else. The pull relay, started the same way for a pulled source, may
+also publish that source's `contrib/live/<UUID>`, over RTSP or SRT.
+Only a process in the MediaMTX pod can connect from loopback,
 because outside clients arrive through the LoadBalancer.
