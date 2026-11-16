@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.5.0](https://github.com/Frikanalen/django-api/compare/v3.4.0...v3.5.0) (2026-11-16)
+
+
+### Features
+
+* **grants:** space between programmes, and text posters in the list ([e52bfb2](https://github.com/Frikanalen/django-api/commit/e52bfb2f79940acae9732eae7477c0f3e6ea5279))
+* **mediamtx:** let playout read and the pull relay publish over SRT ([#141](https://github.com/Frikanalen/django-api/issues/141)) ([7a5a29f](https://github.com/Frikanalen/django-api/commit/7a5a29fad4bd1b2a89a15c4244935ef54fd584cf))
+* **news:** bulletins for the screen, paged like a text poster ([79c09e5](https://github.com/Frikanalen/django-api/commit/79c09e5b15508776046373b8ccdcca93ad5a2e85))
+* **news:** bulletins for the screen, paged like a text poster ([50a0359](https://github.com/Frikanalen/django-api/commit/50a035934fd9c6b7f744187f363d0b3e29af4440))
+* **posters:** standard and notice templates, slides, reading-time minimum ([fddd9f1](https://github.com/Frikanalen/django-api/commit/fddd9f1d0bf78baee9244cc18ea4a6cfb6e9ee9e))
+
+
+### Bug Fixes
+
+* **programming:** recipes only schedule imported videos ([#140](https://github.com/Frikanalen/django-api/issues/140)) ([aaa9ff3](https://github.com/Frikanalen/django-api/commit/aaa9ff37702aaedb0ee6c1533492afa241dc50bd))
+* **schedule:** a poster's template is a plain string to playout ([696d4b2](https://github.com/Frikanalen/django-api/commit/696d4b22954742ab57fb2ebed7def74c65ffcece))
+* **schedule:** poster is optional in the schedule schema, for playout either way round ([86ccc4f](https://github.com/Frikanalen/django-api/commit/86ccc4fa05c2dc3be0102d3e950b81e9e6beb301))
+
 ## [3.4.0](https://github.com/Frikanalen/django-api/compare/v3.3.1...v3.4.0) (2026-11-14)
 
 
