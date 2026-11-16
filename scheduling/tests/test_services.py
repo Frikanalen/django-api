@@ -485,20 +485,40 @@ def test_added_while_graphics_show_airs_from_now_not_the_past(on_air) -> None:
     assert schedule(grant)[-1] == (c.pk, at_1930 + timedelta(minutes=5), timedelta(minutes=10))
 
 
-def test_what_has_started_must_stay_at_the_head(on_air) -> None:
+def test_staff_take_the_programme_on_air_off_the_air(on_air) -> None:
+    grant, (a, b, c), a_row, staff = on_air
+    minutes = timedelta(minutes=1)
+
+    services.set_items(grant, [b, c], user=staff, now=AT_1910)
+
+    # a is cut short at 19:10 and stays listed, as what aired.
+    assert items(grant) == [a.pk, b.pk, c.pk]
+    assert schedule(grant) == [
+        (a.pk, OPEN_WEEK, 10 * minutes),
+        (b.pk, OPEN_WEEK + 15 * minutes, 10 * minutes),
+        (c.pk, OPEN_WEEK + 30 * minutes, 10 * minutes),
+    ]
+    assert Scheduleitem.objects.filter(pk=a_row.pk).exists()
+
+
+def test_what_has_aired_must_stay_at_the_head(on_air) -> None:
     grant, (a, b, c), _, staff = on_air
+    at_1930 = OPEN_WEEK + timedelta(minutes=30)  # a aired, b on air
 
-    for changed in ([b, c], [b, a, c], []):
-        with pytest.raises(ValidationError, match="already aired or is on air"):
-            services.set_items(grant, changed, user=staff, now=AT_1910)
+    for changed in ([b, c], [c, a], []):
+        with pytest.raises(ValidationError, match="already aired"):
+            services.set_items(grant, changed, user=staff, now=at_1930)
+    services.set_items(grant, [a], user=staff, now=at_1930)
+    assert items(grant) == [a.pk, b.pk]  # b cut short at 19:30
 
 
-def test_a_programme_about_to_start_counts_as_on_air(on_air) -> None:
-    grant, (_a, b, _c), _, staff = on_air
+def test_a_programme_about_to_start_can_be_taken_off(on_air) -> None:
+    grant, (_a, b, _c), a_row, staff = on_air
 
-    with pytest.raises(ValidationError, match="already aired or is on air"):
-        services.set_items(grant, [b], user=staff, now=OPEN_WEEK - timedelta(seconds=15))
-    services.set_items(grant, [b], user=staff, now=OPEN_WEEK - timedelta(minutes=1))
+    services.set_items(grant, [b], user=staff, now=OPEN_WEEK - timedelta(seconds=15))
+
+    assert not Scheduleitem.objects.filter(pk=a_row.pk).exists()
+    assert items(grant) == [b.pk]
 
 
 def test_staff_shorten_a_grant_on_air(on_air) -> None:
@@ -513,11 +533,14 @@ def test_staff_shorten_a_grant_on_air(on_air) -> None:
     assert Scheduleitem.objects.filter(pk=a_row.pk).exists()
 
 
-def test_a_grant_cannot_end_before_the_programme_on_air(on_air) -> None:
-    grant, *_ = on_air
+def test_ending_a_grant_early_cuts_the_programme_on_air(on_air) -> None:
+    grant, (a, _b, _c), _a_row, _ = on_air
+    end = OPEN_WEEK + timedelta(minutes=15)
 
-    with pytest.raises(ValidationError, match="on air until 19:20:00"):
-        services.update_grant(grant, endtime=OPEN_WEEK + timedelta(minutes=15), now=AT_1910)
+    services.update_grant(grant, endtime=end, now=AT_1910)
+
+    assert items(grant) == [a.pk]
+    assert schedule(grant) == [(a.pk, OPEN_WEEK, timedelta(minutes=15))]
     with pytest.raises(ValidationError, match="in the past"):
         services.update_grant(grant, endtime=AT_1910 - timedelta(minutes=1), now=AT_1910)
 
