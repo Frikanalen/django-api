@@ -225,6 +225,23 @@ def test_airtime_given_after_its_deadline_stays_open_until_air(staff, organizati
     assert body["recipe"]["kind"] == "uploads"
 
 
+def test_airtime_given_under_the_playhead_starts_now(staff, organization) -> None:
+    start = timezone.now() - timedelta(minutes=10)
+    response = client_for(staff).post(
+        reverse("api-grant-list"),
+        {
+            "organization": organization.pk,
+            "starttime": start.isoformat(),
+            "endtime": (start + timedelta(hours=1)).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201
+    grant = AirtimeGrant.objects.get(pk=response.json()["id"])
+    assert abs(grant.starttime - timezone.now()) < timedelta(seconds=5)
+
+
 def test_staff_cannot_give_airtime_in_the_past_or_to_a_suspended_organization(
     staff, organization
 ) -> None:
