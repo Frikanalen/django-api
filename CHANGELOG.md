@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.6.0](https://github.com/Frikanalen/django-api/compare/v3.5.0...v3.6.0) (2026-11-16)
+
+
+### Features
+
+* **grants:** let staff edit and shorten a grant while it is on air ([#142](https://github.com/Frikanalen/django-api/issues/142)) ([14d7443](https://github.com/Frikanalen/django-api/commit/14d744333f18ea5df4c6a7b6bdd2a790a2521554))
+
 ## [3.5.0](https://github.com/Frikanalen/django-api/compare/v3.4.0...v3.5.0) (2026-11-16)
 
 
