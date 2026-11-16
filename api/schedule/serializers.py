@@ -14,7 +14,7 @@ from fk.models import (
     VideoFile,
     VideoFileVariant,
 )
-from scheduling.models import Poster
+from scheduling.models import Graphic, Poster
 from scheduling.services import airs_live
 
 OSLO = ZoneInfo("Europe/Oslo")
@@ -130,6 +130,13 @@ class ScheduleitemPosterSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class ScheduleitemGraphicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Graphic
+        fields = ("id", "name", "url")
+        read_only_fields = fields
+
+
 class ScheduleitemReadSerializer(serializers.ModelSerializer):
     video = ScheduleitemVideoSerializer(allow_null=True)
     # Not required in the schema, so a playout built against this schema
@@ -138,8 +145,13 @@ class ScheduleitemReadSerializer(serializers.ModelSerializer):
     poster = ScheduleitemPosterSerializer(
         allow_null=True,
         required=False,
-        help_text="Set for a member's text poster (only with include_posters): "
+        help_text="Set for a member's text poster (only with include_fillers): "
         "playout airs it with the graphics template.",
+    )
+    graphic = ScheduleitemGraphicSerializer(
+        allow_null=True,
+        help_text="Set for a staff graphic (only with include_fillers): playout "
+        "airs its page for the row's duration.",
     )
     starttime = serializers.DateTimeField(default_timezone=OSLO)
     endtime = serializers.DateTimeField(default_timezone=OSLO, read_only=True)
@@ -152,6 +164,7 @@ class ScheduleitemReadSerializer(serializers.ModelSerializer):
             "default_name",
             "video",
             "poster",
+            "graphic",
             "schedulereason",
             "starttime",
             "endtime",

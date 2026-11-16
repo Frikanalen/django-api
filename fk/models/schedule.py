@@ -70,6 +70,16 @@ class Scheduleitem(models.Model):
         related_name="schedule_items",
     )
 
+    # A staff graphic (an HTML page such as the infographics), aired by
+    # playout for the row's duration. Not a programme either.
+    graphic = models.ForeignKey(
+        "scheduling.Graphic",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="schedule_items",
+    )
+
     # Published as <Live> in the TV-Anytime feed. A property of the
     # transmission, not of the video, which is why it sits here: the same
     # recording can go out live once and as a repeat afterwards, and a live

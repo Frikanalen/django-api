@@ -3,8 +3,8 @@
 Programmes (videos) start on the five-minute grid, with at least a short
 breather after the programme before them, so a viewer gets a moment of
 graphics between programmes and a time worth printing in the schedule.
-Posters are not programmes: one plays right after whatever is before it,
-so a member can put it in the gap a programme leaves, and the next
+Posters and graphics are not programmes: one plays right after whatever
+is before it, so it can go in the gap a programme leaves, and the next
 programme still starts on the grid after it.
 
 The first entry starts with the grant. Jukebox grants are not padded:
@@ -40,9 +40,9 @@ def up_to_grid(instant: datetime) -> datetime:
 
 
 def is_programme(entry) -> bool:
-    from scheduling.models import Poster
+    from scheduling.models import Poster, Showing
 
-    return not isinstance(entry, Poster)
+    return not isinstance(entry, Poster | Showing)
 
 
 def next_start(cursor: datetime, previous, entry, *, padded: bool) -> datetime:

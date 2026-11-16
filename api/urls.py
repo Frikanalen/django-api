@@ -10,6 +10,7 @@ import agenda.tvanytime.views as tvanytime_views
 import api.auth.views as auth_views
 import api.grant_request.views as grant_request_views
 import api.grants.views as grant_views
+import api.graphics.views as graphic_views
 import api.live.views as live_views
 import api.mediamtx as mediamtx_views
 import api.organization.views as organization_views
@@ -34,6 +35,7 @@ router.register(r"categories", views.CategoryViewSet)
 router.register(r"scheduleitems", schedule_views.ScheduleitemViewSet, "api-scheduleitem")
 router.register(r"grants", grant_views.AirtimeGrantViewSet, "api-grant")
 router.register(r"posters", poster_views.PosterViewSet, "api-poster")
+router.register(r"graphics", graphic_views.GraphicViewSet, "api-graphic")
 router.register(r"videofiles", videofile_views.VideoFileViewSet, "api-videofile")
 
 

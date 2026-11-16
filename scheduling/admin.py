@@ -4,6 +4,7 @@ Grant edits go through the service layer, so the admin cannot bypass
 the rules: the items must fit, and a compiled grant is recompiled.
 """
 
+from datetime import timedelta
 from typing import ClassVar
 
 from django import forms
@@ -17,11 +18,13 @@ from scheduling.models import (
     AirtimeGrantRequest,
     GrantExemptionRequest,
     GrantItem,
+    Graphic,
     Poster,
     RecurringSlot,
     RecurringSlotCreationRequest,
     RecurringSlotOwnershipRequest,
     ReviewStatus,
+    Showing,
 )
 
 
@@ -37,11 +40,20 @@ class GrantItemFormSet(BaseInlineFormSet):
                 for form in self.forms
                 if form.cleaned_data
                 and not form.cleaned_data.get("DELETE")
-                and (form.cleaned_data.get("video") or form.cleaned_data.get("poster"))
+                and (
+                    form.cleaned_data.get("video")
+                    or form.cleaned_data.get("poster")
+                    or form.cleaned_data.get("graphic")
+                )
             ),
             key=lambda row: row.get("position") or 0,
         )
-        entries = [row.get("video") or row.get("poster") for row in rows]
+        entries = [
+            Showing(row["graphic"], row.get("duration") or timedelta(0))
+            if row.get("graphic")
+            else row.get("video") or row.get("poster")
+            for row in rows
+        ]
         end = layout.end_of(grant.starttime, entries, padded=grant.padded)
         if end > grant.endtime:
             raise ValidationError(
@@ -54,7 +66,7 @@ class GrantItemInline(admin.TabularInline):
     model = GrantItem
     formset = GrantItemFormSet
     extra = 1
-    fields = ("position", "video", "poster")
+    fields = ("position", "video", "poster", "graphic", "duration")
     autocomplete_fields = ("video", "poster")
     ordering = ("position",)
 
@@ -276,6 +288,12 @@ admin.site.register(AirtimeGrantRequest, AirtimeGrantRequestAdmin)
 admin.site.register(GrantExemptionRequest, GrantExemptionRequestAdmin)
 admin.site.register(RecurringSlotCreationRequest, RecurringSlotCreationRequestAdmin)
 admin.site.register(RecurringSlotOwnershipRequest, RecurringSlotOwnershipRequestAdmin)
+
+
+@admin.register(Graphic)
+class GraphicAdmin(admin.ModelAdmin):
+    list_display = ("name", "url", "updated_at")
+    search_fields = ("name", "url")
 
 
 @admin.register(Poster)

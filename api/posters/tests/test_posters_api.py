@@ -195,7 +195,7 @@ def test_playout_asks_for_posters_and_the_public_schedule_leaves_them_out(
     url = reverse("api-scheduleitem-list")
 
     public = client_for(None).get(url, {"date": date}).json()["results"]
-    playout = client_for(None).get(url, {"date": date, "include_posters": "true"}).json()["results"]
+    playout = client_for(None).get(url, {"date": date, "include_fillers": "true"}).json()["results"]
 
     assert [row["video"]["id"] for row in public] == [video.pk]
     assert [row["poster"] and row["poster"]["heading"] for row in playout] == [

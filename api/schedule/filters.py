@@ -19,22 +19,22 @@ class ScheduleitemFilter(filters.FilterSet):
     date = DateOrTodayFilter()
     days = filters.NumberFilter(min_value=1)
     surrounding = filters.BooleanFilter()
-    include_posters = filters.BooleanFilter(
+    include_fillers = filters.BooleanFilter(
         method="keep",
-        help_text="Include members' text posters, which playout airs in the gaps "
-        "between programmes. Left out by default: they are not programmes.",
+        help_text="Include members' text posters and staff graphics, which playout "
+        "airs between programmes. Left out by default: they are not programmes.",
     )
 
     class Meta:
         model = Scheduleitem
-        fields = ["date", "days", "surrounding", "include_posters"]
+        fields = ["date", "days", "surrounding", "include_fillers"]
 
     def keep(self, queryset, name, value):
         return queryset
 
     def filter_queryset(self, queryset):
         params = self.form.cleaned_data
-        if not params.get("include_posters"):
+        if not params.get("include_fillers"):
             queryset = queryset.programmes()
         return queryset.by_day(
             start_date=params.get("date"),
