@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.9.0](https://github.com/Frikanalen/django-api/compare/v3.8.0...v3.9.0) (2026-11-16)
+
+
+### Features
+
+* **scheduling:** staff can put HTML graphics such as the infographics on air ([#149](https://github.com/Frikanalen/django-api/issues/149)) ([fa61de0](https://github.com/Frikanalen/django-api/commit/fa61de0436f38b9fbd73e3fa02b8eb25908fb0b0))
+
 ## [3.8.0](https://github.com/Frikanalen/django-api/compare/v3.7.0...v3.8.0) (2026-11-16)
 
 
