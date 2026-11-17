@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.10.0](https://github.com/Frikanalen/django-api/compare/v3.9.0...v3.10.0) (2026-11-17)
+
+
+### Features
+
+* **live:** a live source can move the channel logo clear of its own graphics ([#154](https://github.com/Frikanalen/django-api/issues/154)) ([71c647e](https://github.com/Frikanalen/django-api/commit/71c647e2e631a5db1410a0cdbed5038bacd08cd9))
+* **live:** Stortinget's own logo layout replaces the corner positions ([#155](https://github.com/Frikanalen/django-api/issues/155)) ([094682d](https://github.com/Frikanalen/django-api/commit/094682d7c6366478e011f2f8860eef4f759c668c))
+* **video:** announce a live programme's coming airings as liveAirings ([#151](https://github.com/Frikanalen/django-api/issues/151)) ([fcb018d](https://github.com/Frikanalen/django-api/commit/fcb018de96028e91d98a40299636d8f268e623b5))
+
+
+### Bug Fixes
+
+* **chart:** default image tag to v&lt;Chart.Version&gt; ([#156](https://github.com/Frikanalen/django-api/issues/156)) ([778c7d2](https://github.com/Frikanalen/django-api/commit/778c7d213986153ec318affb6641425759ddac4b))
+* **mediamtx:** let the loopback preview converter read originals over SRT ([#153](https://github.com/Frikanalen/django-api/issues/153)) ([adacddb](https://github.com/Frikanalen/django-api/commit/adacddb9e46c1c979346217bc4349db8b7f6e74c))
+
 ## [3.9.0](https://github.com/Frikanalen/django-api/compare/v3.8.0...v3.9.0) (2026-11-16)
 
 
