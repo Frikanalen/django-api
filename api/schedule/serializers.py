@@ -112,10 +112,10 @@ class ScheduleitemLiveSourceSerializer(serializers.ModelSerializer):
     # playout built against an older schema reject the whole schedule.
     logo_position = serializers.CharField(
         read_only=True,
-        help_text="Where the channel logo sits while the source is on air: "
-        "top-right, below-clock (top right, under the source's own clock), "
-        "bottom-right, top-left or bottom-left, or one added since. Anything "
-        "unknown is shown top-right.",
+        help_text="How the channel logo sits while the source is on air: "
+        "top-right (the usual bug) or stortinget-clock (DIREKTE under the "
+        "clock in Stortinget's feed, the logo to its left), or one added "
+        "since. Anything unknown is shown top-right.",
     )
 
     class Meta:

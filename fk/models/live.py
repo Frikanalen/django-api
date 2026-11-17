@@ -24,14 +24,13 @@ class LiveSource(models.Model):
 
     class LogoPosition(models.TextChoices):
         TOP_RIGHT = "top-right", "Øverst til høyre"
-        BELOW_CLOCK = "below-clock", "Øverst til høyre, under kildens klokke"
-        BOTTOM_RIGHT = "bottom-right", "Nederst til høyre"
-        TOP_LEFT = "top-left", "Øverst til venstre"
-        BOTTOM_LEFT = "bottom-left", "Nederst til venstre"
+        STORTINGET_CLOCK = "stortinget-clock", "Rundt Stortingets klokke"
 
-    # Where the channel logo (and its DIREKTE tag) sits while this source is
-    # on air, for a feed with its own graphics where the logo usually goes,
-    # such as the clock in Stortinget's top right corner.
+    # How the channel logo and its DIREKTE tag sit while this source is on
+    # air. A feed with its own graphics where the logo usually goes gets a
+    # layout of its own: Stortinget's has a clock in the top right corner, so
+    # DIREKTE goes under it and the logo to its left. Playout has a still for
+    # each.
     logo_position = models.CharField(
         max_length=20, choices=LogoPosition.choices, default=LogoPosition.TOP_RIGHT
     )

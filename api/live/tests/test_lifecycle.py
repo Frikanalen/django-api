@@ -217,12 +217,12 @@ def test_a_key_remembers_when_it_was_last_used(client, source):
 
 
 def test_a_member_moves_the_logo_clear_of_their_feeds_own_graphics(client, source):
-    """A feed with a clock in the logo's corner, like Stortinget's, airs with the logo elsewhere."""
-    response = client.patch(detail(source), {"logo_position": "below-clock"}, format="json")
+    """Stortinget's feed has a clock where the logo goes, so it airs with a layout of its own."""
+    response = client.patch(detail(source), {"logo_position": "stortinget-clock"}, format="json")
 
     assert response.status_code == 200, response.data
     source.refresh_from_db()
-    assert source.logo_position == "below-clock"
+    assert source.logo_position == "stortinget-clock"
     assert (
         client.patch(detail(source), {"logo_position": "middle"}, format="json").status_code == 400
     )
