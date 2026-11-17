@@ -360,7 +360,8 @@ def test_loopback_converter_reads_originals_and_publishes_previews(playout, ip):
         ("read", "contribution_path", {"ip": "10.0.0.5"}),
         ("read", "contribution_path", {"ip": "not-an-ip"}),
         ("read", "contribution_path", {"protocol": "webrtc"}),
-        ("read", "contribution_path", {"protocol": "srt"}),
+        ("read", "preview_path", {"protocol": "srt"}),
+        ("read", "contribution_path", {"protocol": "srt", "ip": "192.0.2.1"}),
     ],
 )
 def test_loopback_converter_gets_nothing_else(playout, action, kind, overrides):
@@ -384,4 +385,17 @@ def test_loopback_srt_publish_is_only_for_a_pulled_sources_original(playout):
     assert not pushed.is_pulled
     assert as_local_converter("publish", pushed.contribution_path, protocol="srt") == 401
     assert as_local_converter("publish", pushed.preview_path, protocol="srt") == 401
-    assert as_local_converter("read", pushed.contribution_path, protocol="srt") == 401
+
+
+@pytest.mark.parametrize("ip", ["127.0.0.1", "::1"])
+def test_loopback_converter_reads_originals_over_srt(playout, ip):
+    # The preview converter reads over SRT, which keeps picture and sound on
+    # the source's shared timestamps.
+    _, _, sources = playout
+    for source in sources:
+        assert as_local_converter("read", source.contribution_path, ip=ip, protocol="srt") == 204
+    assert as_local_converter("read", f"contrib/live/{uuid4()}", protocol="srt") == 401
+    source = sources[0]
+    source.enabled = False
+    source.save()
+    assert as_local_converter("read", source.contribution_path, protocol="srt") == 401
