@@ -26,7 +26,7 @@ spec:
       {{- end }}
       containers:
         - name: django
-          image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag }}"
+          image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag | default (printf "v%s" .Chart.Version) }}"
           imagePullPolicy: {{ .Values.django.image.pullPolicy }}
           env:
             {{- include "django.env" . | nindent 12 }}

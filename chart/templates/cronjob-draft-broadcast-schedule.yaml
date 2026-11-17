@@ -16,7 +16,7 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: django-api
-              image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag }}"
+              image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag | default (printf "v%s" .Chart.Version) }}"
               imagePullPolicy: {{ .Values.django.image.pullPolicy }}
               args:
                 - ./manage.py

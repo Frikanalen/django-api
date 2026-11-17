@@ -16,7 +16,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: loaddata
-          image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag }}"
+          image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag | default (printf "v%s" .Chart.Version) }}"
           imagePullPolicy: Always
           command: ["python", "manage.py", "loaddata", "frikanalen"]
           env:
