@@ -1,4 +1,7 @@
+from zoneinfo import ZoneInfo
+
 from django.conf import settings
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field, inline_serializer
 from rest_framework import serializers
 
@@ -12,6 +15,7 @@ from fk.models import (
     LiveSource,
     LiveTransmission,
     Organization,
+    Scheduleitem,
     Series,
     User,
     Video,
@@ -32,6 +36,28 @@ VideoFilesSerializer = inline_serializer(
     name="VideoFiles",
     fields={variant.value: VideoFileLinkSerializer(required=False) for variant in VideoFileVariant},
 )
+
+
+OSLO = ZoneInfo("Europe/Oslo")
+
+
+class LiveAiringSerializer(serializers.ModelSerializer):
+    """One coming live airing of a video, in the channel's own time zone."""
+
+    starttime = serializers.DateTimeField(default_timezone=OSLO, read_only=True)
+    endtime = serializers.DateTimeField(default_timezone=OSLO, read_only=True)
+
+    class Meta:
+        model = Scheduleitem
+        fields = ("id", "starttime", "endtime")
+        read_only_fields = fields
+
+
+def coming_live_airings(now=None):
+    """The schedule items a live video's page announces: live, not yet ended."""
+    return Scheduleitem.objects.filter(
+        is_live=True, airtime__endswith__gt=now or timezone.now()
+    ).order_by("starttime")
 
 
 class BaseVideoSerializer(serializers.ModelSerializer):
@@ -73,6 +99,26 @@ class BaseVideoSerializer(serializers.ModelSerializer):
             "one of the organization's own, until it has a file. Null for none."
         ),
     )
+
+    live_airings = serializers.SerializerMethodField(
+        help_text=(
+            "The live airings of a live programme that have not ended yet, soonest "
+            "first: when it goes out, and whether it is on air now. Empty for a "
+            "video without a live source, and once it has a file."
+        ),
+    )
+
+    @staticmethod
+    @extend_schema_field(LiveAiringSerializer(many=True))
+    def get_live_airings(video):
+        # A live programme airs from its source until it has a file.
+        if video.proper_import or getattr(video, "live_transmission", None) is None:
+            return []
+        # The list and detail views fetch these up front for a whole page.
+        airings = getattr(video, "coming_live_airings", None)
+        if airings is None:
+            airings = coming_live_airings().filter(video=video)
+        return LiveAiringSerializer(airings, many=True).data
 
     @staticmethod
     def get_duration_sec(obj) -> float | None:
@@ -122,6 +168,7 @@ class BaseVideoSerializer(serializers.ModelSerializer):
             "spoken_language",
             "minimum_age",
             "live_source",
+            "live_airings",
             "created_time",
             "updated_time",
             "uploaded_time",
