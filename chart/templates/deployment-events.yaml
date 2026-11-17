@@ -29,7 +29,7 @@ spec:
       {{- end }}
       containers:
         - name: django
-          image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag }}"
+          image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag | default (printf "v%s" .Chart.Version) }}"
           imagePullPolicy: {{ .Values.django.image.pullPolicy }}
           # Not start.sh: migrations and static files belong to the main
           # deployment, which this one only borrows code from.

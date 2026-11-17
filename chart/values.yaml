@@ -1,7 +1,9 @@
 django:
   image:
     repository: ghcr.io/frikanalen/django-api
-    tag: latest
+    # Empty = v<Chart.Version>: the chart at a release tag runs that release's
+    # image, so a deploy only names the version once (targetRevision).
+    tag: ""
     pullPolicy: IfNotPresent
   secretName: django-secret
   # Two, on different nodes where possible, so draining a node never takes
