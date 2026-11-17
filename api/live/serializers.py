@@ -71,6 +71,7 @@ class LiveSourceSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "enabled",
+            "logo_position",
             "pull_url",
             "is_pulled",
             "pull_target",

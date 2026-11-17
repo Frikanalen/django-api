@@ -22,6 +22,20 @@ class LiveSource(models.Model):
     # Scheme, host and port of that address, for showing.
     pull_target = models.CharField(max_length=300, blank=True, default="", editable=False)
 
+    class LogoPosition(models.TextChoices):
+        TOP_RIGHT = "top-right", "Øverst til høyre"
+        BELOW_CLOCK = "below-clock", "Øverst til høyre, under kildens klokke"
+        BOTTOM_RIGHT = "bottom-right", "Nederst til høyre"
+        TOP_LEFT = "top-left", "Øverst til venstre"
+        BOTTOM_LEFT = "bottom-left", "Nederst til venstre"
+
+    # Where the channel logo (and its DIREKTE tag) sits while this source is
+    # on air, for a feed with its own graphics where the logo usually goes,
+    # such as the clock in Stortinget's top right corner.
+    logo_position = models.CharField(
+        max_length=20, choices=LogoPosition.choices, default=LogoPosition.TOP_RIGHT
+    )
+
     @property
     def is_pulled(self) -> bool:
         return bool(self.pull_url_encrypted)

@@ -24,7 +24,11 @@ def test_a_live_airing_names_its_videos_source(
         source = LiveSource.objects.create(name="Studio", organization=organization)
         LiveTransmission.objects.create(video=entry.video, source=source)
         Scheduleitem.objects.filter(pk=entry.pk).update(is_live=True)
-        expected = {"id": source.pk, "stream_id": str(source.stream_id)}
+        expected = {
+            "id": source.pk,
+            "stream_id": str(source.stream_id),
+            "logo_position": "top-right",
+        }
     detail = authenticated_client.get(reverse("api-scheduleitem-detail", args=[entry.pk]))
     listing = authenticated_client.get(reverse("api-scheduleitem-list"), {"date": "2015-01-01"})
     assert detail.status_code == listing.status_code == 200

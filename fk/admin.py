@@ -105,7 +105,7 @@ class SeriesAdmin(admin.ModelAdmin):
 
 
 class LiveSourceAdmin(admin.ModelAdmin):
-    list_display = ("name", "organization", "enabled", "pull_target")
+    list_display = ("name", "organization", "enabled", "logo_position", "pull_target")
     list_filter = ("enabled", "organization")
     search_fields = ("name", "organization__name")
     # The pull address is set through the API, which validates it; here
