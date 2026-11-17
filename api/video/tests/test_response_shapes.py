@@ -120,6 +120,7 @@ def expected_video_json(video: Video) -> dict:
         "spokenLanguage": "no",
         "minimumAge": None,
         "liveSource": None,
+        "liveAirings": [],
         "createdTime": "2015-01-01T10:00:00Z",
         "updatedTime": "2015-01-02T10:00:00Z",
         "uploadedTime": "2015-01-03T10:00:00Z",

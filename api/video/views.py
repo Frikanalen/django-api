@@ -1,7 +1,7 @@
 from hmac import compare_digest
 
 from django.contrib.postgres.search import SearchQuery, SearchRank
-from django.db.models import F
+from django.db.models import F, Prefetch
 from django.db.models.functions import Greatest
 from django.http import Http404
 from django_filters import rest_framework as djfilters
@@ -25,8 +25,16 @@ from api.video.serializers import (
     VideoCreateSerializer,
     VideoSerializer,
     VideoUploadTokenSerializer,
+    coming_live_airings,
 )
 from fk.models import Category, IngestJob, Organization, Video
+
+
+def _with_live_airings(queryset):
+    """Fetch every live video's coming airings in one query for the lot."""
+    return queryset.prefetch_related(
+        Prefetch("scheduleitem_set", queryset=coming_live_airings(), to_attr="coming_live_airings")
+    )
 
 
 class VideoDetail(generics.RetrieveUpdateDestroyAPIView):
@@ -41,7 +49,7 @@ class VideoDetail(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         # Videos of an organization without an ansvarlig redaktor are
         # staff-only until one is appointed; see OrganizationQuerySet.
-        return Video.objects.visible_to(self.request.user)
+        return _with_live_airings(Video.objects.visible_to(self.request.user))
 
     @extend_schema(
         responses={
@@ -395,8 +403,9 @@ class VideoList(RequireTargetOrganizationMembership, generics.ListCreateAPIView)
         # Everything VideoSerializer reads off a video beyond its own columns
         # is fetched up front, so a page costs the same handful of queries
         # whatever its length instead of seven more per video.
-        return (
+        queryset = (
             Video.objects.visible_to(self.request.user)
             .select_related("creator", "organization__editor", "series", "live_transmission")
             .prefetch_related("categories", "videofile_set")
         )
+        return _with_live_airings(queryset)
