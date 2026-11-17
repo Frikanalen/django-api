@@ -178,8 +178,10 @@ def authenticate_local_converter(payload):
     # pod when someone opens a preview. Only a process in that pod reaches
     # MediaMTX from loopback (outside clients arrive through the
     # LoadBalancer), so the address stands in for a credential. It may read
-    # an enabled source's original and publish that source's preview over
-    # RTSP, and nothing else.
+    # an enabled source's original, over RTSP or SRT, and publish that
+    # source's preview over RTSP, and nothing else. It reads over SRT:
+    # MediaMTX's RTSP output re-times each track by arrival, which put the
+    # preview's sound about 340 ms behind its picture.
     #
     # The pull relay, an FFmpeg MediaMTX starts the same way when someone
     # reads a pulled source, may also publish that source's original, over
@@ -190,6 +192,9 @@ def authenticate_local_converter(payload):
     if action == "publish" and protocol == "srt":
         pulled = _enabled_source_at(path, "contribution_path")
         allowed = pulled is not None and pulled.is_pulled
+        return HttpResponse(status=204 if allowed else 401)
+    if action == "read" and protocol == "srt":
+        allowed = _is_enabled_source_path(path, "contribution_path")
         return HttpResponse(status=204 if allowed else 401)
     if protocol != "rtsp":
         return HttpResponse(status=401)
