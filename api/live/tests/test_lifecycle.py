@@ -214,3 +214,15 @@ def test_a_key_remembers_when_it_was_last_used(client, source):
     # Kept to the minute: an encoder that reconnects at once costs no write.
     assert mediamtx(key["key_id"], key["password"], source).status_code == 204
     assert StreamCredential.objects.get(pk=key["id"]).last_used_at == used
+
+
+def test_a_member_moves_the_logo_clear_of_their_feeds_own_graphics(client, source):
+    """A feed with a clock in the logo's corner, like Stortinget's, airs with the logo elsewhere."""
+    response = client.patch(detail(source), {"logo_position": "below-clock"}, format="json")
+
+    assert response.status_code == 200, response.data
+    source.refresh_from_db()
+    assert source.logo_position == "below-clock"
+    assert (
+        client.patch(detail(source), {"logo_position": "middle"}, format="json").status_code == 400
+    )

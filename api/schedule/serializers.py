@@ -108,9 +108,19 @@ class ScheduleitemModifySerializer(serializers.ModelSerializer):
 
 
 class ScheduleitemLiveSourceSerializer(serializers.ModelSerializer):
+    # A plain string, not an enum: a position added here must not make a
+    # playout built against an older schema reject the whole schedule.
+    logo_position = serializers.CharField(
+        read_only=True,
+        help_text="Where the channel logo sits while the source is on air: "
+        "top-right, below-clock (top right, under the source's own clock), "
+        "bottom-right, top-left or bottom-left, or one added since. Anything "
+        "unknown is shown top-right.",
+    )
+
     class Meta:
         model = LiveSource
-        fields = ("id", "stream_id")
+        fields = ("id", "stream_id", "logo_position")
         read_only_fields = fields
 
 
