@@ -1,0 +1,51 @@
+{{- if .Values.stortingetKeeper.enabled }}
+# Follows Stortinget's live speaker list and keeps the schedule in step with
+# the sitting (manage.py keep_stortinget). One replica: two would both act.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stortinget-keeper
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: stortinget-keeper
+  template:
+    metadata:
+      annotations:
+        linkerd.io/inject: enabled
+      labels:
+        app: stortinget-keeper
+    spec:
+      containers:
+        - name: keeper
+          image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag | default (printf "v%s" .Chart.Version) }}"
+          imagePullPolicy: {{ .Values.django.image.pullPolicy }}
+          command: ["python", "manage.py", "keep_stortinget"]
+          env:
+            {{- include "django.env" . | nindent 12 }}
+            - name: FK_STORTINGET_LIVE_SOURCE_ID
+              value: {{ .Values.stortingetKeeper.liveSourceId | quote }}
+            - name: FK_STORTINGET_DAYS
+              value: {{ .Values.stortingetKeeper.days | quote }}
+            - name: FK_STORTINGET_EXPECTED_END
+              value: {{ .Values.stortingetKeeper.expectedEnd | quote }}
+            - name: FK_STORTINGET_HARD_STOP
+              value: {{ .Values.stortingetKeeper.hardStop | quote }}
+            - name: FK_STORTINGET_DRY_RUN
+              value: {{ .Values.stortingetKeeper.dryRun | quote }}
+            - name: FK_DEMOCRACY_NOW_LIVE_SOURCE_ID
+              value: {{ .Values.stortingetKeeper.democracyNow.liveSourceId | quote }}
+            - name: FK_DEMOCRACY_NOW_START
+              value: {{ .Values.stortingetKeeper.democracyNow.start | quote }}
+            - name: FK_DEMOCRACY_NOW_MINUTES
+              value: {{ .Values.stortingetKeeper.democracyNow.minutes | quote }}
+            - name: FK_DEMOCRACY_NOW_DEADLINE
+              value: {{ .Values.stortingetKeeper.democracyNow.deadline | quote }}
+          resources:
+            requests:
+              cpu: 10m
+              memory: 128Mi
+{{- end }}
