@@ -158,3 +158,39 @@ def test_the_stream_greets_then_relays(monkeypatch) -> None:
 def test_wsgi_refuses_to_hold_a_worker_on_the_stream() -> None:
     response = Client().get(reverse("api-playout-events"))
     assert response.status_code == 503
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_hub_pings_itself_and_passes_no_pings_on() -> None:
+    async def scenario() -> list[dict]:
+        hub = PlayoutEventHub(ping_seconds=0.1, ping_timeout=2.0)
+        async with hub.subscribe() as queue:
+            assert (await asyncio.wait_for(queue.get(), 5))["type"] == "resync"
+            # A few pings go round; none reaches the subscriber.
+            await asyncio.sleep(0.5)
+            assert queue.empty()
+            await asyncio.to_thread(book)
+            got = [await asyncio.wait_for(queue.get(), 5)]
+        assert hub._listener is not None
+        hub._listener.cancel()
+        return got
+
+    [event] = asyncio.run(scenario())
+    assert event["type"] == "schedule.changed"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_deaf_listener_starts_over_with_a_resync(monkeypatch) -> None:
+    monkeypatch.setattr(events, "RECONNECT_SECONDS", 0.05)
+
+    async def scenario() -> list[str]:
+        hub = PlayoutEventHub(ping_seconds=0.05, ping_timeout=0.2)
+        # Pings that never arrive: the listener is deaf.
+        hub._ping = lambda token: None  # type: ignore[method-assign]
+        async with hub.subscribe() as queue:
+            got = [(await asyncio.wait_for(queue.get(), 5))["type"] for _ in range(2)]
+        assert hub._listener is not None
+        hub._listener.cancel()
+        return got
+
+    assert asyncio.run(scenario()) == ["resync", "resync"]
