@@ -16,6 +16,21 @@ events:
   # drain doesn't cut every playout subscriber off at once.
   replicas: 2
 
+# Keeps Stortinget's sittings on the schedule (see stortinget/keeper.py).
+# Dry run logs what it would do without changing anything.
+stortingetKeeper:
+  enabled: false
+  dryRun: true
+  liveSourceId: 0
+  days: "tue,wed"
+  expectedEnd: "tue=16:00,wed=13:00"
+  hardStop: "18:00"
+  democracyNow:
+    liveSourceId: 0
+    start: "14:00"
+    minutes: 60
+    deadline: "13:58"
+
 podDisruptionBudget:
   enabled: true
   maxUnavailable: 1

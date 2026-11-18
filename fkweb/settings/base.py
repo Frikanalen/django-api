@@ -362,6 +362,7 @@ LOCAL_APPS = (
     "fk",
     "programming",
     "scheduling",
+    "stortinget",
     "api",
     "news",
 )
@@ -369,6 +370,21 @@ LOCAL_APPS = (
 # The station's own organization: it owns the jukebox slots, and gets the
 # grants of slots that have no owner.
 STATION_ORGANIZATION_ID = env.int("STATION_ORGANIZATION_ID", default=3)
+
+# The Stortinget keeper (manage.py keep_stortinget): which live source carries
+# the chamber (0: none, the keeper does nothing), which weekdays it carries,
+# when a sitting is expected to end on each, and the latest it may run.
+FK_STORTINGET_LIVE_SOURCE_ID = env.int("FK_STORTINGET_LIVE_SOURCE_ID", default=0)
+FK_STORTINGET_DAYS = env.str("FK_STORTINGET_DAYS", default="tue,wed")
+FK_STORTINGET_EXPECTED_END = env.str("FK_STORTINGET_EXPECTED_END", default="tue=16:00,wed=13:00")
+FK_STORTINGET_HARD_STOP = env.str("FK_STORTINGET_HARD_STOP", default="18:00")
+FK_STORTINGET_DRY_RUN = env.bool("FK_STORTINGET_DRY_RUN", default=True)
+# Democracy Now! in a sitting's empty hall, if it empties before the deadline
+# (0: no Democracy Now!).
+FK_DEMOCRACY_NOW_LIVE_SOURCE_ID = env.int("FK_DEMOCRACY_NOW_LIVE_SOURCE_ID", default=0)
+FK_DEMOCRACY_NOW_START = env.str("FK_DEMOCRACY_NOW_START", default="14:00")
+FK_DEMOCRACY_NOW_MINUTES = env.int("FK_DEMOCRACY_NOW_MINUTES", default=60)
+FK_DEMOCRACY_NOW_DEADLINE = env.str("FK_DEMOCRACY_NOW_DEADLINE", default="13:58")
 
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
