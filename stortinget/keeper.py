@@ -16,6 +16,17 @@ of a sitting is shortened, moved or cancelled. Otherwise the keeper only
 changes grants it made itself (see :class:`KeeperBooking`). It holds no
 state of its own beyond what phase the feed has settled in, so a restart
 picks up where it left off.
+
+The keeper also carries the European Commission's midday press briefing
+from EbS (see :mod:`stortinget.ebs`), on the days EbS lists one:
+
+- booked from its listed start for an hour, into free time only: it never
+  moves anyone, and Stortinget's sitting takes its time when they meet;
+- live: extended 15 minutes at a time, into free time, up to a longest;
+- over (interpretation gone, or another programme on): cut to filler;
+- never began, half an hour after the listed start: cut to filler;
+- already on when the keeper first sees it (after a sitting breaks off,
+  say): booked from now, if the time is free.
 """
 
 from __future__ import annotations
@@ -34,9 +45,10 @@ from fk.models import LiveSource, LiveTransmission, Scheduleitem, Video
 from scheduling import services
 from scheduling.models import AirtimeGrant
 
+from .ebs import OnAir, Programme
 from .feed import OSLO, Snapshot
 from .models import KeeperBooking
-from .rules import Debouncer, Phase, phase_of
+from .rules import BRIEFING_HOLD, Debouncer, Phase, briefing_phase, phase_of
 
 logger = logging.getLogger(__name__)
 Kind = KeeperBooking.Kind
@@ -50,6 +62,12 @@ SHORTEST_RESUME = datetime.timedelta(minutes=30)
 # Extend a sitting on air when its end is this close, by this much.
 EXTEND_WHEN = datetime.timedelta(minutes=10)
 EXTEND_BY = datetime.timedelta(minutes=15)
+# The EU midday briefing: the shortest booking worth making, and how long
+# after its listed start a briefing that hasn't begun is given up.
+SHORTEST_BRIEFING = datetime.timedelta(minutes=20)
+BRIEFING_NEVER_BEGAN = datetime.timedelta(minutes=30)
+# After the grid's real end (once rewritten), the briefing is over regardless.
+BRIEFING_GRID_GRACE = datetime.timedelta(minutes=2)
 # Playout can leave black if an item changes just before it starts or ends.
 BOUNDARY_GUARD = datetime.timedelta(seconds=10)
 
@@ -80,6 +98,14 @@ class Config:
     democracy_now_length: datetime.timedelta
     democracy_now_deadline: datetime.time
     dry_run: bool
+    briefing_source_id: int = 0
+    briefing_days: frozenset[int] = frozenset({0, 1, 2, 3, 4})
+    # "listed": on air from the listed start (EbS's own picture until the
+    # briefing begins); "live": only once EbS shows it has begun.
+    briefing_start: str = "listed"
+    briefing_length: datetime.timedelta = datetime.timedelta(hours=1)
+    # The latest a briefing stays on, counted from its listed start.
+    briefing_longest: datetime.timedelta = datetime.timedelta(minutes=90)
 
     @classmethod
     def from_settings(cls) -> Config:
@@ -99,6 +125,13 @@ class Config:
             democracy_now_length=datetime.timedelta(minutes=settings.FK_DEMOCRACY_NOW_MINUTES),
             democracy_now_deadline=_clock(settings.FK_DEMOCRACY_NOW_DEADLINE),
             dry_run=settings.FK_STORTINGET_DRY_RUN,
+            briefing_source_id=settings.FK_EU_BRIEFING_LIVE_SOURCE_ID,
+            briefing_days=frozenset(
+                WEEKDAYS[d.strip()] for d in settings.FK_EU_BRIEFING_DAYS.split(",") if d
+            ),
+            briefing_start=settings.FK_EU_BRIEFING_START,
+            briefing_length=datetime.timedelta(minutes=settings.FK_EU_BRIEFING_MINUTES),
+            briefing_longest=datetime.timedelta(minutes=settings.FK_EU_BRIEFING_LONGEST_MINUTES),
         )
 
 
@@ -121,6 +154,11 @@ def _norwegian_date(day: datetime.date) -> str:
 class Keeper:
     config: Config
     _debouncers: dict[int, Debouncer] = field(default_factory=dict)
+    _briefing_debouncers: dict[datetime.date, Debouncer] = field(default_factory=dict)
+    # Days whose briefing the keeper has seen live, and seen end.
+    _briefing_seen: set[datetime.date] = field(default_factory=set)
+    _briefing_over: set[datetime.date] = field(default_factory=set)
+    _briefing_skipped: set[datetime.date] = field(default_factory=set)
 
     # -- The loop calls this ------------------------------------------------
 
@@ -232,6 +270,117 @@ class Keeper:
             return
         self._book(Kind.DEMOCRACY_NOW, start, end, now)
 
+    # -- The EU midday briefing ---------------------------------------------
+
+    def tick_briefing(
+        self,
+        on_air: OnAir | None,
+        programme: Programme | None,
+        now: datetime.datetime | None = None,
+    ) -> None:
+        """Act on one reading of EbS's live status (None: not read) and
+        today's briefing in EbS's grid (None: not listed, or not read)."""
+        if not self.config.briefing_source_id:
+            return
+        now = now or timezone.now()
+        today = now.astimezone(OSLO).date()
+        if programme is not None and self.config.briefing_start == "listed":
+            self._book_briefing_ahead(programme, now)
+        debouncer = self._briefing_debouncers.setdefault(today, Debouncer(hold=BRIEFING_HOLD))
+        if on_air is not None:
+            phase = briefing_phase(on_air, today, seen_live=today in self._briefing_seen)
+            if phase is not None:
+                debouncer.feed(on_air.at, phase)
+        phase = debouncer.settled
+        if phase == Phase.LIVE:
+            self._briefing_seen.add(today)
+        elif (
+            programme is not None
+            and programme.duration
+            and now > programme.start + programme.duration + BRIEFING_GRID_GRACE
+        ):
+            phase = Phase.ENDED  # the grid has been rewritten with its real end
+        briefing = self._on_air(Kind.EU_BRIEFING, today, now)
+        if phase == Phase.ENDED:
+            self._briefing_over.add(today)
+            if briefing is not None:
+                self._cut(briefing, now, why="the briefing is over")
+            for grant in self._coming(Kind.EU_BRIEFING, today, now):
+                self._cancel(grant, now, why="the briefing is over")
+        elif phase == Phase.LIVE:
+            if briefing is not None:
+                self._extend_briefing_if_due(briefing, programme, today, now)
+            elif today not in self._briefing_over and not self._coming(
+                Kind.EU_BRIEFING, today, now
+            ):
+                self._join_briefing(programme, today, now)
+        elif (
+            phase == Phase.NOT_STARTED  # held: not just a restart mid-briefing
+            and briefing is not None
+            and today not in self._briefing_seen
+            and now >= briefing.starttime + BRIEFING_NEVER_BEGAN
+        ):
+            self._briefing_over.add(today)
+            self._cut(briefing, now, why="the briefing never began")
+
+    def _briefing_latest(self, programme: Programme | None, now) -> datetime.datetime:
+        return (programme.start if programme is not None else now) + self.config.briefing_longest
+
+    def _book_briefing_ahead(self, programme: Programme, now: datetime.datetime) -> None:
+        start = programme.start
+        day = start.astimezone(OSLO).date()
+        if day.weekday() not in self.config.briefing_days or start <= now + RESUME_DELAY:
+            return
+        if KeeperBooking.objects.filter(kind=Kind.EU_BRIEFING, day=day).exists():
+            return
+        end = min(start + self.config.briefing_length, self._briefing_latest(programme, now))
+        self._book_briefing(_whole(start), end, now)
+
+    def _join_briefing(self, programme: Programme | None, today, now) -> None:
+        if today.weekday() not in self.config.briefing_days:
+            return
+        latest = self._briefing_latest(programme, now)
+        start = _whole(now + RESUME_DELAY)
+        if start + SHORTEST_BRIEFING > latest:
+            return
+        listed = programme.start if programme is not None else now
+        end = min(max(listed + self.config.briefing_length, start + SHORTEST_BRIEFING), latest)
+        self._book_briefing(start, end, now)
+
+    def _book_briefing(self, start, end, now) -> None:
+        """Book the briefing for start-end, or as much of it as is free from
+        start on, if that is worth it."""
+        free = self._free_until(start, end)
+        day = start.astimezone(OSLO).date()
+        if free is None or free - start < SHORTEST_BRIEFING:
+            if day not in self._briefing_skipped:
+                logger.info("Not booking the EU briefing: %s-%s is taken", start, end)
+                self._briefing_skipped.add(day)
+            return
+        self._book(Kind.EU_BRIEFING, start, free, now)
+
+    def _extend_briefing_if_due(self, grant, programme, today, now) -> None:
+        latest = self._briefing_latest(programme, now)
+        if grant.endtime - now > EXTEND_WHEN or grant.endtime >= latest:
+            return
+        free = self._free_until(grant.endtime, min(grant.endtime + EXTEND_BY, latest))
+        if free is None or free <= grant.endtime:
+            return
+        self._extend(grant, free, now, make_room=False)
+
+    def _free_until(self, start, end) -> datetime.datetime | None:
+        """How far the schedule is free from `start`, up to `end`; None if
+        something is on at `start` itself."""
+        grants = AirtimeGrant.objects.active().filter(starttime__lt=end, endtime__gt=start)
+        rows = Scheduleitem.objects.overlapping(start, end).filter(grant=None)
+        if (
+            grants.filter(starttime__lte=start).exists()
+            or rows.filter(starttime__lte=start).exists()
+        ):
+            return None
+        starts = [g.starttime for g in grants] + [r.starttime for r in rows]
+        return min([end, *starts])
+
     # -- Looking things up --------------------------------------------------
 
     def _bookings(self, kind: str, today: datetime.date, mote_id: int | None = None):
@@ -293,7 +442,7 @@ class Keeper:
                 logger.warning("Shortening %s to end at %s for Stortinget", grant, start)
                 if not self.config.dry_run:
                     services.update_grant(grant, endtime=start, now=now)
-            elif grant.endtime > end and grant.starttime > now:
+            elif grant.endtime > end and grant.starttime > now and not _is_briefing(grant):
                 logger.warning("Moving the start of %s to %s for Stortinget", grant, end)
                 if not self.config.dry_run:
                     services.update_grant(grant, starttime=end, now=now)
@@ -302,10 +451,19 @@ class Keeper:
 
     def _live_video(self, kind: str, source: LiveSource, start, end, mote_id) -> Video:
         day = start.astimezone(OSLO).date()
+        language = "en"
         if kind == Kind.SITTING:
             name = f"Stortinget direkte – {_norwegian_date(day)}"
             ref_url = f"https://data.stortinget.no/eksport/dagsorden?moteid={mote_id}"
             description = "Direkte fra Stortingssalen. Kilde: Stortinget."
+            language = "no"
+        elif kind == Kind.EU_BRIEFING:
+            name = f"EU-kommisjonens pressebriefing – {day.day}. {MONTHS[day.month - 1]} {day.year}"
+            ref_url = "https://audiovisual.ec.europa.eu/"
+            description = (
+                "Direkte fra Europakommisjonens daglige pressebriefing i Brussel. "
+                f"© European Union, {day.year}. Kilde: EbS."
+            )
         else:
             name = f"Democracy Now! {day.day}. {MONTHS[day.month - 1]} {day.year}"
             ref_url = "https://www.democracynow.org/"
@@ -320,7 +478,7 @@ class Keeper:
             creator=organization.editor,
             duration=end - start,
             ref_url=ref_url,
-            spoken_language="no" if kind == Kind.SITTING else "en",
+            spoken_language=language,
         )
         earlier = (
             Video.objects.filter(keeper_kind_filter(kind))
@@ -334,10 +492,11 @@ class Keeper:
         return video
 
     def _book(self, kind, start, end, now, *, mote_id: int | None = None) -> None:
-        source_id = (
-            self.config.live_source_id if kind == Kind.SITTING
-            else self.config.democracy_now_source_id
-        )  # fmt: skip
+        source_id = {
+            Kind.SITTING: self.config.live_source_id,
+            Kind.DEMOCRACY_NOW: self.config.democracy_now_source_id,
+            Kind.EU_BRIEFING: self.config.briefing_source_id,
+        }[kind]
         day = start.astimezone(OSLO).date()
         logger.warning(
             "Booking %s %s-%s%s",
@@ -365,16 +524,17 @@ class Keeper:
         except NoRoom as error:
             logger.error("Not booking %s: %s", Kind(kind).label, error)
 
-    def _extend(self, grant: AirtimeGrant, end: datetime.datetime, now) -> None:
-        """Lengthen a sitting on air: its grant, its video and the row
-        playing now."""
+    def _extend(self, grant: AirtimeGrant, end: datetime.datetime, now, *, make_room=True) -> None:
+        """Lengthen a booking on air: its grant, its video and the row
+        playing now. A sitting makes room; the briefing only takes free time."""
         logger.warning("Extending %s to %s", grant, end.astimezone(OSLO))
         if self.config.dry_run:
             return
         old_end = grant.endtime
         try:
             with transaction.atomic():
-                self._make_room(old_end, end, now, keep=grant)
+                if make_room:
+                    self._make_room(old_end, end, now, keep=grant)
                 AirtimeGrant.objects.filter(pk=grant.pk).update(endtime=end)
                 for row in grant.schedule_items.filter(starttime__lte=now, is_live=True):
                     if row.endtime == old_end:
@@ -386,6 +546,11 @@ class Keeper:
             logger.error("Not extending %s: %s", grant, error)
             return
         transaction.on_commit(cache.clear)
+
+
+def _is_briefing(grant: AirtimeGrant) -> bool:
+    """The EU briefing is not worth keeping for what is left after a sitting."""
+    return KeeperBooking.objects.filter(grant=grant, kind=Kind.EU_BRIEFING).exists()
 
 
 def keeper_kind_filter(kind: str):

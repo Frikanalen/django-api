@@ -30,6 +30,15 @@ stortingetKeeper:
     start: "14:00"
     minutes: 60
     deadline: "13:58"
+  # The European Commission's midday briefing from EbS, on the days EbS lists
+  # one (liveSourceId 0: not carried). start: "listed" (on air from the listed
+  # start) or "live" (only once EbS shows it has begun).
+  euBriefing:
+    liveSourceId: 0
+    days: "mon,tue,wed,thu,fri"
+    start: "listed"
+    minutes: 60
+    longestMinutes: 90
 
 podDisruptionBudget:
   enabled: true

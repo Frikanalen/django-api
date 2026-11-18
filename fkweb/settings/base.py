@@ -385,6 +385,14 @@ FK_DEMOCRACY_NOW_LIVE_SOURCE_ID = env.int("FK_DEMOCRACY_NOW_LIVE_SOURCE_ID", def
 FK_DEMOCRACY_NOW_START = env.str("FK_DEMOCRACY_NOW_START", default="14:00")
 FK_DEMOCRACY_NOW_MINUTES = env.int("FK_DEMOCRACY_NOW_MINUTES", default=60)
 FK_DEMOCRACY_NOW_DEADLINE = env.str("FK_DEMOCRACY_NOW_DEADLINE", default="13:58")
+# The European Commission's midday briefing from EbS, on the days EbS lists
+# one (0: not carried). Start "listed" (from the listed start) or "live"
+# (once EbS shows it has begun).
+FK_EU_BRIEFING_LIVE_SOURCE_ID = env.int("FK_EU_BRIEFING_LIVE_SOURCE_ID", default=0)
+FK_EU_BRIEFING_DAYS = env.str("FK_EU_BRIEFING_DAYS", default="mon,tue,wed,thu,fri")
+FK_EU_BRIEFING_START = env.str("FK_EU_BRIEFING_START", default="listed")
+FK_EU_BRIEFING_MINUTES = env.int("FK_EU_BRIEFING_MINUTES", default=60)
+FK_EU_BRIEFING_LONGEST_MINUTES = env.int("FK_EU_BRIEFING_LONGEST_MINUTES", default=90)
 
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
