@@ -1,5 +1,6 @@
 from zoneinfo import ZoneInfo
 
+from django.conf import settings
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
@@ -31,11 +32,18 @@ class PublicGrantSerializer(serializers.ModelSerializer):
     """Whose airtime a window is: all the public schedule says of a grant."""
 
     organization = PublicGrantOrganizationSerializer(read_only=True)
+    station = serializers.SerializerMethodField(
+        help_text="True for the station's own airtime (the jukebox, Stortinget): "
+        "the organization is the station itself, not a holder to announce.",
+    )
 
     class Meta:
         model = AirtimeGrant
-        fields = ("id", "organization", "starttime", "endtime")
+        fields = ("id", "organization", "station", "starttime", "endtime")
         read_only_fields = fields
+
+    def get_station(self, grant: AirtimeGrant) -> bool:
+        return grant.organization_id == settings.STATION_ORGANIZATION_ID
 
 
 class GrantItemLiveSourceSerializer(serializers.ModelSerializer):
