@@ -121,7 +121,7 @@ def test_everyone_may_read_whose_airtime_a_day_is(organization, open_grant) -> N
     assert response.json() == [
         {
             "id": open_grant.pk,
-            "organization": {"id": organization.pk, "name": "Grant org"},
+            "organization": {"id": organization.pk, "name": "Grant org", "fkmember": True},
             "starttime": response.json()[0]["starttime"],
             "endtime": response.json()[0]["endtime"],
         }

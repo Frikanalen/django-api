@@ -19,10 +19,18 @@ class GrantOrganizationSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class PublicGrantOrganizationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Organization
+        # `fkmember` lets the graphics say "our member" only of a member.
+        fields = ("id", "name", "fkmember")
+        read_only_fields = fields
+
+
 class PublicGrantSerializer(serializers.ModelSerializer):
     """Whose airtime a window is: all the public schedule says of a grant."""
 
-    organization = GrantOrganizationSerializer(read_only=True)
+    organization = PublicGrantOrganizationSerializer(read_only=True)
 
     class Meta:
         model = AirtimeGrant
