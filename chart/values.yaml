@@ -38,7 +38,9 @@ podDisruptionBudget:
 nginx:
   image:
     repository: nginx
-    tag: latest
+    # Pinned: "latest" with IfNotPresent keeps whatever a node pulled first.
+    # 1.30.7 fixes the nginx2root CVEs (CVE-2026-123007 and others).
+    tag: 1.30.7-alpine
     pullPolicy: IfNotPresent
 
 database:
