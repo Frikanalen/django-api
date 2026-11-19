@@ -19,6 +19,17 @@ class GrantOrganizationSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class PublicGrantSerializer(serializers.ModelSerializer):
+    """Whose airtime a window is: all the public schedule says of a grant."""
+
+    organization = GrantOrganizationSerializer(read_only=True)
+
+    class Meta:
+        model = AirtimeGrant
+        fields = ("id", "organization", "starttime", "endtime")
+        read_only_fields = fields
+
+
 class GrantItemLiveSourceSerializer(serializers.ModelSerializer):
     class Meta:
         model = LiveSource

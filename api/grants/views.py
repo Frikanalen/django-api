@@ -1,9 +1,10 @@
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Prefetch, Q
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import mixins, permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -16,6 +17,7 @@ from api.grants.serializers import (
     AirtimeGrantSerializer,
     AirtimeGrantUpdateSerializer,
     GrantItemsWriteSerializer,
+    PublicGrantSerializer,
     entries,
 )
 from api.pagination import FkDefaultPagination
@@ -54,6 +56,8 @@ class AirtimeGrantViewSet(
     http_method_names = ["get", "post", "put", "patch", "head", "options"]
 
     def get_permissions(self):
+        if self.action == "public":
+            return [permissions.AllowAny()]
         if self.action in ("items", "automatic"):
             # Per-grant rules, checked by the service layer.
             return [permissions.IsAuthenticated()]
@@ -134,6 +138,47 @@ class AirtimeGrantViewSet(
         except DjangoValidationError as error:
             raise _drf(error) from error
         return self._respond(grant)
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "date", OpenApiTypes.DATE, description="Europe/Oslo. Today if left out."
+            ),
+            OpenApiParameter(
+                "days", OpenApiTypes.INT, description="Number of days. Defaults to 1."
+            ),
+        ],
+        responses=PublicGrantSerializer(many=True),
+        filters=False,
+    )
+    @action(detail=False, methods=["get"], pagination_class=None, filterset_class=None)
+    def public(self, request):
+        """
+        Whose airtime it is, for everyone: the grants that touch the given
+        days, with only their organization and window. The public schedule
+        shows them around the programmes of /api/scheduleitems, which name
+        their grant.
+        """
+        try:
+            day = datetime.strptime(request.query_params["date"], "%Y-%m-%d").date()
+        except KeyError:
+            day = datetime.now(broadcast_time.TZ).date()
+        except ValueError as error:
+            raise ValidationError({"date": "Use YYYY-MM-DD."}) from error
+        try:
+            days = min(max(int(request.query_params.get("days", 1)), 1), 31)
+        except ValueError as error:
+            raise ValidationError({"days": "A whole number of days."}) from error
+        start = datetime.combine(day, time.min, tzinfo=broadcast_time.TZ)
+        grants = (
+            AirtimeGrant.objects.select_related("organization")
+            .exclude(state=AirtimeGrant.State.CANCELLED)
+            # A suspended member's airtime compiles to nothing; it is not shown either.
+            .exclude(organization__is_rogue=True)
+            .filter(starttime__lt=start + timedelta(days=days), endtime__gt=start)
+            .order_by("starttime")
+        )
+        return Response(PublicGrantSerializer(grants, many=True).data)
 
     @extend_schema(request=GrantItemsWriteSerializer, responses=AirtimeGrantSerializer)
     @action(detail=True, methods=["put"])
