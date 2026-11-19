@@ -18,6 +18,7 @@ import datetime
 import enum
 from dataclasses import dataclass, field
 
+from .ebs import OnAir, briefing_day
 from .feed import Snapshot
 
 # How long a phase must hold before the keeper acts on it.
@@ -65,3 +66,25 @@ class Debouncer:
         if self._since is not None and at - self._since >= self.hold:
             self.settled = phase
         return self.settled
+
+
+# -- The EU midday briefing ---------------------------------------------------
+
+# EbS's languages blip too: on 16 Nov 2026 a press point read INT only for
+# 41 s in its middle. So the briefing's end must hold a little longer.
+BRIEFING_HOLD = datetime.timedelta(seconds=90)
+
+
+def briefing_phase(on_air: OnAir, day: datetime.date, *, seen_live: bool) -> Phase | None:
+    """The phase of `day`'s midday briefing, as EbS's live status shows it;
+    None when the status says nothing either way.
+
+    Live while EbS shows the briefing with interpretation (INT plus EN, FR
+    ...). Over once it shows the briefing with INT only (seen 16 Nov 2026,
+    to the second), or another programme, but only after it has been live:
+    before the briefing, EbS shows whatever comes first."""
+    if on_air.title is None:
+        return None
+    if briefing_day(on_air.title) == day and on_air.languages - {"INT"}:
+        return Phase.LIVE
+    return Phase.ENDED if seen_live else Phase.NOT_STARTED

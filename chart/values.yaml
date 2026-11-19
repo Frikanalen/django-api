@@ -30,6 +30,25 @@ stortingetKeeper:
     start: "14:00"
     minutes: 60
     deadline: "13:58"
+  # The European Commission's midday briefing from EbS, on the days EbS lists
+  # one (liveSourceId 0: not carried). start: "listed" (on air from the listed
+  # start) or "live" (only once EbS shows it has begun).
+  euBriefing:
+    liveSourceId: 0
+    days: "mon,tue,wed,thu,fri"
+    start: "listed"
+    minutes: 60
+    longestMinutes: 90
+  # Democracy Now! recorded every one of these days and rerun from the
+  # recording at rerunAt ("": no rerun). Needs recordingKeeper.
+  democracyNowRerun:
+    at: ""
+    days: "mon,tue,wed,thu,fri"
+
+# Records live sources on request (recordings app): needs env
+# FK_MEDIAMTX_API_URL, FK_MEDIAMTX_PLAYBACK_URL and FK_INGEST_INTERNAL_URL.
+recordingKeeper:
+  enabled: false
 
 podDisruptionBudget:
   enabled: true

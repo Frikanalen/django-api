@@ -22,6 +22,7 @@ import api.schedule.views as schedule_views
 import api.series.views as series_views
 import api.video.views as video_views
 import api.videofile.views as videofile_views
+import recordings.views as recording_views
 from api.auth import password_reset, two_factor, webauthn
 from fkweb.views import CsrfView
 
@@ -167,6 +168,16 @@ api_patterns: list[URLPattern | URLResolver] = [
     # asks for whichever video needs work next, so there is no id to hang
     # it off.
     path("ingest/claim", video_views.IngestClaim.as_view(), name="api-ingest-claim"),
+    path(
+        "recordings/<int:pk>",
+        recording_views.RecordingDetail.as_view(),
+        name="api-recording-detail",
+    ),
+    path(
+        "recordings/<int:pk>/result",
+        recording_views.RecordingResult.as_view(),
+        name="api-recording-result",
+    ),
     # Series
     path("series", series_views.SeriesList.as_view(), name="api-series-list"),
     path("series/<int:pk>", series_views.SeriesDetail.as_view(), name="api-series-detail"),

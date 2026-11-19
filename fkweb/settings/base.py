@@ -43,6 +43,10 @@ FK_MEDIAMTX_HLS_URL = env.str("FK_MEDIAMTX_HLS_URL", default="")
 # MediaMTX's control API, in-cluster only: where Django reads what signal a
 # live source is receiving. Empty leaves signal reports unavailable.
 FK_MEDIAMTX_API_URL = env.str("FK_MEDIAMTX_API_URL", default="")
+# MediaMTX's playback server, which serves recordings (recordings app), and
+# ingest's upload pod, which archives them. Empty: nothing is recorded.
+FK_MEDIAMTX_PLAYBACK_URL = env.str("FK_MEDIAMTX_PLAYBACK_URL", default="")
+FK_INGEST_INTERNAL_URL = env.str("FK_INGEST_INTERNAL_URL", default="")
 # Prometheus, which scrapes MediaMTX's metrics: where Django reads how a live
 # source's signal has held up over the last hour. Empty leaves the history out.
 FK_PROMETHEUS_URL = env.str("FK_PROMETHEUS_URL", default="")
@@ -363,6 +367,7 @@ LOCAL_APPS = (
     "programming",
     "scheduling",
     "stortinget",
+    "recordings",
     "api",
     "news",
 )
@@ -385,6 +390,18 @@ FK_DEMOCRACY_NOW_LIVE_SOURCE_ID = env.int("FK_DEMOCRACY_NOW_LIVE_SOURCE_ID", def
 FK_DEMOCRACY_NOW_START = env.str("FK_DEMOCRACY_NOW_START", default="14:00")
 FK_DEMOCRACY_NOW_MINUTES = env.int("FK_DEMOCRACY_NOW_MINUTES", default=60)
 FK_DEMOCRACY_NOW_DEADLINE = env.str("FK_DEMOCRACY_NOW_DEADLINE", default="13:58")
+# Democracy Now! recorded every one of these days and rerun from the
+# recording at this time ("" for no rerun).
+FK_DEMOCRACY_NOW_RERUN_AT = env.str("FK_DEMOCRACY_NOW_RERUN_AT", default="")
+FK_DEMOCRACY_NOW_RERUN_DAYS = env.str("FK_DEMOCRACY_NOW_RERUN_DAYS", default="mon,tue,wed,thu,fri")
+# The European Commission's midday briefing from EbS, on the days EbS lists
+# one (0: not carried). Start "listed" (from the listed start) or "live"
+# (once EbS shows it has begun).
+FK_EU_BRIEFING_LIVE_SOURCE_ID = env.int("FK_EU_BRIEFING_LIVE_SOURCE_ID", default=0)
+FK_EU_BRIEFING_DAYS = env.str("FK_EU_BRIEFING_DAYS", default="mon,tue,wed,thu,fri")
+FK_EU_BRIEFING_START = env.str("FK_EU_BRIEFING_START", default="listed")
+FK_EU_BRIEFING_MINUTES = env.int("FK_EU_BRIEFING_MINUTES", default=60)
+FK_EU_BRIEFING_LONGEST_MINUTES = env.int("FK_EU_BRIEFING_LONGEST_MINUTES", default=90)
 
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

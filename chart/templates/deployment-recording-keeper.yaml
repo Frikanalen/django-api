@@ -1,0 +1,33 @@
+{{- if .Values.recordingKeeper.enabled }}
+# Keeps MediaMTX recording what has been requested and hands finished
+# recordings to ingest (manage.py keep_recordings). One replica.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recording-keeper
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: recording-keeper
+  template:
+    metadata:
+      annotations:
+        linkerd.io/inject: enabled
+      labels:
+        app: recording-keeper
+    spec:
+      containers:
+        - name: recordings
+          image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag | default (printf "v%s" .Chart.Version) }}"
+          imagePullPolicy: {{ .Values.django.image.pullPolicy }}
+          command: ["python", "manage.py", "keep_recordings"]
+          env:
+            {{- include "django.env" . | nindent 12 }}
+          resources:
+            requests:
+              cpu: 10m
+              memory: 128Mi
+{{- end }}

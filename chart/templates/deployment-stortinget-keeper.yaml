@@ -1,6 +1,6 @@
 {{- if .Values.stortingetKeeper.enabled }}
 # Follows Stortinget's live speaker list and keeps the schedule in step with
-# the sitting (manage.py keep_stortinget). One replica: two would both act.
+# the sitting (manage.py keep_stortinget), and the EU midday briefing too. One replica: two would both act.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -44,6 +44,20 @@ spec:
               value: {{ .Values.stortingetKeeper.democracyNow.minutes | quote }}
             - name: FK_DEMOCRACY_NOW_DEADLINE
               value: {{ .Values.stortingetKeeper.democracyNow.deadline | quote }}
+            - name: FK_DEMOCRACY_NOW_RERUN_AT
+              value: {{ .Values.stortingetKeeper.democracyNowRerun.at | quote }}
+            - name: FK_DEMOCRACY_NOW_RERUN_DAYS
+              value: {{ .Values.stortingetKeeper.democracyNowRerun.days | quote }}
+            - name: FK_EU_BRIEFING_LIVE_SOURCE_ID
+              value: {{ .Values.stortingetKeeper.euBriefing.liveSourceId | quote }}
+            - name: FK_EU_BRIEFING_DAYS
+              value: {{ .Values.stortingetKeeper.euBriefing.days | quote }}
+            - name: FK_EU_BRIEFING_START
+              value: {{ .Values.stortingetKeeper.euBriefing.start | quote }}
+            - name: FK_EU_BRIEFING_MINUTES
+              value: {{ .Values.stortingetKeeper.euBriefing.minutes | quote }}
+            - name: FK_EU_BRIEFING_LONGEST_MINUTES
+              value: {{ .Values.stortingetKeeper.euBriefing.longestMinutes | quote }}
           resources:
             requests:
               cpu: 10m
