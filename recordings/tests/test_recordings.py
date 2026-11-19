@@ -88,7 +88,7 @@ def test_records_its_window_and_hands_it_to_ingest(recording, mediamtx, ingest) 
     reconcile.reconcile(START - timedelta(seconds=50))
     path = f"contrib/record/{recording.pk}"
     assert mediamtx.paths[path] == {
-        "source": f"rtsp://127.0.0.1:8554/{recording.source.contribution_path}",
+        "source": f"srt://127.0.0.1:8890?streamid=read:{recording.source.contribution_path}",
         "sourceOnDemand": False,
         "record": True,
     }

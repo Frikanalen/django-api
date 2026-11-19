@@ -42,8 +42,11 @@ TIMEOUT_SECONDS = 10
 
 
 def path_config(request: RecordingRequest) -> dict:
+    # Read over loopback SRT, which keeps picture and sound on the source's
+    # shared timestamps (MediaMTX's RTSP output re-times each track by
+    # arrival). Django allows loopback SRT reads of an enabled source.
     return {
-        "source": f"rtsp://127.0.0.1:8554/{request.source.contribution_path}",
+        "source": f"srt://127.0.0.1:8890?streamid=read:{request.source.contribution_path}",
         "sourceOnDemand": False,
         "record": True,
     }
