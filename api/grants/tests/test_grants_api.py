@@ -97,6 +97,41 @@ def test_anonymous_callers_are_refused() -> None:
     assert client_for(None).get(reverse("api-grant-list")).status_code == 401
 
 
+def test_everyone_may_read_whose_airtime_a_day_is(organization, open_grant) -> None:
+    day = open_grant.starttime.astimezone(OSLO).date()
+    cancelled = AirtimeGrant.objects.create(
+        organization=organization,
+        starttime=open_grant.starttime + timedelta(hours=2),
+        endtime=open_grant.starttime + timedelta(hours=3),
+        locks_at=timezone.now(),
+        state=AirtimeGrant.State.CANCELLED,
+    )
+    suspended = Organization.objects.create(name="Suspended", is_rogue=True)
+    AirtimeGrant.objects.create(
+        organization=suspended,
+        starttime=open_grant.starttime + timedelta(hours=4),
+        endtime=open_grant.starttime + timedelta(hours=5),
+        locks_at=timezone.now(),
+    )
+    url = reverse("api-grant-public")
+
+    response = client_for(None).get(url, {"date": day.isoformat()})
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": open_grant.pk,
+            "organization": {"id": organization.pk, "name": "Grant org", "fkmember": True},
+            "starttime": response.json()[0]["starttime"],
+            "endtime": response.json()[0]["endtime"],
+        }
+    ]
+    assert cancelled.pk not in [grant["id"] for grant in response.json()]
+    other_day = client_for(None).get(url, {"date": (day + timedelta(days=2)).isoformat()})
+    assert other_day.json() == []
+    assert client_for(None).get(url, {"date": "soon"}).status_code == 400
+
+
 def test_list_filters(staff, open_grant) -> None:
     client = client_for(staff)
     url = reverse("api-grant-list")
