@@ -18,6 +18,7 @@ from django.views.decorators.http import require_GET, require_POST
 from api.auth.permissions import can_administer_organization
 from fk import preview_tokens, receiver
 from fk.models import LiveSource, StreamCredential
+from recordings import playback
 
 # Protocols CasparCG may read a contribution over with the playout credential.
 PLAYOUT_PROTOCOLS = ("rtsp", "srt")
@@ -46,6 +47,8 @@ def authenticate(request):
         # its own token (fk.receiver). Nothing else may use the API.
         allowed = isinstance(token, str) and len(token) <= 512 and receiver.verify_api_token(token)
         return HttpResponse(status=204 if allowed else 401)
+    if payload.get("action") == "playback":
+        return authenticate_playback(payload)
     if isinstance(token, str) and token and not payload.get("password"):
         return authenticate_preview_token(token, payload)
     if not payload.get("password") and _is_loopback(payload.get("ip")):
@@ -140,6 +143,22 @@ def _enabled_source_at(path, kind):
 
 def _is_enabled_source_path(path, kind):
     return _enabled_source_at(path, kind) is not None
+
+
+@sensitive_variables()
+def authenticate_playback(payload):
+    # Ingest fetching a recording from the playback server, with the
+    # short-lived token Django signed for that one recording path.
+    path, password = payload.get("path"), payload.get("password")
+    allowed = (
+        payload.get("user") == playback.USER
+        and isinstance(path, str)
+        and path.startswith("contrib/record/")
+        and isinstance(password, str)
+        and 0 < len(password) <= 512
+        and playback.verify_token(password, path)
+    )
+    return HttpResponse(status=204 if allowed else 401)
 
 
 @sensitive_variables("token")

@@ -9,6 +9,7 @@ class KeeperBooking(models.Model):
         SITTING = "sitting", "Stortinget sitting"
         DEMOCRACY_NOW = "democracy_now", "Democracy Now!"
         EU_BRIEFING = "eu_briefing", "EU Commission midday briefing"
+        DEMOCRACY_NOW_RERUN = "dn_rerun", "Democracy Now! rerun"
 
     grant = models.OneToOneField(
         "scheduling.AirtimeGrant", on_delete=models.CASCADE, related_name="keeper_booking"

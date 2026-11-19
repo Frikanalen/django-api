@@ -72,6 +72,54 @@ def _get(path):
         raise ReceiverUnavailable(str(error)) from error
 
 
+def _post(path, body=None):
+    """A POST on the receiver's API (its config changes): True, or False for a 404."""
+    base = settings.FK_MEDIAMTX_API_URL
+    if not base:
+        raise ReceiverUnavailable("FK_MEDIAMTX_API_URL is not set")
+    data = json.dumps(body).encode() if body is not None else b""
+    request = urllib.request.Request(
+        f"{base.rstrip('/')}{path}",
+        data=data,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {issue_api_token()}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS):
+            return True
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return False
+        raise ReceiverUnavailable(f"receiver answered {error.code}") from error
+    except OSError as error:
+        raise ReceiverUnavailable(str(error)) from error
+
+
+def path_config(name):
+    """A path configured through the API, or None if there is none."""
+    return _get(f"/v3/config/paths/get/{quote(name)}")
+
+
+def add_path(name, config):
+    _post(f"/v3/config/paths/add/{quote(name)}", config)
+
+
+def remove_path(name):
+    """Remove a path configured through the API; nothing if it is not there."""
+    _post(f"/v3/config/paths/delete/{quote(name)}")
+
+
+def path_inbound_bytes(name):
+    """How much a path has received, or None if it isn't running."""
+    path = _get(f"/v3/paths/get/{quote(name)}")
+    if not path:
+        return None
+    return path.get("inboundBytes", path.get("bytesReceived", 0))
+
+
 def _track(track):
     props = track.get("codecProps") or {}
     return track.get("codec") or "", props

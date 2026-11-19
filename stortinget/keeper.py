@@ -27,6 +27,11 @@ from EbS (see :mod:`stortinget.ebs`), on the days EbS lists one:
 - never began, half an hour after the listed start: cut to filler;
 - already on when the keeper first sees it (after a sitting breaks off,
   say): booked from now, if the time is free.
+
+And Democracy Now! is recorded every weekday, 14:00-15:00, and rerun from
+the recording at 20:00-21:00, whether or not it aired live: the keeper
+books the evening slot in the morning, if it is free, together with a
+recording request (see :mod:`recordings`).
 """
 
 from __future__ import annotations
@@ -42,6 +47,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from fk.models import LiveSource, LiveTransmission, Scheduleitem, Video
+from recordings.models import RecordingRequest
 from scheduling import services
 from scheduling.models import AirtimeGrant
 
@@ -68,6 +74,8 @@ SHORTEST_BRIEFING = datetime.timedelta(minutes=20)
 BRIEFING_NEVER_BEGAN = datetime.timedelta(minutes=30)
 # After the grid's real end (once rewritten), the briefing is over regardless.
 BRIEFING_GRID_GRACE = datetime.timedelta(minutes=2)
+# Set up Democracy Now!'s recording no later than this before it starts.
+RECORDING_LEAD = datetime.timedelta(minutes=5)
 # Playout can leave black if an item changes just before it starts or ends.
 BOUNDARY_GUARD = datetime.timedelta(seconds=10)
 
@@ -106,6 +114,9 @@ class Config:
     briefing_length: datetime.timedelta = datetime.timedelta(hours=1)
     # The latest a briefing stays on, counted from its listed start.
     briefing_longest: datetime.timedelta = datetime.timedelta(minutes=90)
+    # Democracy Now!'s rerun from the day's recording (None: no rerun).
+    democracy_now_rerun_at: datetime.time | None = None
+    democracy_now_rerun_days: frozenset[int] = frozenset({0, 1, 2, 3, 4})
 
     @classmethod
     def from_settings(cls) -> Config:
@@ -132,6 +143,14 @@ class Config:
             briefing_start=settings.FK_EU_BRIEFING_START,
             briefing_length=datetime.timedelta(minutes=settings.FK_EU_BRIEFING_MINUTES),
             briefing_longest=datetime.timedelta(minutes=settings.FK_EU_BRIEFING_LONGEST_MINUTES),
+            democracy_now_rerun_at=(
+                _clock(settings.FK_DEMOCRACY_NOW_RERUN_AT)
+                if settings.FK_DEMOCRACY_NOW_RERUN_AT
+                else None
+            ),
+            democracy_now_rerun_days=frozenset(
+                WEEKDAYS[d.strip()] for d in settings.FK_DEMOCRACY_NOW_RERUN_DAYS.split(",") if d
+            ),
         )
 
 
@@ -159,6 +178,7 @@ class Keeper:
     _briefing_seen: set[datetime.date] = field(default_factory=set)
     _briefing_over: set[datetime.date] = field(default_factory=set)
     _briefing_skipped: set[datetime.date] = field(default_factory=set)
+    _rerun_skipped: set[datetime.date] = field(default_factory=set)
 
     # -- The loop calls this ------------------------------------------------
 
@@ -166,6 +186,7 @@ class Keeper:
         """Act on one reading of the speaker list (None: the fetch failed,
         which neither confirms nor contradicts anything)."""
         now = now or timezone.now()
+        self._democracy_now_rerun(now)
         if snapshot is not None:
             self._book_ahead(snapshot, now)
         today = now.astimezone(OSLO).date()
@@ -269,6 +290,77 @@ class Keeper:
             logger.info("Not booking Democracy Now!: %s-%s is taken", start, end)
             return
         self._book(Kind.DEMOCRACY_NOW, start, end, now)
+
+    # -- Democracy Now!'s evening rerun --------------------------------------
+
+    def _democracy_now_rerun(self, now: datetime.datetime) -> None:
+        """Book today's rerun and the recording it plays, once, in good time."""
+        config = self.config
+        if not config.democracy_now_source_id or config.democracy_now_rerun_at is None:
+            return
+        today = now.astimezone(OSLO).date()
+        if today.weekday() not in config.democracy_now_rerun_days or today in self._rerun_skipped:
+            return
+        record_start = _at(today, config.democracy_now_start)
+        record_end = record_start + config.democracy_now_length
+        if now > record_start - RECORDING_LEAD:
+            return  # too late to record today
+        if KeeperBooking.objects.filter(kind=Kind.DEMOCRACY_NOW_RERUN, day=today).exists():
+            return
+        start = _at(today, config.democracy_now_rerun_at)
+        end = start + config.democracy_now_length
+        if self._free_until(start, end) != end:
+            logger.info("Not rerunning Democracy Now!: %s-%s is taken", start, end)
+            self._rerun_skipped.add(today)
+            return
+        logger.warning(
+            "Recording Democracy Now! %s-%s for a rerun %s-%s",
+            record_start.astimezone(OSLO), record_end.astimezone(OSLO),
+            start.astimezone(OSLO), end.astimezone(OSLO),
+        )  # fmt: skip
+        if config.dry_run:
+            self._rerun_skipped.add(today)  # say it once a day
+            return
+        try:
+            with transaction.atomic():
+                source = LiveSource.objects.select_related("organization__editor").get(
+                    pk=config.democracy_now_source_id
+                )
+                organization = source.organization
+                if organization.editor is None:
+                    raise NoRoom(f"{organization} has no responsible editor")
+                video = Video.objects.create(
+                    name=(
+                        f"Democracy Now! {today.day}. {MONTHS[today.month - 1]} {today.year} "
+                        "(opptak)"
+                    ),
+                    organization=organization,
+                    creator=organization.editor,
+                    duration=config.democracy_now_length,
+                    ref_url="https://www.democracynow.org/",
+                    spoken_language="en",
+                )
+                earlier = (
+                    Video.objects.filter(keeper_kind_filter(Kind.DEMOCRACY_NOW))
+                    .order_by("-pk")
+                    .first()
+                )
+                if earlier is not None:
+                    video.categories.set(earlier.categories.all())
+                RecordingRequest.objects.create(
+                    source=source, video=video, starttime=record_start, endtime=record_end
+                )
+                grant = services.create_grant(
+                    organization=organization,
+                    starttime=start,
+                    endtime=end,
+                    lock_exempt=True,
+                    videos=[video],
+                )
+                KeeperBooking.objects.create(grant=grant, kind=Kind.DEMOCRACY_NOW_RERUN, day=today)
+        except NoRoom as error:
+            logger.error("Not rerunning Democracy Now!: %s", error)
+            self._rerun_skipped.add(today)
 
     # -- The EU midday briefing ---------------------------------------------
 
