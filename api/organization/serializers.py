@@ -1,4 +1,5 @@
 from phonenumber_field.phonenumber import PhoneNumber
+from phonenumber_field.serializerfields import PhoneNumberField
 from rest_framework import serializers
 
 from api.serializers import logger
@@ -10,6 +11,12 @@ class OrganizationSerializer(serializers.ModelSerializer):
     editor_name = serializers.SerializerMethodField()
     editor_email = serializers.SerializerMethodField()
     editor_msisdn = serializers.SerializerMethodField()
+    phone_number = PhoneNumberField(
+        region="NO",
+        required=False,
+        allow_blank=True,
+        help_text="The organization's own phone number. Norwegian numbers may omit +47.",
+    )
     fkmember = serializers.BooleanField(read_only=True)
     is_rogue = serializers.BooleanField(read_only=True)
 
@@ -28,14 +35,28 @@ class OrganizationSerializer(serializers.ModelSerializer):
                     data[field] = "" if isinstance(data[field], str) else None
         return data
 
+    ORGNR_REQUIRED = "Organisasjonsnummer fra Brønnøysundregistrene må fylles ut."
+
     def validate_orgnr(self, value: str) -> str:
-        """Blank, or a real organisasjonsnummer; stored without spaces."""
+        """A real organisasjonsnummer, stored without spaces."""
         value = normalize_orgnr(value)
-        if value and not is_valid_orgnr(value):
+        if not value:
+            raise serializers.ValidationError(self.ORGNR_REQUIRED)
+        if not is_valid_orgnr(value):
             raise serializers.ValidationError(
                 "Organisasjonsnummeret må ha ni siffer og et gyldig kontrollsiffer."
             )
         return value
+
+    def get_fields(self):
+        fields = super().get_fields()
+        # Every new organization is registered in Enhetsregisteret. Older
+        # ones may lack the number, so an update that leaves it out is
+        # let through; one that blanks it is not (see validate_orgnr).
+        if self.instance is None:
+            fields["orgnr"].required = True
+            fields["orgnr"].error_messages["required"] = self.ORGNR_REQUIRED
+        return fields
 
     def get_editor_email(self, obj: Organization) -> str | None:
         if obj.editor:
@@ -43,10 +64,10 @@ class OrganizationSerializer(serializers.ModelSerializer):
         return None
 
     def get_editor_msisdn(self, obj: Organization) -> str | None:
-        """The editor's number in international format, or None if there isn't one."""
-        if not obj.editor:
-            return None
-        number = obj.editor.phone_number
+        """The number listed with the editor information: the organization's
+        own, in international format, or None if it has none. The editor's
+        personal number is never published."""
+        number = obj.phone_number
         # phone_number is blank=True, so a blank value stays a plain str, and an
         # unparseable one formats as the literal string "None".
         if not isinstance(number, PhoneNumber) or not number.is_valid():
@@ -67,6 +88,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "homepage",
             "description",
             "orgnr",
+            "phone_number",
             "postal_address",
             "street_address",
             "editor_id",

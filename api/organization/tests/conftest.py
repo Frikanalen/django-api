@@ -29,6 +29,7 @@ def organization(editor: User) -> Organization:
         description="An organization used by the API tests.",
         postal_address="Postboks 1",
         street_address="Testgata 2",
+        phone_number="+4722334455",
         fkmember=True,
         editor=editor,
     )
