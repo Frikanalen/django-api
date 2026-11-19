@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from django.db.models import Q
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, permissions
@@ -7,11 +9,13 @@ from api.auth.permissions import IsStaffOrReadOnly
 from api.grant_request.views import REQUEST_FILTERS, filter_requests
 from api.pagination import FkDefaultPagination
 from api.recurring_slot.serializers import (
+    PublicRecurringSlotSerializer,
     RecurringSlotCreationRequestSerializer,
     RecurringSlotOwnershipRequestSerializer,
     RecurringSlotRequestSerializer,
     RecurringSlotSerializer,
 )
+from scheduling import broadcast_time
 from scheduling.models import (
     RecurringSlot,
     RecurringSlotCreationRequest,
@@ -36,6 +40,26 @@ class RecurringSlotList(generics.ListCreateAPIView):
     serializer_class = RecurringSlotSerializer
     pagination_class = FkDefaultPagination
     permission_classes = (IsStaffOrReadOnly,)
+
+
+class PublicRecurringSlotList(generics.ListAPIView):
+    """The regular slots in force, for everyone: who has the airtime and
+    when. Ended slots and those of suspended organizations are left out,
+    as is how each slot programs itself."""
+
+    serializer_class = PublicRecurringSlotSerializer
+    pagination_class = None
+    filter_backends = ()
+    permission_classes = (permissions.AllowAny,)
+
+    def get_queryset(self):
+        today = datetime.now(broadcast_time.TZ).date()
+        return (
+            RecurringSlot.objects.select_related("organization", "recipe")
+            .exclude(organization__is_rogue=True)
+            .filter(Q(ends_on__isnull=True) | Q(ends_on__gte=today))
+            .order_by("start_time", "id")
+        )
 
 
 class RecurringSlotDetail(generics.RetrieveUpdateDestroyAPIView):
