@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.11.0](https://github.com/Frikanalen/django-api/compare/v3.10.0...v3.11.0) (2026-11-19)
+
+
+### Features
+
+* **grants:** a public read of whose airtime a day is ([#160](https://github.com/Frikanalen/django-api/issues/160)) ([ddd4ab8](https://github.com/Frikanalen/django-api/commit/ddd4ab854bfd1dc41addf191219aa20215acf152))
+* **stortinget:** a keeper that follows Stortinget's sittings on air ([#157](https://github.com/Frikanalen/django-api/issues/157)) ([06ce195](https://github.com/Frikanalen/django-api/commit/06ce195429fdccaed71f68638619b32fba363f5e))
+
+
+### Bug Fixes
+
+* **chart:** pin nginx to 1.30.7-alpine (nginx2root CVEs) ([#161](https://github.com/Frikanalen/django-api/issues/161)) ([c56e42b](https://github.com/Frikanalen/django-api/commit/c56e42b80dc9ae095e48740c29534732791b3614))
+* **playout-events:** the event hub pings itself through Postgres every 30 s and reconnects with a resync when it goes deaf. ([06ce195](https://github.com/Frikanalen/django-api/commit/06ce195429fdccaed71f68638619b32fba363f5e))
+
 ## [3.10.0](https://github.com/Frikanalen/django-api/compare/v3.9.0...v3.10.0) (2026-11-17)
 
 
