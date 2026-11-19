@@ -7,6 +7,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
 from api.auth.permissions import can_administer_organization
+from api.grants.serializers import PublicGrantOrganizationSerializer
 from api.programming.serializers import RecipeSerializer, build_recipe
 from programming.models import Recipe
 from programming.services import uploads_recipe
@@ -19,6 +20,36 @@ from scheduling.models import (
 )
 
 _UNSET = object()
+
+
+class PublicRecurringSlotSerializer(serializers.ModelSerializer):
+    """A regular slot as anyone may see it: who has the airtime and when,
+    without how it programs itself."""
+
+    organization = PublicGrantOrganizationSerializer(read_only=True, allow_null=True)
+    jukebox = serializers.SerializerMethodField(
+        help_text="The station's own airtime, filled from the archive."
+    )
+
+    class Meta:
+        model = RecurringSlot
+        fields = (
+            "id",
+            "organization",
+            "frequency",
+            "interval",
+            "weekdays",
+            "month_weeks",
+            "start_time",
+            "duration",
+            "starts_on",
+            "ends_on",
+            "jukebox",
+        )
+        read_only_fields = fields
+
+    def get_jukebox(self, slot: RecurringSlot) -> bool:
+        return slot.recipe is not None and slot.recipe.kind == Recipe.Kind.JUKEBOX
 
 
 class RecurringSlotSerializer(serializers.ModelSerializer):
