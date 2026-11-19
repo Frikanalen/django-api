@@ -13,6 +13,7 @@ import api.grants.views as grant_views
 import api.graphics.views as graphic_views
 import api.live.views as live_views
 import api.mediamtx as mediamtx_views
+import api.organization.affidavit as organization_affidavit
 import api.organization.views as organization_views
 import api.playout.views as playout_views
 import api.posters.views as poster_views
@@ -191,6 +192,17 @@ api_patterns: list[URLPattern | URLResolver] = [
         "organization/<int:pk>",
         organization_views.OrganizationDetail.as_view(),
         name="api-organization-detail",
+    ),
+    # The signed editor affidavit, uploaded as a scan for staff to verify.
+    path(
+        "organization/<int:pk>/affidavit",
+        organization_affidavit.OrganizationAffidavit.as_view(),
+        name="api-organization-affidavit",
+    ),
+    path(
+        "organization/<int:pk>/affidavit/<int:submission_id>/file",
+        organization_affidavit.AffidavitFile.as_view(),
+        name="api-organization-affidavit-file",
     ),
     # Prefills the form for a new organization from Brønnøysundregistrene.
     path(
