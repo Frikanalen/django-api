@@ -255,7 +255,6 @@ class AffidavitSubmissionAdmin(admin.ModelAdmin):
         "orgnr",
         "postal_address",
         "editor",
-        "editor_phone",
         "submitted_by",
         "submitted_at",
         "status",
@@ -293,10 +292,6 @@ class AffidavitSubmissionAdmin(admin.ModelAdmin):
         if editor is None:
             return "No editor"
         return f"{editor.first_name} {editor.last_name} <{editor.email}>"
-
-    @admin.display(description="Listed phone")
-    def editor_phone(self, obj):
-        return obj.organization.phone_number
 
     @admin.display(description="Scan")
     def scan(self, obj):

@@ -2,7 +2,6 @@ from django.conf import settings
 from django.contrib.postgres.indexes import GinIndex
 from django.contrib.postgres.search import SearchVector, SearchVectorField
 from django.db import models
-from phonenumber_field.modelfields import PhoneNumberField
 
 
 class OrganizationQuerySet(models.QuerySet):
@@ -76,14 +75,6 @@ class Organization(models.Model):
         help_text="Suspended member: content is hidden and the page shows a suspension notice.",
     )
     orgnr = models.CharField(blank=True, max_length=255)
-    # The organization's own number, listed as the editor's contact
-    # number. The editor's personal number is never published.
-    phone_number = PhoneNumberField(
-        blank=True,
-        region="NO",
-        help_text="The organization's phone number, listed with the editor information.",
-        verbose_name="phone number",
-    )
     homepage = models.CharField(
         "Link back to the organisation home page.", blank=True, null=True, max_length=255
     )

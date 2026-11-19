@@ -9,7 +9,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("fk", "0060_organization_phone_and_affidavit"),
+        ("fk", "0060_affidavit_help_texts"),
     ]
 
     operations = [

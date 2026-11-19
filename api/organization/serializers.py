@@ -1,5 +1,3 @@
-from phonenumber_field.phonenumber import PhoneNumber
-from phonenumber_field.serializerfields import PhoneNumberField
 from rest_framework import serializers
 
 from api.serializers import logger
@@ -11,12 +9,6 @@ class OrganizationSerializer(serializers.ModelSerializer):
     editor_name = serializers.SerializerMethodField()
     editor_email = serializers.SerializerMethodField()
     editor_msisdn = serializers.SerializerMethodField()
-    phone_number = PhoneNumberField(
-        region="NO",
-        required=False,
-        allow_blank=True,
-        help_text="The organization's own phone number. Norwegian numbers may omit +47.",
-    )
     fkmember = serializers.BooleanField(read_only=True)
     is_rogue = serializers.BooleanField(read_only=True)
 
@@ -64,15 +56,9 @@ class OrganizationSerializer(serializers.ModelSerializer):
         return None
 
     def get_editor_msisdn(self, obj: Organization) -> str | None:
-        """The number listed with the editor information: the organization's
-        own, in international format, or None if it has none. The editor's
-        personal number is never published."""
-        number = obj.phone_number
-        # phone_number is blank=True, so a blank value stays a plain str, and an
-        # unparseable one formats as the literal string "None".
-        if not isinstance(number, PhoneNumber) or not number.is_valid():
-            return None
-        return number.as_international
+        """Always None: no phone number is published for an organization or
+        its editor. Kept so clients built against the old schema still parse."""
+        return None
 
     def get_editor_name(self, obj: Organization) -> str:
         if obj.editor:
@@ -88,7 +74,6 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "homepage",
             "description",
             "orgnr",
-            "phone_number",
             "postal_address",
             "street_address",
             "editor_id",
