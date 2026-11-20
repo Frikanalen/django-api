@@ -5,7 +5,12 @@ CHART_TEMPLATES = Path(__file__).parents[2] / "chart" / "templates"
 
 
 def test_chart_has_one_ordered_oslo_schedule_draft_cronjob() -> None:
-    cronjobs = sorted(CHART_TEMPLATES.glob("cronjob-*.yaml"))
+    # The staging-only database refresh is not a scheduling job.
+    cronjobs = sorted(
+        path
+        for path in CHART_TEMPLATES.glob("cronjob-*.yaml")
+        if path.name != "cronjob-staging-db-refresh.yaml"
+    )
 
     assert [path.name for path in cronjobs] == ["cronjob-draft-broadcast-schedule.yaml"]
     manifest = cronjobs[0].read_text()
