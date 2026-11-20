@@ -14,6 +14,7 @@ import api.graphics.views as graphic_views
 import api.live.views as live_views
 import api.mediamtx as mediamtx_views
 import api.organization.affidavit as organization_affidavit
+import api.organization.members as organization_members
 import api.organization.views as organization_views
 import api.playout.views as playout_views
 import api.posters.views as poster_views
@@ -203,6 +204,17 @@ api_patterns: list[URLPattern | URLResolver] = [
         "organization/<int:pk>/affidavit/<int:submission_id>/file",
         organization_affidavit.AffidavitFile.as_view(),
         name="api-organization-affidavit-file",
+    ),
+    # Who works for the organization; the editor manages its members.
+    path(
+        "organization/<int:pk>/members",
+        organization_members.OrganizationMembers.as_view(),
+        name="api-organization-members",
+    ),
+    path(
+        "organization/<int:pk>/members/<int:user_id>",
+        organization_members.OrganizationMember.as_view(),
+        name="api-organization-member",
     ),
     # Prefills the form for a new organization from Brønnøysundregistrene.
     path(

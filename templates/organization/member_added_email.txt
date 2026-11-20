@@ -1,0 +1,9 @@
+{% autoescape off %}Hei{% if user.first_name %} {{ user.first_name }}{% endif %},
+
+{{ added_by }} har lagt deg til som medlem i {{ organization.name }} på Frikanalen. Som medlem kan du laste opp videoer og sette opp sendinger på vegne av organisasjonen.
+
+Organisasjonens Studio: {{ site_url }}/organization/{{ organization.id }}/admin
+
+Hilsen
+Frikanalen
+{% endautoescape %}
