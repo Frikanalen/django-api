@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("fk", "0062_organization_invitation"),
+        ("fk", "0063_video_is_banned"),
     ]
 
     operations = [
