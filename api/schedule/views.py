@@ -44,6 +44,12 @@ class ScheduleitemViewSet(viewsets.ModelViewSet):
     ordering_fields = ["starttime"]
     ordering = ["starttime"]
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if getattr(self.request.user, "is_staff", False):
+            return queryset
+        return queryset.without_removed()
+
     def filter_queryset(self, queryset):
         if self.action == "list":
             return super().filter_queryset(queryset)

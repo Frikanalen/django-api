@@ -845,6 +845,9 @@ def compile_grant(grant: AirtimeGrant, now: datetime | None = None) -> bool:
     A suspended (is_rogue) member's grant compiles to nothing: what it
     put on the schedule and has not aired yet comes off, and the grant
     is left in its state.
+
+    A removed video (Video.is_banned) is skipped, the list closing up
+    behind it.
     """
     now = now or timezone.now()
     if grant.organization.is_rogue:
@@ -869,6 +872,13 @@ def compile_grant(grant: AirtimeGrant, now: datetime | None = None) -> bool:
             if [_key(i.entry) for i in items[: len(started)]] != heads:
                 logger.warning("%s: the list no longer starts with what has aired", grant)
             items = items[len(started) :]
+            # A video staff have removed (is_banned) stays on the list, so
+            # lifting the removal puts it back, but is not laid out: the
+            # rest of the list closes up behind it.
+            removed = [i for i in items if i.video is not None and i.video.is_banned]
+            for item in removed:
+                logger.warning("Leaving %s out of %s: it has been removed", item.entry, grant)
+            items = [i for i in items if i not in removed]
             start, previous = _tail_origin(grant, started, now)
             padded = grant.padded
             kept = _fitting(grant, items, padded=padded, start=start, previous=previous)
@@ -906,16 +916,20 @@ def compile_grant(grant: AirtimeGrant, now: datetime | None = None) -> bool:
 
 
 def recompile_for_video(video: Video, now: datetime | None = None) -> None:
-    """A pending upload's file arrived with its real length, or a live
-    programme got its recording: recompile the compiled grants yet to air
-    whose rows no longer match it. A save that changes nothing about the
-    length or how it airs leaves the schedule alone."""
+    """A pending upload's file arrived with its real length, a live
+    programme got its recording, or staff removed the video or lifted
+    its removal: recompile the compiled grants yet to air whose rows no
+    longer match it. A save that changes nothing about the length, how
+    it airs or whether it may air leaves the schedule alone."""
     now = now or timezone.now()
     # Fresh, so a live transmission just added or removed is seen.
     video = Video.objects.select_related("live_transmission").get(pk=video.pk)
     live = airs_live(video)
+    # A removed video comes off a grant already on air too: compile_grant
+    # keeps what has started and closes up the rest.
+    window = Q(endtime__gt=now) if video.is_banned else Q(starttime__gt=now)
     grants = AirtimeGrant.objects.filter(
-        state=State.COMPILED, starttime__gt=now, items__video=video
+        window, state=State.COMPILED, items__video=video
     ).distinct()
     # Staff entries have no grant to recompile; they only follow how it airs.
     # .update() sends no signals, so the page cache is cleared by hand.
@@ -927,7 +941,8 @@ def recompile_for_video(video: Video, now: datetime | None = None) -> None:
         transaction.on_commit(cache.clear)
     for grant in grants:
         rows = list(grant.schedule_items.filter(video=video).values_list("duration", "is_live"))
-        listed = grant.items.filter(video=video).count()
+        # A removed video is listed but not laid out; see compile_grant.
+        listed = 0 if video.is_banned else grant.items.filter(video=video).count()
         if len(rows) != listed or any(d != video.duration or l != live for d, l in rows):
             compile_grant(grant, now)
 
