@@ -97,7 +97,8 @@ def test_anonymous_callers_are_refused() -> None:
     assert client_for(None).get(reverse("api-grant-list")).status_code == 401
 
 
-def test_everyone_may_read_whose_airtime_a_day_is(organization, open_grant) -> None:
+def test_everyone_may_read_whose_airtime_a_day_is(organization, open_grant, settings) -> None:
+    settings.STATION_ORGANIZATION_ID = organization.pk + 1000
     day = open_grant.starttime.astimezone(OSLO).date()
     cancelled = AirtimeGrant.objects.create(
         organization=organization,
@@ -122,6 +123,7 @@ def test_everyone_may_read_whose_airtime_a_day_is(organization, open_grant) -> N
         {
             "id": open_grant.pk,
             "organization": {"id": organization.pk, "name": "Grant org", "fkmember": True},
+            "station": False,
             "starttime": response.json()[0]["starttime"],
             "endtime": response.json()[0]["endtime"],
         }
@@ -130,6 +132,15 @@ def test_everyone_may_read_whose_airtime_a_day_is(organization, open_grant) -> N
     other_day = client_for(None).get(url, {"date": (day + timedelta(days=2)).isoformat()})
     assert other_day.json() == []
     assert client_for(None).get(url, {"date": "soon"}).status_code == 400
+
+
+def test_the_stations_own_airtime_is_marked(organization, open_grant, settings) -> None:
+    day = open_grant.starttime.astimezone(OSLO).date()
+    settings.STATION_ORGANIZATION_ID = organization.pk
+
+    response = client_for(None).get(reverse("api-grant-public"), {"date": day.isoformat()})
+
+    assert [grant["station"] for grant in response.json()] == [True]
 
 
 def test_list_filters(staff, open_grant) -> None:
