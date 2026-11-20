@@ -14,6 +14,7 @@ import api.graphics.views as graphic_views
 import api.live.views as live_views
 import api.mediamtx as mediamtx_views
 import api.organization.affidavit as organization_affidavit
+import api.organization.invitations as organization_invitations
 import api.organization.members as organization_members
 import api.organization.views as organization_views
 import api.playout.views as playout_views
@@ -215,6 +216,28 @@ api_patterns: list[URLPattern | URLResolver] = [
         "organization/<int:pk>/members/<int:user_id>",
         organization_members.OrganizationMember.as_view(),
         name="api-organization-member",
+    ),
+    # Invitations to join: the editor invites an address, the e-mailed link
+    # accepts (or creates an account and accepts).
+    path(
+        "organization/<int:pk>/invitations",
+        organization_invitations.OrganizationInvitations.as_view(),
+        name="api-organization-invitations",
+    ),
+    path(
+        "organization/<int:pk>/invitations/<int:invitation_id>",
+        organization_invitations.OrganizationInvitationDetail.as_view(),
+        name="api-organization-invitation",
+    ),
+    path(
+        "invitations/<str:token>",
+        organization_invitations.InvitationByToken.as_view(),
+        name="api-invitation",
+    ),
+    path(
+        "invitations/<str:token>/accept",
+        organization_invitations.AcceptInvitation.as_view(),
+        name="api-invitation-accept",
     ),
     # Prefills the form for a new organization from Brønnøysundregistrene.
     path(

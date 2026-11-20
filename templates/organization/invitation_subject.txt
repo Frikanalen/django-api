@@ -1,0 +1,1 @@
+{% autoescape off %}Invitasjon til {{ organization.name }} på Frikanalen{% endautoescape %}

@@ -1,1 +1,0 @@
-{% autoescape off %}Du er med i {{ organization.name }} på Frikanalen{% endautoescape %}

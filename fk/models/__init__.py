@@ -14,6 +14,7 @@ from .affidavit import AffidavitStatus, AffidavitSubmission  # noqa: F401
 from .asrun import AsRun  # noqa: F401
 from .category import Category  # noqa: F401
 from .ingest import IngestJob, IngestKind, IngestState  # noqa: F401
+from .invitation import OrganizationInvitation  # noqa: F401
 from .live import LiveSource, LiveTransmission, StreamCredential  # noqa: F401
 from .organization import Organization  # noqa: F401
 from .program_image import ImageMediaType, ImageRole, ProgramImage  # noqa: F401
