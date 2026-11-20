@@ -75,8 +75,10 @@ class BaseVideoSerializer(serializers.ModelSerializer):
     creator: serializers.SlugRelatedField[User] = serializers.SlugRelatedField(
         slug_field="email", read_only=True
     )
+    # Optional: a video can be created with only a name, and its categories
+    # filled in later, or never.
     categories = serializers.SlugRelatedField(
-        slug_field="name", many=True, queryset=Category.objects.all()
+        slug_field="name", many=True, queryset=Category.objects.all(), required=False
     )
     files = serializers.SerializerMethodField()
     duration_sec = serializers.SerializerMethodField()

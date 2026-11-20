@@ -209,3 +209,13 @@ def test_a_live_programme_needs_its_organizations_own_source(
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert response.json()["errors"][0]["attr"] == "live_source"
+
+
+def test_categories_are_optional_on_create(
+    editor_client: APIClient, organization: Organization
+) -> None:
+    response = create_video(editor_client, {"name": "Just a name", "organization": organization.pk})
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.json()["categories"] == []
+    assert not Video.objects.get(pk=response.json()["id"]).categories.exists()
