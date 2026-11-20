@@ -524,3 +524,50 @@ def test_members_cannot_turn_their_grant_into_jukebox(member, open_grant) -> Non
     )
 
     assert response.status_code == 400
+
+
+def _grant_with_every_kind_of_entry(organization, video, start, recipe) -> AirtimeGrant:
+    from fk.models import Scheduleitem
+    from scheduling.models import Graphic, Poster
+
+    grant = AirtimeGrant.objects.create(
+        organization=organization,
+        starttime=start,
+        endtime=start + timedelta(hours=1),
+        locks_at=start,
+        recipe=recipe,
+    )
+    graphic, _ = Graphic.objects.get_or_create(name="Grafikk", url="/graphics/x")
+    poster = Poster.objects.create(
+        organization=organization, heading="Neste", duration=timedelta(seconds=30)
+    )
+    GrantItem.objects.create(grant=grant, position=0, video=video)
+    GrantItem.objects.create(grant=grant, position=1, poster=poster)
+    GrantItem.objects.create(
+        grant=grant, position=2, graphic=graphic, duration=timedelta(seconds=20)
+    )
+    Scheduleitem.objects.create(video=video, grant=grant, starttime=start, duration=video.duration)
+    return grant
+
+
+@pytest.mark.parametrize("who", ["staff", "member"])
+def test_listing_grants_takes_the_same_queries_however_many(
+    who, staff, member, organization, video, django_assert_max_num_queries
+) -> None:
+    """Graphics, jukebox categories and the started rows are fetched once
+    per page, not once per grant (the list took ~400 queries for 50)."""
+    from programming.services import jukebox_recipe
+
+    jukebox = jukebox_recipe(organization, name="Tema")
+    for hours in range(-40, 20, 2):
+        recipe = jukebox if hours % 4 else uploads_recipe(organization)
+        _grant_with_every_kind_of_entry(
+            organization, video, in_days(0) + timedelta(hours=hours), recipe
+        )
+    user = staff if who == "staff" else member
+
+    with django_assert_max_num_queries(8):
+        response = client_for(user).get(reverse("api-grant-list"))
+
+    assert response.status_code == 200
+    assert len(response.json()["results"]) == 30

@@ -170,7 +170,7 @@ class AirtimeGrantSerializer(serializers.ModelSerializer):
         )
     )
     def get_started_items(self, grant) -> int:
-        return len(services.started_rows(grant))
+        return len(self._started_rows(grant))
 
     @extend_schema_field(
         serializers.IntegerField(
@@ -181,7 +181,14 @@ class AirtimeGrantSerializer(serializers.ModelSerializer):
     )
     def get_aired_items(self, grant) -> int:
         now = timezone.now()
-        return sum(1 for row in services.started_rows(grant, now) if row.endtime <= now)
+        return sum(1 for row in self._started_rows(grant) if row.endtime <= now)
+
+    def _started_rows(self, grant) -> list:
+        """services.started_rows, from the view's prefetch when it made one."""
+        rows = getattr(grant, "prefetched_started_rows", None)
+        if rows is None:
+            rows = grant.prefetched_started_rows = services.started_rows(grant)
+        return rows
 
 
 class GrantItemWriteSerializer(serializers.Serializer):
