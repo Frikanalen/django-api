@@ -1,7 +1,8 @@
 """
 Administrative removal: a video staff flag is_banned is withdrawn from the
-website, the listings, the schedule and the air. Its page says only that
-it has been removed pending review -- never why, nor whose it was.
+website, the listings, the schedule and the air. To the public its page
+says only that it is unavailable -- never why, nor whose it was. Its own
+organization is told it was removed pending review.
 """
 
 from datetime import timedelta
@@ -59,24 +60,33 @@ def airing(video: Video) -> Scheduleitem:
     )
 
 
-def test_page_says_removed_and_nothing_more(video) -> None:
+def test_page_says_unavailable_and_nothing_more(video) -> None:
     response = APIClient().get(reverse("api-video-detail", args=[video.pk]))
 
     assert response.status_code == 403
-    assert response.json() == {
-        "detail": "Administrativt fjernet i påvente av gjennomgang.",
-        "code": "video_removed",
-    }
+    assert response.json() == {"detail": "Denne videoen er utilgjengelig.", "code": "video_removed"}
 
 
-def test_its_own_organization_gets_the_same_notice(video, editor) -> None:
+def test_other_users_are_told_no_more(video) -> None:
+    client = APIClient()
+    client.force_authenticate(user=User.objects.create(email="someone@example.test"))
+
+    body = client.get(reverse("api-video-detail", args=[video.pk])).json()
+    assert body == {"detail": "Denne videoen er utilgjengelig.", "code": "video_removed"}
+
+
+def test_its_own_organization_is_told_it_was_removed(video, editor, organization) -> None:
     client = APIClient()
     client.force_authenticate(user=editor)
 
     assert client.get(reverse("api-video-list")).json()["results"] == []
     response = client.get(reverse("api-video-detail", args=[video.pk]))
     assert response.status_code == 403
-    assert response.json()["code"] == "video_removed"
+    assert response.json() == {
+        "detail": "Videoen er administrativt fjernet i påvente av gjennomgang.",
+        "code": "video_removed",
+        "organization": {"id": organization.pk, "name": "Some org"},
+    }
 
 
 def test_staff_still_see_it_flagged(video, staff) -> None:
