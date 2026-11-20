@@ -49,7 +49,7 @@ def invite(client: APIClient, organization: Organization, email: str):
 
 
 def token_from_last_mail() -> str:
-    match = re.search(r"/invitasjon/([\w-]+)", mail.outbox[-1].body)
+    match = re.search(r"/invitation/([\w-]+)", mail.outbox[-1].body)
     assert match
     return match.group(1)
 
@@ -100,6 +100,7 @@ def test_the_link_shows_what_it_is_for(organization, editor_client, editor):
     response = client_for().get(reverse("api-invitation", args=[token_from_last_mail()]))
 
     assert response.status_code == status.HTTP_200_OK
+    assert response.json()["organizationId"] == organization.pk
     assert response.json()["organizationName"] == organization.name
     assert response.json()["invitedBy"] == "Ada Lovelace"
     assert response.json()["email"] == "nobody@example.test"

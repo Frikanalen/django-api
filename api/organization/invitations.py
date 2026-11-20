@@ -52,6 +52,7 @@ class InviteSerializer(serializers.Serializer):
 
 
 class InvitationPreviewSerializer(serializers.Serializer):
+    organization_id = serializers.IntegerField()
     organization_name = serializers.CharField()
     invited_by = serializers.CharField()
     email = serializers.EmailField(help_text="The address the invitation was sent to.")
@@ -76,7 +77,7 @@ def send_invitation(invitation: OrganizationInvitation, token: str) -> None:
     context = {
         "organization": invitation.organization,
         "invited_by": _name(invitation.invited_by),
-        "link": f"{settings.SITE_URL}/invitasjon/{token}",
+        "link": f"{settings.SITE_URL}/invitation/{token}",
         "expires_at": invitation.expires_at,
     }
     run_in_background(
@@ -180,6 +181,7 @@ class InvitationByToken(APIView):
         return Response(
             InvitationPreviewSerializer(
                 {
+                    "organization_id": invitation.organization.pk,
                     "organization_name": invitation.organization.name,
                     "invited_by": _name(invitation.invited_by),
                     "email": invitation.email,
