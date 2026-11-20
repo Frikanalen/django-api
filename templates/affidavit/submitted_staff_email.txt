@@ -1,0 +1,8 @@
+{% autoescape off %}{{ organization.name }} har lastet opp en signert redaktørerklæring.
+
+Sjekk den mot organisasjonens opplysninger og godkjenn eller avvis den her:
+{{ admin_url }}
+
+Hilsen
+Frikanalen
+{% endautoescape %}

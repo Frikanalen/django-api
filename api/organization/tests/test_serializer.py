@@ -23,19 +23,39 @@ def test_serializer_includes_organization_and_editor_details(
         "editor_id": editor.pk,
         "editor_name": "Ada Lovelace",
         "editor_email": "organization-editor@example.test",
-        "editor_msisdn": "+47 41 23 45 67",
+        "editor_msisdn": None,
         "fkmember": True,
         "is_rogue": False,
     }
 
 
-@pytest.mark.parametrize("phone_number", ["", "not a number", "12345"])
-def test_serializer_reports_no_usable_phone_number_as_null(editor: User, phone_number: str) -> None:
+def test_no_phone_number_is_published(editor: User) -> None:
+    # The editor has a personal number on their profile; it stays private.
     organization = Organization.objects.create(name="No phone", editor=editor)
-    editor.phone_number = phone_number
-    editor.save(update_fields=["phone_number"])
 
     assert OrganizationSerializer(organization).data["editor_msisdn"] is None
+
+
+def test_create_requires_an_orgnr() -> None:
+    serializer = OrganizationSerializer(data={"name": "No orgnr"})
+
+    assert not serializer.is_valid()
+    assert list(serializer.errors) == ["orgnr"]
+
+
+def test_orgnr_cannot_be_blanked(organization: Organization) -> None:
+    serializer = OrganizationSerializer(organization, data={"orgnr": ""}, partial=True)
+
+    assert not serializer.is_valid()
+    assert list(serializer.errors) == ["orgnr"]
+
+
+def test_an_older_organization_without_orgnr_can_still_be_updated(
+    organization: Organization,
+) -> None:
+    serializer = OrganizationSerializer(organization, data={"name": "Renamed"}, partial=True)
+
+    assert serializer.is_valid(), serializer.errors
 
 
 def test_serializer_handles_an_organization_without_an_editor(caplog) -> None:
@@ -55,6 +75,7 @@ def test_derived_and_membership_fields_are_read_only(editor: User) -> None:
     serializer = OrganizationSerializer(
         data={
             "name": "Submitted organization",
+            "orgnr": "971526920",
             "editor_id": 999999,
             "editor_name": "Injected Name",
             "editor_email": "injected@example.test",

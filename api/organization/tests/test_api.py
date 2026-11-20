@@ -67,6 +67,7 @@ def test_authenticated_user_can_create_an_organization(
         reverse("api-organization-list"),
         {
             "name": "New organization",
+            "orgnr": "971 526 920",
             "homepage": "https://new.example.test",
             "description": "Created through the API",
             "postal_address": "Postboks 3",
@@ -85,6 +86,7 @@ def test_authenticated_user_can_create_an_organization(
     assert created.description == "Created through the API"
     assert created.postal_address == "Postboks 3"
     assert created.street_address == "Testveien 4"
+    assert created.orgnr == "971526920"
     assert created.fkmember is False
     assert response.data["editor_id"] == editor.pk
 
@@ -105,9 +107,7 @@ def test_create_requires_a_name(editor_client: APIClient) -> None:
     response = editor_client.post(reverse("api-organization-list"), {}, format="json")
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert response.data["errors"] == [
-        {"code": "required", "detail": "This field is required.", "attr": "name"}
-    ]
+    assert [error["attr"] for error in response.data["errors"]] == ["name", "orgnr"]
     assert not Organization.objects.exists()
 
 

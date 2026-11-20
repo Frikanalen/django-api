@@ -1,4 +1,3 @@
-from phonenumber_field.phonenumber import PhoneNumber
 from rest_framework import serializers
 
 from api.serializers import logger
@@ -28,14 +27,28 @@ class OrganizationSerializer(serializers.ModelSerializer):
                     data[field] = "" if isinstance(data[field], str) else None
         return data
 
+    ORGNR_REQUIRED = "Organisasjonsnummer fra Brønnøysundregistrene må fylles ut."
+
     def validate_orgnr(self, value: str) -> str:
-        """Blank, or a real organisasjonsnummer; stored without spaces."""
+        """A real organisasjonsnummer, stored without spaces."""
         value = normalize_orgnr(value)
-        if value and not is_valid_orgnr(value):
+        if not value:
+            raise serializers.ValidationError(self.ORGNR_REQUIRED)
+        if not is_valid_orgnr(value):
             raise serializers.ValidationError(
                 "Organisasjonsnummeret må ha ni siffer og et gyldig kontrollsiffer."
             )
         return value
+
+    def get_fields(self):
+        fields = super().get_fields()
+        # Every new organization is registered in Enhetsregisteret. Older
+        # ones may lack the number, so an update that leaves it out is
+        # let through; one that blanks it is not (see validate_orgnr).
+        if self.instance is None:
+            fields["orgnr"].required = True
+            fields["orgnr"].error_messages["required"] = self.ORGNR_REQUIRED
+        return fields
 
     def get_editor_email(self, obj: Organization) -> str | None:
         if obj.editor:
@@ -43,15 +56,9 @@ class OrganizationSerializer(serializers.ModelSerializer):
         return None
 
     def get_editor_msisdn(self, obj: Organization) -> str | None:
-        """The editor's number in international format, or None if there isn't one."""
-        if not obj.editor:
-            return None
-        number = obj.editor.phone_number
-        # phone_number is blank=True, so a blank value stays a plain str, and an
-        # unparseable one formats as the literal string "None".
-        if not isinstance(number, PhoneNumber) or not number.is_valid():
-            return None
-        return number.as_international
+        """Always None: no phone number is published for an organization or
+        its editor. Kept so clients built against the old schema still parse."""
+        return None
 
     def get_editor_name(self, obj: Organization) -> str:
         if obj.editor:

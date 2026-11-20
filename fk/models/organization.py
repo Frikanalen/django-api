@@ -55,7 +55,17 @@ class Organization(models.Model):
     members = models.ManyToManyField(
         settings.AUTH_USER_MODEL, blank=True
     )  # User ownership of an organization
-    fkmember = models.BooleanField(default=False)
+    # Ticked when Frikanalen has received the editor's signed affidavit
+    # (redaktorerklaering). Receiving it is also how the editor's identity
+    # is confirmed; see save().
+    fkmember = models.BooleanField(
+        "Member",
+        default=False,
+        help_text=(
+            "Tick when the editor's signed affidavit has been received. This approves the "
+            "membership and confirms the editor's identity."
+        ),
+    )
     # Suspended for trying to subvert the general assembly: the
     # organization's content is withdrawn from the website, listings and
     # scheduling, and its page shows a suspension notice instead.
@@ -96,3 +106,20 @@ class Organization(models.Model):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        # The signed affidavit names the editor and carries their
+        # signature, so receiving it confirms who they are: there is no
+        # separate step for it. Only on the way in to membership, so a
+        # later change of editor does not confirm someone who has not
+        # signed anything.
+        becomes_member = self.fkmember and not (
+            self.pk and Organization.objects.filter(pk=self.pk, fkmember=True).exists()
+        )
+        super().save(*args, **kwargs)
+        if becomes_member and self.editor_id:
+            from fk.models.user import User
+
+            User.objects.filter(pk=self.editor_id).update(identity_confirmed=True)
+            if Organization.editor.is_cached(self):
+                self.editor.identity_confirmed = True

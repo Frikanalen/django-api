@@ -1,0 +1,12 @@
+{% extends "admin/change_form.html" %}
+{% block submit_buttons_bottom %}
+  {% if original.status == "pending" %}
+    <div class="submit-row">
+      <input type="submit" value="Approve: make the organization a member" name="_approve" class="default">
+      <input type="submit" value="Reject with the review note" name="_reject">
+      <input type="submit" value="Save note only" name="_continue">
+    </div>
+  {% else %}
+    {{ block.super }}
+  {% endif %}
+{% endblock %}

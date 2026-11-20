@@ -2,14 +2,19 @@
 # This file is covered by the LGPLv3 or later, read COPYING for details.
 from base64 import b64encode
 
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group
+from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
+from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import format_html
 
 from fk.forms import UserChangeForm, UserCreationForm
 from fk.models import (
+    AffidavitStatus,
+    AffidavitSubmission,
     Category,
     IngestJob,
     LiveSource,
@@ -230,6 +235,119 @@ class CategoryAdmin(admin.ModelAdmin):
     ordering = ("name",)
 
 
+class AffidavitSubmissionAdmin(admin.ModelAdmin):
+    """
+    The verification queue for scanned editor affidavits. Check the scan
+    against the organization's details beside it, then approve it (the
+    organization becomes a member and its editor's identity is confirmed)
+    or reject it with a note the organization will see.
+    """
+
+    list_display = ("organization", "orgnr", "submitted_by", "submitted_at", "status")
+    list_filter = ("status",)
+    list_select_related = ("organization", "submitted_by")
+    search_fields = ("organization__name", "organization__orgnr", "submitted_by__email")
+    ordering = ("submitted_at",)
+    actions = ("approve_selected",)
+    fields = (
+        "scan",
+        "organization",
+        "orgnr",
+        "postal_address",
+        "editor",
+        "submitted_by",
+        "submitted_at",
+        "status",
+        "reviewed_by",
+        "reviewed_at",
+        "review_note",
+    )
+    readonly_fields = tuple(f for f in fields if f != "review_note")
+    change_form_template = "admin/fk/affidavitsubmission/change_form.html"
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).defer("content")
+
+    def has_add_permission(self, request):
+        # Scans come from the organization's own upload, nowhere else.
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        # Open on what needs doing: the queue, not the archive.
+        if not request.GET:
+            return HttpResponseRedirect(f"{request.path}?status__exact={AffidavitStatus.PENDING}")
+        return super().changelist_view(request, extra_context)
+
+    @admin.display(description="Org.nr.")
+    def orgnr(self, obj):
+        return obj.organization.orgnr
+
+    @admin.display(description="Postal address")
+    def postal_address(self, obj):
+        return obj.organization.postal_address
+
+    @admin.display(description="Editor")
+    def editor(self, obj):
+        editor = obj.organization.editor
+        if editor is None:
+            return "No editor"
+        return f"{editor.first_name} {editor.last_name} <{editor.email}>"
+
+    @admin.display(description="Scan")
+    def scan(self, obj):
+        url = reverse("api-organization-affidavit-file", args=[obj.organization_id, obj.pk])
+        if obj.content_type.startswith("image/"):
+            return format_html(
+                '<a href="{}" target="_blank"><img src="{}" style="max-width: 40rem"></a>',
+                url,
+                url,
+            )
+        return format_html('<a href="{}" target="_blank">Open {}</a>', url, obj.file_name)
+
+    def response_change(self, request, obj):
+        from api.organization.affidavit import notify_submitter_of_decision
+
+        if "_approve" in request.POST or "_reject" in request.POST:
+            if obj.status != AffidavitStatus.PENDING:
+                self.message_user(request, "This scan has already been reviewed.", messages.ERROR)
+                return HttpResponseRedirect(request.path)
+            if "_approve" in request.POST:
+                obj.approve(request.user)
+                self.message_user(
+                    request, f"Approved: {obj.organization} is now a member.", messages.SUCCESS
+                )
+            else:
+                if not obj.review_note.strip():
+                    self.message_user(
+                        request,
+                        "Write a review note first: the organization needs to know what to fix.",
+                        messages.ERROR,
+                    )
+                    return HttpResponseRedirect(request.path)
+                obj.reject(request.user, obj.review_note)
+                self.message_user(request, f"Rejected the scan from {obj.organization}.")
+            notify_submitter_of_decision(obj)
+            return HttpResponseRedirect(
+                reverse("admin:fk_affidavitsubmission_changelist")
+                + f"?status__exact={AffidavitStatus.PENDING}"
+            )
+        return super().response_change(request, obj)
+
+    @admin.action(description="Approve selected scans (makes the organizations members)")
+    def approve_selected(self, request, queryset):
+        from api.organization.affidavit import notify_submitter_of_decision
+
+        approved = 0
+        for submission in queryset.filter(status=AffidavitStatus.PENDING).select_related(
+            "organization", "submitted_by"
+        ):
+            submission.approve(request.user)
+            notify_submitter_of_decision(submission)
+            approved += 1
+        self.message_user(request, f"Approved {approved} scan(s).", messages.SUCCESS)
+
+
+admin.site.register(AffidavitSubmission, AffidavitSubmissionAdmin)
 admin.site.register(Category, CategoryAdmin)
 admin.site.register(IngestJob, IngestJobAdmin)
 admin.site.register(Organization, OrganizationAdmin)

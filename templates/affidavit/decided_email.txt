@@ -1,0 +1,15 @@
+{% autoescape off %}Hei{% if user.first_name %} {{ user.first_name }}{% endif %},
+{% if approved %}
+Frikanalen har godkjent redaktørerklæringen for {{ organization.name }}. Organisasjonen er nå medlem, og identiteten din som redaktør er bekreftet.
+
+Du kan sette opp sendinger her: {{ site_url }}/organization/{{ organization.id }}/schedule
+{% else %}
+Frikanalen kunne ikke godkjenne redaktørerklæringen for {{ organization.name }}.
+{% if note %}
+Begrunnelse: {{ note }}
+{% endif %}
+Last opp en ny skannet erklæring her: {{ site_url }}/organization/{{ organization.id }}/affidavit
+{% endif %}
+Hilsen
+Frikanalen
+{% endautoescape %}

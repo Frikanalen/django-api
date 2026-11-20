@@ -55,7 +55,11 @@ class User(AbstractBaseUser):
     )
     identity_confirmed = models.BooleanField(
         default=False,
-        help_text="Whether the identity of this user has been confirmed by Frikanalen management.",
+        help_text=(
+            "Set automatically when the signed affidavit of an organization this user edits "
+            "is received (the organization is made a member). Tick by hand only for someone "
+            "who is not an editor."
+        ),
         verbose_name="identity confirmed",
     )
 

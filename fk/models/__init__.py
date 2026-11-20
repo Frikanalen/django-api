@@ -10,6 +10,7 @@ transferred.
 
 import logging
 
+from .affidavit import AffidavitStatus, AffidavitSubmission  # noqa: F401
 from .asrun import AsRun  # noqa: F401
 from .category import Category  # noqa: F401
 from .ingest import IngestJob, IngestKind, IngestState  # noqa: F401
