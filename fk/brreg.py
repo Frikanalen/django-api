@@ -42,11 +42,46 @@ def is_valid_orgnr(value: str) -> bool:
     return check != 10 and check == int(value[8])
 
 
+# Enhetsregisteret keeps names and places in capitals only: it does not tell
+# upper from lower case. Shouting is worse than a guess, so capitals are
+# turned into ordinary case and the member is asked to check the result.
+# Company-form suffixes stay capitals, as they are always written.
+_FORM_SUFFIXES = {"AS", "ASA", "SA", "BA", "ANS", "DA", "NUF", "KF", "IKS", "SF"}
+# Little words in place names that stay lower case: "Mo i Rana".
+_PLACE_PARTICLES = {"i", "på", "og", "ved", "under", "over"}
+
+
+def _all_capitals(text: str) -> bool:
+    return any(c.isalpha() for c in text) and text == text.upper()
+
+
+def soften_name(name: str) -> str:
+    """'FORENINGEN FOR LOKAL-TV AS' -> 'Foreningen for lokal-tv AS'."""
+    if not _all_capitals(name):
+        return name
+    words = name.lower().split(" ")
+    words = [w.upper() if w.upper() in _FORM_SUFFIXES else w for w in words]
+    text = " ".join(words)
+    return text[:1].upper() + text[1:]
+
+
+def soften_place(text: str) -> str:
+    """'MO I RANA' -> 'Mo i Rana', 'STORGATA 1' -> 'Storgata 1'."""
+    if not _all_capitals(text):
+        return text
+    words = text.lower().split(" ")
+    return " ".join(
+        w if i and w in _PLACE_PARTICLES else "-".join(p[:1].upper() + p[1:] for p in w.split("-"))
+        for i, w in enumerate(words)
+    )
+
+
 def _format_address(address: dict | None) -> str:
     if not address:
         return ""
-    lines = [line for line in address.get("adresse") or [] if line]
-    place = " ".join(p for p in (address.get("postnummer"), address.get("poststed")) if p)
+    lines = [soften_place(line) for line in address.get("adresse") or [] if line]
+    poststed = soften_place(address.get("poststed") or "")
+    place = " ".join(p for p in (address.get("postnummer"), poststed) if p)
     if place:
         lines.append(place)
     if address.get("landkode") not in (None, "", "NO") and address.get("land"):
@@ -75,7 +110,7 @@ def _entity(data: dict) -> dict:
     form = data.get("organisasjonsform") or {}
     return {
         "orgnr": data["organisasjonsnummer"],
-        "name": data.get("navn") or "",
+        "name": soften_name(data.get("navn") or ""),
         "organization_form": form.get("beskrivelse") or "",
         "homepage": _homepage(data.get("hjemmeside")),
         # Vedtektsfestet formål; older entries only have the activity field.

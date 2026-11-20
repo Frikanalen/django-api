@@ -102,12 +102,12 @@ def test_lookup_returns_our_fields(client, monkeypatch):
     assert calls == [brreg.BASE_URL + VALID]
     assert response.data == {
         "orgnr": VALID,
-        "name": "TESTFORENINGEN",
+        "name": "Testforeningen",
         "organization_form": "Forening/lag/innretning",
         "homepage": "https://www.testforeningen.no",
         "purpose": "Foreningen skal lage lokal-TV.",
-        "street_address": "Testgata 1\n0150 OSLO",
-        "postal_address": "Testgata 1\n0150 OSLO",
+        "street_address": "Testgata 1\n0150 Oslo",
+        "postal_address": "Testgata 1\n0150 Oslo",
         "bankrupt": False,
         "being_dissolved": False,
     }
@@ -127,8 +127,8 @@ def test_separate_postal_address_is_used(client, monkeypatch):
 
     response = client.get(url(VALID))
 
-    assert response.data["postal_address"] == "Postboks 1\n0101 OSLO"
-    assert response.data["street_address"] == "Testgata 1\n0150 OSLO"
+    assert response.data["postal_address"] == "Postboks 1\n0101 Oslo"
+    assert response.data["street_address"] == "Testgata 1\n0150 Oslo"
 
 
 def test_spaces_in_the_number_are_ignored(client, monkeypatch):
@@ -211,3 +211,30 @@ def test_activity_stands_in_for_a_missing_purpose(client, monkeypatch):
     answer(monkeypatch, dict(entity, aktivitet=["Drive nærradio"]))
 
     assert client.get(url(VALID)).data["purpose"] == "Drive nærradio"
+
+
+@pytest.mark.parametrize(
+    ("given", "expected"),
+    [
+        ("TESTFORENINGEN", "Testforeningen"),
+        ("FORENINGEN FOR LOKAL-TV AS", "Foreningen for lokal-tv AS"),
+        ("Allerede Riktig", "Allerede Riktig"),
+        ("NUUG", "Nuug"),
+    ],
+)
+def test_names_in_capitals_are_softened(given, expected):
+    assert brreg.soften_name(given) == expected
+
+
+@pytest.mark.parametrize(
+    ("given", "expected"),
+    [
+        ("OSLO", "Oslo"),
+        ("MO I RANA", "Mo i Rana"),
+        ("STORGATA 1", "Storgata 1"),
+        ("SANDE I VESTFOLD", "Sande i Vestfold"),
+        ("Testgata 1", "Testgata 1"),
+    ],
+)
+def test_places_in_capitals_are_softened(given, expected):
+    assert brreg.soften_place(given) == expected
