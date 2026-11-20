@@ -1,0 +1,14 @@
+{% autoescape off %}Hei,
+
+{{ invited_by }} har invitert deg til å bli medlem i {{ organization.name }} på Frikanalen. Som medlem kan du laste opp videoer og sette opp sendinger på vegne av organisasjonen.
+
+Bli med her:
+{{ link }}
+
+Har du ikke en bruker på Frikanalen, lager du den fra lenken. Lenken virker til {{ expires_at|date:"d.m.Y" }}.
+
+Var dette ikke ment for deg, kan du se bort fra e-posten.
+
+Hilsen
+Frikanalen
+{% endautoescape %}
