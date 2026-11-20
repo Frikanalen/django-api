@@ -1,0 +1,114 @@
+{{- with .Values.stagingDbRefresh }}
+{{- if .enabled }}
+{{- if eq $.Values.ingress.hostname "frikanalen.tv" }}
+{{- fail "stagingDbRefresh wipes the database: it must never be enabled on production" }}
+{{- end }}
+# See stagingDbRefresh in values.yaml. Failures raise kube-prometheus-stack's
+# KubeJobFailed; the clusters repo has a rule for a refresh that stops
+# succeeding altogether.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: staging-db-refresh
+spec:
+  schedule: {{ .schedule | quote }}
+  timeZone: Europe/Oslo
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            app: django-api-job
+        spec:
+          restartPolicy: Never
+          volumes:
+            - name: work
+              emptyDir:
+                sizeLimit: 5Gi
+          initContainers:
+            - name: download
+              image: {{ .rcloneImage | quote }}
+              command: ["sh", "-c"]
+              args:
+                - >-
+                  rclone lsl "garage:$BUCKET/$OBJECT" &&
+                  rclone copyto "garage:$BUCKET/$OBJECT" /work/dump.pgdump
+              env:
+                - name: BUCKET
+                  value: {{ .s3.bucket | quote }}
+                - name: OBJECT
+                  value: {{ .s3.object | quote }}
+                - name: RCLONE_CONFIG_GARAGE_TYPE
+                  value: s3
+                - name: RCLONE_CONFIG_GARAGE_PROVIDER
+                  value: Other
+                - name: RCLONE_CONFIG_GARAGE_ENDPOINT
+                  value: {{ .s3.endpoint | quote }}
+                - name: RCLONE_CONFIG_GARAGE_REGION
+                  value: {{ .s3.region | quote }}
+                - name: RCLONE_CONFIG_GARAGE_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .s3.secret }}
+                      key: ACCESS_KEY_ID
+                - name: RCLONE_CONFIG_GARAGE_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .s3.secret }}
+                      key: SECRET_ACCESS_KEY
+              volumeMounts:
+                - name: work
+                  mountPath: /work
+            - name: restore
+              image: {{ .postgresImage | quote }}
+              command: ["bash", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  # Everything except extensions: those belong to the
+                  # operator, and as a non-superuser the dump's
+                  # COMMENT ON EXTENSION fails with "must be owner".
+                  pg_restore -l /work/dump.pgdump \
+                    | grep -vE '^[0-9]+; [0-9]+ [0-9]+ (EXTENSION|COMMENT - EXTENSION) ' > /work/toc
+                  # Drop everything the user owns rather than pg_restore
+                  # --clean, which only drops what is in the dump and trips
+                  # over tables staging has and prod does not yet. One
+                  # transaction, so a failure leaves last week's data.
+                  {
+                    echo "DROP OWNED BY \"$PGUSER\";"
+                    pg_restore -L /work/toc --no-owner --no-acl -f - /work/dump.pgdump
+                  } | psql --single-transaction -v ON_ERROR_STOP=1 -q
+                  echo "Restored $(du -h /work/dump.pgdump | cut -f1) dump"
+              env:
+                - name: PGHOST
+                  value: {{ .db.host | quote }}
+                - name: PGDATABASE
+                  value: {{ .db.name | quote }}
+                - name: PGUSER
+                  value: {{ .db.user | quote }}
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $.Values.database.secret }}
+                      key: {{ .db.passwordKey }}
+                - name: PGOPTIONS
+                  value: "-c lock_timeout={{ .lockTimeout }}"
+              volumeMounts:
+                - name: work
+                  mountPath: /work
+          containers:
+            # Staging's code is usually ahead of prod's schema.
+            - name: migrate
+              image: "{{ $.Values.django.image.repository }}:{{ $.Values.django.image.tag | default (printf "v%s" $.Chart.Version) }}"
+              imagePullPolicy: Always
+              command: ["python", "manage.py", "migrate", "--noinput"]
+              env:
+                {{- include "django.env" $ | nindent 16 }}
+{{- end }}
+{{- end }}

@@ -119,3 +119,36 @@ monitoring:
   enabled: false
   interval: 30s
   scrapeTimeout: 10s
+
+# Weekly copy of production's database into this environment, for STAGING
+# ONLY: it drops everything the database user owns and restores the newest
+# dump that prod's staging-refresh-dump CronJob (Frikanalen/clusters,
+# clusters/prod/jobs/) left in Garage, then runs migrate, since staging's
+# code is usually ahead of prod's schema. The chart refuses to render it with
+# ingress.hostname frikanalen.tv.
+stagingDbRefresh:
+  enabled: false
+  # Monday 00:15 Oslo, after prod's Sunday-night dump and the staging media
+  # reset on file01 (Monday 00:00).
+  schedule: "15 0 * * 1"
+  db:
+    host: pgcluster-rw
+    name: fkweb
+    user: fkweb
+    # Key in database.secret holding that user's password.
+    passwordKey: djangoPassword
+  # How long the restore waits for its table locks before giving up and
+  # rolling back, leaving last week's data in place.
+  lockTimeout: 60s
+  s3:
+    endpoint: http://192.168.3.59:3900  # Garage on file01
+    region: garage
+    bucket: staging-refresh
+    object: fkweb.pgdump
+    # Secret with ACCESS_KEY_ID and SECRET_ACCESS_KEY (read-only key), from
+    # OpenBao via an ExternalSecret.
+    secret: staging-refresh-s3
+  # Same major version as the CloudNativePG cluster, so pg_restore never
+  # emits settings the server does not know.
+  postgresImage: ghcr.io/cloudnative-pg/postgresql:16
+  rcloneImage: rclone/rclone:1.68.2
