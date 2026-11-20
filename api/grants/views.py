@@ -22,6 +22,7 @@ from api.grants.serializers import (
 )
 from api.pagination import FkDefaultPagination
 from api.programming.serializers import build_recipe
+from fk.models import Scheduleitem
 from scheduling import broadcast_time, services
 from scheduling.models import AirtimeGrant, GrantItem
 
@@ -64,6 +65,8 @@ class AirtimeGrantViewSet(
         return super().get_permissions()
 
     def get_queryset(self):
+        # Everything the serializer reads, in a fixed number of queries
+        # however many grants the page holds.
         queryset = AirtimeGrant.objects.select_related(
             "organization",
             "recipe__series_source__series",
@@ -73,9 +76,22 @@ class AirtimeGrantViewSet(
             Prefetch(
                 "items",
                 queryset=GrantItem.objects.select_related(
-                    "video__organization", "video__live_transmission__source", "poster"
+                    "video__organization",
+                    "video__live_transmission__source",
+                    "poster",
+                    "graphic",
                 ),
-            )
+            ),
+            "recipe__jukebox_settings__categories",
+            # What `started_items` and `aired_items` count: the same rows
+            # services.started_rows reads, one query for the whole page.
+            Prefetch(
+                "schedule_items",
+                queryset=Scheduleitem.objects.filter(
+                    starttime__lte=timezone.now() + services.ON_AIR_MARGIN
+                ).order_by("starttime"),
+                to_attr="prefetched_started_rows",
+            ),
         )
         user = self.request.user
         if user.is_staff:
