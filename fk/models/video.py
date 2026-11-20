@@ -23,17 +23,26 @@ class VideoManager(models.Manager):
             .filter(organization__in=Organization.objects.with_responsible_editor())
         )
 
+    def available(self):
+        """Accountable videos that staff have not removed (is_banned).
+
+        The base of everything below: a removed video is withdrawn from
+        the website, the listings and the air exactly as one nobody
+        answers for.
+        """
+        return self.with_responsible_editor().filter(is_banned=False)
+
     def visible_to(self, user):
-        """Everything for staff, only accountable videos otherwise."""
+        """Everything for staff, only available videos otherwise."""
         if getattr(user, "is_staff", False):
             return super().get_queryset()
-        return self.with_responsible_editor()
+        return self.available()
 
     def public(self):
-        return self.with_responsible_editor().filter(publish_on_web=True, proper_import=True)
+        return self.available().filter(publish_on_web=True, proper_import=True)
 
     def fillers(self):
-        return self.with_responsible_editor().filter(FILLER)
+        return self.available().filter(FILLER)
 
     def listable(self):
         """Videos a grant may list: accountable, with a positive length.
@@ -42,7 +51,7 @@ class VideoManager(models.Manager):
         processed yet but whose duration was set by hand -- since the
         list is settled at the lock and the file may follow.
         """
-        return self.with_responsible_editor().filter(duration__gt=timedelta(0))
+        return self.available().filter(duration__gt=timedelta(0))
 
     def airable(self):
         """Videos that can go on air as they are: listable, file processed."""
@@ -86,6 +95,17 @@ class Video(models.Model):
         default=False,
     )
     publish_on_web = models.BooleanField(default=True)
+    # Removed by staff pending review: hidden from everyone but staff and
+    # kept off the air. The public only ever sees a neutral notice, never
+    # a reason.
+    is_banned = models.BooleanField(
+        "Administratively removed",
+        default=False,
+        help_text=(
+            "Removed pending review: hidden from the website, listings and the schedule, and "
+            "not aired. The video page only says it has been removed, with no reason."
+        ),
+    )
 
     proper_import = models.BooleanField(
         default=False, help_text="Has the video been properly imported?"

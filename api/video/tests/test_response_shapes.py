@@ -115,6 +115,7 @@ def expected_video_json(video: Video) -> dict:
         "properImport": True,
         "hasTonoRecords": False,
         "publishOnWeb": True,
+        "isBanned": False,
         "isFiller": False,
         "refUrl": "https://example.test/ref",
         "spokenLanguage": "no",

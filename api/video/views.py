@@ -16,6 +16,7 @@ from api.auth.permissions import (
     IsInOrganizationOrDisallow,
     IsInOrganizationOrReadOnly,
     RequireTargetOrganizationMembership,
+    can_administer_organization,
 )
 from api.pagination import FkDefaultPagination
 from api.video.serializers import (
@@ -56,7 +57,10 @@ class VideoDetail(generics.RetrieveUpdateDestroyAPIView):
             200: VideoSerializer,
             403: OpenApiResponse(
                 description=(
-                    "The video belongs to a suspended organization. The body names it: "
+                    "The video is withheld. Either staff have removed it pending review: "
+                    '`{"detail", "code": "video_removed"}`, deliberately with no reason, plus '
+                    '`"organization": {"id", "name"}` when the caller is in its organization; '
+                    "or it belongs to a suspended organization, which the body names: "
                     '`{"detail", "code": "organization_suspended", "organization": {"id", "name"}}`.'
                 )
             ),
@@ -66,6 +70,28 @@ class VideoDetail(generics.RetrieveUpdateDestroyAPIView):
         try:
             return super().retrieve(request, *args, **kwargs)
         except Http404:
+            # A removed video is withheld, not missing. To the public, say
+            # only that it is unavailable; the reason stays with staff, and
+            # so does whose video it was. Its own organization is told a
+            # little more, and which organization, so its page can say so.
+            removed = (
+                Video.objects.filter(pk=self.kwargs.get("pk"), is_banned=True)
+                .select_related("organization")
+                .first()
+            )
+            if removed is not None:
+                if can_administer_organization(request.user, removed.organization):
+                    body = {
+                        "detail": "Videoen er administrativt fjernet i påvente av gjennomgang.",
+                        "code": "video_removed",
+                        "organization": {
+                            "id": removed.organization.pk,
+                            "name": removed.organization.name,
+                        },
+                    }
+                else:
+                    body = {"detail": "Denne videoen er utilgjengelig.", "code": "video_removed"}
+                return Response(body, status=status.HTTP_403_FORBIDDEN)
             # A suspended organization's video is withheld, not missing:
             # say whose it was, so the page can show the suspension notice.
             organization = (

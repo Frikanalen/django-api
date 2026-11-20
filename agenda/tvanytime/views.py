@@ -59,7 +59,8 @@ def schedule_queryset():
     may be offered on demand.
     """
     return (
-        Scheduleitem.objects.programmes()
+        Scheduleitem.objects.without_removed()
+        .programmes()
         .select_related(
             "video__organization__editor",
             "video__series",
