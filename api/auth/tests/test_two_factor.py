@@ -17,6 +17,7 @@ from django_otp.plugins.otp_totp.models import TOTPDevice
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from api.auth.two_factor import CODE_REQUIRED, CODE_WRONG
 from fk.models import User
 
 pytestmark = pytest.mark.django_db
@@ -287,6 +288,11 @@ def test_admin_login_asks_for_the_code(client: APIClient, account: User) -> None
     page = browser.post(url, {"username": EMAIL, "password": PASSWORD})
     assert page.status_code == status.HTTP_200_OK  # the form again, with an error
     assert "_auth_user_id" not in browser.session
+    assert page.context["form"].errors["otp_token"] == [CODE_REQUIRED]
+    assert CODE_REQUIRED in page.content.decode()
+
+    page = browser.post(url, {"username": EMAIL, "password": PASSWORD, "otp_token": "nope"})
+    assert page.context["form"].errors["otp_token"] == [CODE_WRONG]
 
     page = browser.post(
         url, {"username": EMAIL, "password": PASSWORD, "otp_token": code(device, 1)}

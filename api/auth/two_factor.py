@@ -559,6 +559,12 @@ class AdminAuthenticationWithSecondFactorForm(AdminAuthenticationForm):
             try:
                 device = require_second_factor(user, cleaned.get("otp_token"))
             except ValidationError as error:
-                raise forms.ValidationError(str(error.detail["otp"][0])) from None
+                # DRF keeps a lone message as a string, not a list: indexing
+                # it gave the first letter ("S" for "Skriv inn koden ...").
+                message = error.detail["otp"]
+                if isinstance(message, list):
+                    message = message[0]
+                self.add_error("otp_token", str(message))
+                return cleaned
             user.otp_device = device
         return cleaned
