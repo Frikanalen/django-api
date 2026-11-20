@@ -13,6 +13,15 @@ class ScheduleitemQuerySet(models.QuerySet):
 
     TZ = ZoneInfo("Europe/Oslo")
 
+    def without_removed(self) -> models.QuerySet:
+        """Leave out airings of videos staff have removed (Video.is_banned).
+
+        Playout reads the schedule anonymously, so this is also what keeps
+        a removed video off the air: its time shows as a gap, which
+        playout fills with graphics. Staff still see the rows.
+        """
+        return self.exclude(video__is_banned=True)
+
     def programmes(self) -> models.QuerySet:
         """Everything but text posters and graphics, which fill time
         rather than being programmes of their own."""

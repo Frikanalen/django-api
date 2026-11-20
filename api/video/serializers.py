@@ -162,6 +162,7 @@ class BaseVideoSerializer(serializers.ModelSerializer):
             "proper_import",
             "has_tono_records",
             "publish_on_web",
+            "is_banned",
             "is_filler",
             "ref_url",
             # Both feed the TV-Anytime EPG and are only ever as good as
@@ -180,7 +181,8 @@ class BaseVideoSerializer(serializers.ModelSerializer):
         # threw it away, which is why nothing has ever populated the column.
         # Units are the field's own: thousandths of a frame per second, so
         # 25 fps is 25000 and 59.94 is 59940.
-        read_only_fields = ("created_time", "updated_time", "files")
+        # `is_banned` is set by staff in the admin, never through the API.
+        read_only_fields = ("created_time", "updated_time", "files", "is_banned")
 
     def validate(self, data):
         is_creation = not self.instance

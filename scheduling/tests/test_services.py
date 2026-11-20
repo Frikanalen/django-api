@@ -879,3 +879,37 @@ def test_a_staff_entry_changing_how_it_airs_clears_the_page_cache(
         services.recompile_for_video(video, now=NOW)
 
     assert cache.get("cached-page") is None
+
+
+# -- Removed videos ------------------------------------------------------------
+
+
+def test_a_removed_video_is_skipped_and_the_list_closes_up(make_grant, make_video) -> None:
+    a, b = make_video(20), make_video(15)
+    grant = make_grant(OPEN_WEEK, state=State.LOCKED)
+    services._replace_items(grant, [a, b])
+    Video.objects.filter(pk=a.pk).update(is_banned=True)
+
+    assert services.compile_grant(grant)
+
+    assert schedule(grant) == [(b.pk, OPEN_WEEK, timedelta(minutes=15))]
+    assert items(grant) == [a.pk, b.pk]
+
+
+def test_removing_a_video_and_lifting_it_recompiles(
+    make_grant, make_video, django_capture_on_commit_callbacks
+) -> None:
+    a, b = make_video(20), make_video(15)
+    grant = make_grant(datetime.datetime.now(OSLO) + timedelta(days=3), state=State.LOCKED)
+    services._replace_items(grant, [a, b])
+    services.compile_grant(grant)
+
+    with django_capture_on_commit_callbacks(execute=True):
+        a.is_banned = True
+        a.save()
+    assert [v for v, _, _ in schedule(grant)] == [b.pk]
+
+    with django_capture_on_commit_callbacks(execute=True):
+        a.is_banned = False
+        a.save()
+    assert [v for v, _, _ in schedule(grant)] == [a.pk, b.pk]

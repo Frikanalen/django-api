@@ -88,10 +88,10 @@ class LiveTransmissionInline(admin.StackedInline):
 
 
 class VideoAdmin(admin.ModelAdmin):
-    list_display = ("name", "creator", "organization", "series", "episode_number")
+    list_display = ("name", "creator", "organization", "series", "episode_number", "is_banned")
     inlines = [VideoFileInline, ProgramImageInline, LiveTransmissionInline]
     search_fields = ["name", "description", "organization__name", "creator__email"]
-    list_filter = ("proper_import", "is_filler", "publish_on_web", "has_tono_records")
+    list_filter = ("is_banned", "proper_import", "is_filler", "publish_on_web", "has_tono_records")
 
 
 class OrganizationAdmin(admin.ModelAdmin):

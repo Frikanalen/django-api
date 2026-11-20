@@ -41,11 +41,18 @@ def _xmltv(request, events):
 
 
 def xmltv_upcoming(request):
-    events = Scheduleitem.objects.programmes().by_day(days=7).order_by("starttime")
+    events = (
+        Scheduleitem.objects.without_removed().programmes().by_day(days=7).order_by("starttime")
+    )
     return _xmltv(request, events)
 
 
 def xmltv_date(request, year, month, day):
     date = datetime.datetime(year=int(year), month=int(month), day=int(day), tzinfo=datetime.UTC)
-    events = Scheduleitem.objects.programmes().by_day(date, days=1).order_by("starttime")
+    events = (
+        Scheduleitem.objects.without_removed()
+        .programmes()
+        .by_day(date, days=1)
+        .order_by("starttime")
+    )
     return _xmltv(request, events)

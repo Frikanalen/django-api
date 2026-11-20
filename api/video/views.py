@@ -56,7 +56,9 @@ class VideoDetail(generics.RetrieveUpdateDestroyAPIView):
             200: VideoSerializer,
             403: OpenApiResponse(
                 description=(
-                    "The video belongs to a suspended organization. The body names it: "
+                    "The video is withheld. Either staff have removed it pending review: "
+                    '`{"detail", "code": "video_removed"}`, deliberately with no reason; or it '
+                    "belongs to a suspended organization, which the body names: "
                     '`{"detail", "code": "organization_suspended", "organization": {"id", "name"}}`.'
                 )
             ),
@@ -66,6 +68,16 @@ class VideoDetail(generics.RetrieveUpdateDestroyAPIView):
         try:
             return super().retrieve(request, *args, **kwargs)
         except Http404:
+            # A removed video is withheld, not missing. Say only that: the
+            # reason stays with staff, and so does whose video it was.
+            if Video.objects.filter(pk=self.kwargs.get("pk"), is_banned=True).exists():
+                return Response(
+                    {
+                        "detail": "Administrativt fjernet i påvente av gjennomgang.",
+                        "code": "video_removed",
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
             # A suspended organization's video is withheld, not missing:
             # say whose it was, so the page can show the suspension notice.
             organization = (
