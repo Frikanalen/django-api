@@ -1025,7 +1025,7 @@
     {
       "type": "table",
       "title": "Endpoint breakdown",
-      "description": "One row per view and method, averaged over the dashboard's whole time range (not the last sample), sorted slowest p95 first. \"Time spent\" is seconds of request processing per second of wall clock — rate × mean latency — which is the honest measure of which endpoint is actually costing the service: a 3s view called once an hour ranks below a 300ms view called ten times a second. Sort by it to find what to optimise; sort by p95 to find what feels slow.",
+      "description": "One row per view and method, averaged over the dashboard's whole time range (not the last sample), sorted slowest p95 first. \"Time spent\" is seconds of request processing per second of wall clock — rate × mean latency — which is the honest measure of which endpoint is actually costing the service: a 3s view called once an hour ranks below a 300ms view called ten times a second. Sort by it to find what to optimise; sort by p95 to find what feels slow. A view with no requests in the range has no latency and shows blank (the queries drop the NaN that histogram_quantile returns for it, which would otherwise break sorting).",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -1055,7 +1055,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.5, sum by (le, view, method) (rate(django_http_requests_latency_seconds_by_view_method_bucket{job=~\"$job\", view=~\"$view\", view!=\"prometheus-django-metrics\", method=~\"$method\"}[$__range])))",
+          "expr": "histogram_quantile(0.5, sum by (le, view, method) (rate(django_http_requests_latency_seconds_by_view_method_bucket{job=~\"$job\", view=~\"$view\", view!=\"prometheus-django-metrics\", method=~\"$method\"}[$__range]))) >= 0",
           "refId": "B",
           "range": false,
           "instant": true,
@@ -1067,7 +1067,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, view, method) (rate(django_http_requests_latency_seconds_by_view_method_bucket{job=~\"$job\", view=~\"$view\", view!=\"prometheus-django-metrics\", method=~\"$method\"}[$__range])))",
+          "expr": "histogram_quantile(0.95, sum by (le, view, method) (rate(django_http_requests_latency_seconds_by_view_method_bucket{job=~\"$job\", view=~\"$view\", view!=\"prometheus-django-metrics\", method=~\"$method\"}[$__range]))) >= 0",
           "refId": "C",
           "range": false,
           "instant": true,
@@ -1079,7 +1079,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum by (le, view, method) (rate(django_http_requests_latency_seconds_by_view_method_bucket{job=~\"$job\", view=~\"$view\", view!=\"prometheus-django-metrics\", method=~\"$method\"}[$__range])))",
+          "expr": "histogram_quantile(0.99, sum by (le, view, method) (rate(django_http_requests_latency_seconds_by_view_method_bucket{job=~\"$job\", view=~\"$view\", view!=\"prometheus-django-metrics\", method=~\"$method\"}[$__range]))) >= 0",
           "refId": "D",
           "range": false,
           "instant": true,
@@ -1103,7 +1103,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "100 * sum by (view, method) (rate(django_http_responses_total_by_status_view_method_total{job=~\"$job\", view=~\"$view\", view!=\"prometheus-django-metrics\", method=~\"$method\", status=~\"5..\"}[$__range])) / sum by (view, method) (rate(django_http_responses_total_by_status_view_method_total{job=~\"$job\", view=~\"$view\", view!=\"prometheus-django-metrics\", method=~\"$method\"}[$__range]))",
+          "expr": "100 * sum by (view, method) (rate(django_http_responses_total_by_status_view_method_total{job=~\"$job\", view=~\"$view\", view!=\"prometheus-django-metrics\", method=~\"$method\", status=~\"5..\"}[$__range])) / sum by (view, method) (rate(django_http_responses_total_by_status_view_method_total{job=~\"$job\", view=~\"$view\", view!=\"prometheus-django-metrics\", method=~\"$method\"}[$__range])) >= 0",
           "refId": "F",
           "range": false,
           "instant": true,
@@ -1115,7 +1115,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "100 * sum by (view, method) (rate(django_http_responses_total_by_status_view_method_total{job=~\"$job\", view=~\"$view\", view!=\"prometheus-django-metrics\", method=~\"$method\", status=~\"4..\"}[$__range])) / sum by (view, method) (rate(django_http_responses_total_by_status_view_method_total{job=~\"$job\", view=~\"$view\", view!=\"prometheus-django-metrics\", method=~\"$method\"}[$__range]))",
+          "expr": "100 * sum by (view, method) (rate(django_http_responses_total_by_status_view_method_total{job=~\"$job\", view=~\"$view\", view!=\"prometheus-django-metrics\", method=~\"$method\", status=~\"4..\"}[$__range])) / sum by (view, method) (rate(django_http_responses_total_by_status_view_method_total{job=~\"$job\", view=~\"$view\", view!=\"prometheus-django-metrics\", method=~\"$method\"}[$__range])) >= 0",
           "refId": "G",
           "range": false,
           "instant": true,
