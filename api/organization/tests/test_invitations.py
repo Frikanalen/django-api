@@ -65,7 +65,11 @@ def test_the_editor_cannot_tell_whether_an_address_has_an_account(
     unknown = invite(editor_client, organization, "nobody@example.test")
 
     assert known.status_code == unknown.status_code == status.HTTP_201_CREATED
-    assert set(known.json()) == set(unknown.json()) == {"id", "email", "createdAt", "expiresAt"}
+    assert (
+        set(known.json())
+        == set(unknown.json())
+        == {"id", "email", "createdAt", "expiresAt", "link", "qrCode"}
+    )
     # Nobody joins until they accept, and the list shows addresses only.
     assert not organization.members.filter(pk=existing.pk).exists()
     assert [m.to for m in mail.outbox] == [[existing.email], ["nobody@example.test"]]
@@ -180,3 +184,46 @@ def test_only_the_token_is_stored_as_a_hash(organization, editor_client):
     invite(editor_client, organization, "nobody@example.test")
     token = token_from_last_mail()
     assert OrganizationInvitation.objects.get().token_hash != token
+
+
+def test_an_invitation_can_be_a_link_to_hand_over(organization, editor_client):
+    response = editor_client.post(invitations_url(organization), {}, format="json")
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.json()["email"] == ""
+    assert re.search(r"/invitation/[\w-]+$", response.json()["link"])
+    assert response.json()["qrCode"].startswith("data:image/svg+xml;base64,")
+    assert mail.outbox == []
+    # It shows in the list as a link, and the link shows nothing about anyone.
+    assert [i["email"] for i in editor_client.get(invitations_url(organization)).json()] == [""]
+    token = response.json()["link"].rsplit("/", 1)[1]
+    assert client_for().get(reverse("api-invitation", args=[token])).json()["email"] == ""
+
+
+def test_a_link_invitation_creates_an_account_with_the_address_given(organization, editor_client):
+    link = editor_client.post(invitations_url(organization), {}, format="json").json()["link"]
+    token = link.rsplit("/", 1)[1]
+
+    assert (
+        accept(
+            client_for(), token, {"firstName": "Eva", "lastName": "Eng", "password": STRONG}
+        ).status_code
+        == 400
+    )
+    response = accept(
+        client_for(),
+        token,
+        {"email": "eva@example.test", "firstName": "Eva", "lastName": "Eng", "password": STRONG},
+    )
+    assert response.status_code == status.HTTP_200_OK
+    user = User.objects.get(email="eva@example.test")
+    assert organization.members.filter(pk=user.pk).exists()
+    # Used once, like an e-mailed one.
+    assert accept(client_for(user), token).status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_each_link_is_its_own_invitation(organization, editor_client):
+    first = editor_client.post(invitations_url(organization), {}, format="json").json()
+    second = editor_client.post(invitations_url(organization), {}, format="json").json()
+    assert first["id"] != second["id"]
+    assert first["link"] != second["link"]

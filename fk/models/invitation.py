@@ -21,7 +21,8 @@ class OrganizationInvitationQuerySet(models.QuerySet):
 class OrganizationInvitation(models.Model):
     """
     An editor's invitation for someone to become a member of their
-    organization, sent to an e-mail address.
+    organization: sent to an e-mail address, or handed over as a link or
+    QR code. Either way it is used once.
 
     The editor learns nothing from it about whether the address has an
     account: the answer and the e-mail are the same either way, and the
@@ -34,7 +35,9 @@ class OrganizationInvitation(models.Model):
     organization = models.ForeignKey(
         "Organization", on_delete=models.CASCADE, related_name="invitations"
     )
-    email = models.EmailField()
+    # Blank for an invitation the editor shares as a link or QR code
+    # instead of sending it by e-mail.
+    email = models.EmailField(blank=True)
     invited_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="+"
     )
@@ -56,7 +59,7 @@ class OrganizationInvitation(models.Model):
         ordering = ("-created_at",)
 
     def __str__(self) -> str:
-        return f"{self.email} → {self.organization}"
+        return f"{self.email or 'link'} → {self.organization}"
 
     def issue_token(self) -> str:
         """A fresh token, valid for the next 14 days. Returns it in clear, once."""
