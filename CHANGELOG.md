@@ -1,5 +1,30 @@
 # Changelog
 
+## [3.12.0](https://github.com/Frikanalen/django-api/compare/v3.11.0...v3.12.0) (2026-11-21)
+
+
+### Features
+
+* **api:** public read of the regular slots in force ([#162](https://github.com/Frikanalen/django-api/issues/162)) ([a219460](https://github.com/Frikanalen/django-api/commit/a2194606ef62b6f9ca20812c4207d18b6ea4bbf9))
+* **chart:** weekly staging database refresh from prod's dump ([#169](https://github.com/Frikanalen/django-api/issues/169)) ([0ff5ba1](https://github.com/Frikanalen/django-api/commit/0ff5ba12273f61ccf480b0a386a9ee87edcd6446))
+* **grants:** mark the station's own airtime in the public grants ([#165](https://github.com/Frikanalen/django-api/issues/165)) ([730e22e](https://github.com/Frikanalen/django-api/commit/730e22e82799e8db43a185a918202cc60c288b7b))
+* **organization:** finish registration: required orgnr, no phone numbers, scanned affidavit queue ([#164](https://github.com/Frikanalen/django-api/issues/164)) ([865f533](https://github.com/Frikanalen/django-api/commit/865f533c2a96242e6c137d3a62ed76a5d921a0ff))
+* **organization:** invite by link and QR code, not only by e-mail ([#173](https://github.com/Frikanalen/django-api/issues/173)) ([41c9b9b](https://github.com/Frikanalen/django-api/commit/41c9b9be2e7c48df1898d1366e2a23637fd4c1f7))
+* **organization:** members API with invitations: the editor invites and removes, members can leave ([#167](https://github.com/Frikanalen/django-api/issues/167)) ([1a0e545](https://github.com/Frikanalen/django-api/commit/1a0e5458a2f60f85805bef6a7c6cfcf3c6c0c927))
+* **video:** administrative removal flag (is_banned) ([#174](https://github.com/Frikanalen/django-api/issues/174)) ([5c47e48](https://github.com/Frikanalen/django-api/commit/5c47e48fc326f2e5f66a79d76e9e7b9c35e3cb06))
+* **video:** categories are optional when a video is created ([#168](https://github.com/Frikanalen/django-api/issues/168)) ([4813b04](https://github.com/Frikanalen/django-api/commit/4813b04130b899b58499c1de6866be85536c2e35))
+
+
+### Bug Fixes
+
+* **admin:** show the whole two-factor message on the admin login ([#172](https://github.com/Frikanalen/django-api/issues/172)) ([1e4a6fc](https://github.com/Frikanalen/django-api/commit/1e4a6fcf977f4793bf6230404ca0d17161d4929c))
+* **dashboard:** sortable latency columns in the endpoint breakdown ([#171](https://github.com/Frikanalen/django-api/issues/171)) ([c218086](https://github.com/Frikanalen/django-api/commit/c218086671735e155cfc507da8a2d72edf0a3281))
+
+
+### Performance Improvements
+
+* **grants:** list grants in a fixed number of queries ([#170](https://github.com/Frikanalen/django-api/issues/170)) ([c23a988](https://github.com/Frikanalen/django-api/commit/c23a9885b84f9a69b98b0ec966ec71decc3d982e))
+
 ## [3.11.0](https://github.com/Frikanalen/django-api/compare/v3.10.0...v3.11.0) (2026-11-19)
 
 
