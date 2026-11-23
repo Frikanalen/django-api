@@ -53,28 +53,41 @@ class ScheduleContext:
         self.times_played: Counter[int] = Counter()
         self.compiled_plays: Counter[int] = Counter()
         self.last_video_id: int | None = None
+        # When each video airs, where known: what the new-material quota
+        # spaces its repeats by.
+        self.airings: defaultdict[int, list[datetime.datetime]] = defaultdict(list)
         # The grants this run fills. What they compiled before is not
         # counted: the run decides it again.
         self.refilling: set[int] = set()
 
     def count(
-        self, video: Video | None, duration: datetime.timedelta, compiled: bool = False
+        self,
+        video: Video | None,
+        duration: datetime.timedelta,
+        compiled: bool = False,
+        at: datetime.datetime | None = None,
     ) -> None:
         """Note programming that was there before the run started.
 
         `compiled` marks a Scheduleitem row, which "least aired" already
         counts from the database and must not count twice.
         """
-        self._count(video, duration)
+        self._count(video, duration, at)
         if compiled and video is not None:
             self.compiled_plays[video.id] += 1
 
-    def record(self, video: Video) -> None:
-        """Note a pick the selector just made, so later weights see it."""
-        self._count(video, video.duration)
+    def record(self, video: Video, at: datetime.datetime | None = None) -> None:
+        """Note a pick the selector just made, so later weights see it.
+        `at` is roughly when it airs (the window's start will do)."""
+        self._count(video, video.duration, at)
         self.last_video_id = video.id
 
-    def _count(self, video: Video | None, duration: datetime.timedelta) -> None:
+    def _count(
+        self,
+        video: Video | None,
+        duration: datetime.timedelta,
+        at: datetime.datetime | None = None,
+    ) -> None:
         # An edge item's airtime counts in full even where it leaves the
         # window; shares are a steering signal, not bookkeeping.
         self.total_airtime += duration
@@ -82,6 +95,8 @@ class ScheduleContext:
             return
         self.times_played[video.id] += 1
         self.org_airtime[video.organization_id] += duration
+        if at is not None:
+            self.airings[video.id].append(at)
 
     def organization_share(self, organization_id: int) -> float:
         """The organization's fraction of all airtime counted so far."""
@@ -172,6 +187,7 @@ class WeightedSelector:
         context: ScheduleContext,
         rules: Sequence[Rule],
         rng: random.Random | None = None,
+        at: datetime.datetime | None = None,
     ) -> None:
         # A non-positive duration cannot advance the schedule clock, so
         # it would be drawn once a minute for the whole window.
@@ -179,6 +195,7 @@ class WeightedSelector:
         self._context = context
         self._rules = list(rules)
         self._rng = rng or random
+        self._at = at
 
     def pick(self, remaining: datetime.timedelta) -> Video | None:
         """The next video no longer than `remaining`, or None if none fit."""
@@ -188,7 +205,7 @@ class WeightedSelector:
         scores = [self._weight(video) for video in fitting]
         weights = scores if any(scores) else None  # None draws uniformly
         video = self._rng.choices(fitting, weights=weights, k=1)[0]
-        self._context.record(video)
+        self._context.record(video, at=self._at)
         return video
 
     def _weight(self, video: Video) -> float:

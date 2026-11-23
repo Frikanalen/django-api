@@ -2,6 +2,7 @@
 planning is deterministic."""
 
 import datetime
+import itertools
 from datetime import timedelta
 
 import pytest
@@ -241,3 +242,59 @@ def test_a_padded_window_leaves_the_breaks_between_programmes(uploads, make_vide
     picks = plan(uploads, Window(padded=True), ScheduleContext(), NOW)
 
     assert len(picks) == 2
+
+
+# -- New material on its quota ------------------------------------------------
+
+
+def test_a_new_upload_airs_about_twice_a_week(organization, make_video) -> None:
+    """Uploaded two days ago among 300 archive videos: in daily 3-hour
+    jukebox windows it airs at least twice in every week of its first
+    two, never within three days of itself."""
+    new = make_video(5, uploaded_time=NOW - timedelta(days=2))
+    for n in range(300):
+        make_video(5, uploaded_time=NOW - timedelta(days=2000 + n))
+    recipe = jukebox_recipe(organization)
+    context = ScheduleContext()
+
+    airs = []
+    for day in range(12):
+        window = Window(pk=day, starttime=NOW + timedelta(days=day), duration=timedelta(hours=3))
+        if new.pk in ids(plan(recipe, window, context, NOW)):
+            airs.append(day)
+
+    assert airs[0] == 0
+    assert all(b - a >= 3 for a, b in itertools.pairwise(airs))
+    for week_start in range(12 - 6):
+        assert sum(week_start <= d < week_start + 7 for d in airs) >= 2, airs
+    assert max(airs) <= 12  # 14 days after upload it is archive material again
+
+
+def test_a_new_upload_that_just_aired_waits(organization, make_video) -> None:
+    new = make_video(5, uploaded_time=NOW - timedelta(days=3))
+    others = [make_video(5, uploaded_time=NOW - timedelta(days=2000 + n)) for n in range(50)]
+    Scheduleitem.objects.create(video=new, starttime=NOW - timedelta(days=1), duration=new.duration)
+
+    window = Window(pk=1, duration=timedelta(minutes=5))
+    picks = plan(jukebox_recipe(organization), window, ScheduleContext(), NOW)
+
+    assert ids(picks) != [new.pk] and len(picks) == 1 and picks[0] in others
+
+
+def test_an_upload_older_than_two_weeks_gets_no_quota(organization, make_video) -> None:
+    old_new = make_video(5, uploaded_time=NOW - timedelta(days=20))
+    for n in range(300):
+        make_video(5, uploaded_time=NOW - timedelta(days=2000 + n))
+
+    picks = [
+        v.pk
+        for pk in range(10)
+        for v in plan(
+            jukebox_recipe(organization),
+            Window(pk=pk, duration=timedelta(minutes=5)),
+            ScheduleContext(),
+            NOW,
+        )
+    ]
+
+    assert picks.count(old_new.pk) < 10
