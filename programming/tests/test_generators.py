@@ -155,20 +155,45 @@ def test_a_playlist_recipe_picks_from_its_videos(organization, make_video) -> No
 # -- The jukebox --------------------------------------------------------------
 
 
-def test_the_jukebox_draws_on_the_filler_pool(organization, make_video) -> None:
-    make_video(10)
+def test_the_jukebox_draws_on_every_finished_published_member_video(
+    organization, make_video
+) -> None:
+    plain = make_video(10)
     filler = make_video(10, is_filler=True)
-    make_video(10, is_filler=True, has_tono_records=True)
+    make_video(10, has_tono_records=True)
+    make_video(10, publish_on_web=False)
+    make_video(10, proper_import=False)
+    outsider = Organization.objects.create(
+        name="Not a member", editor=organization.editor, fkmember=False
+    )
+    make_video(10, organization=outsider)
+    rogue = Organization.objects.create(
+        name="Suspended", editor=organization.editor, fkmember=True, is_rogue=True
+    )
+    make_video(10, organization=rogue)
 
-    assert ids(candidates(jukebox_recipe(organization), NOW)) == [filler.pk]
+    assert set(ids(candidates(jukebox_recipe(organization), NOW))) == {plain.pk, filler.pk}
+
+
+def test_the_jukebox_leans_hard_on_new_material(organization, make_video) -> None:
+    """A few recent uploads against a large archive: the recent ones
+    still take most of the airtime."""
+    recent = {make_video(5, uploaded_time=NOW - timedelta(days=d)).pk for d in range(1, 31, 3)}
+    for n in range(300):
+        make_video(5, uploaded_time=NOW - timedelta(days=2000 + n))
+    recipe = jukebox_recipe(organization)
+
+    picks = [v.pk for pk in range(20) for v in plan(recipe, Window(pk=pk), ScheduleContext(), NOW)]
+
+    assert sum(pk in recent for pk in picks) / len(picks) > 0.6
 
 
 def test_a_jukebox_theme_narrows_the_pool(organization, make_video) -> None:
     culture = Category.objects.create(id=1, name="Kultur")
     society = Category.objects.create(id=2, name="Samfunn")
-    short = make_video(5, is_filler=True, categories=[culture])
-    long = make_video(50, is_filler=True, categories=[culture])
-    other = make_video(5, is_filler=True, categories=[society])
+    short = make_video(5, categories=[culture])
+    long = make_video(50, categories=[culture])
+    other = make_video(5, categories=[society])
 
     def pool(**theme) -> set[int]:
         return set(ids(candidates(jukebox_recipe(organization, **theme), NOW)))
@@ -181,10 +206,9 @@ def test_a_jukebox_theme_narrows_the_pool(organization, make_video) -> None:
 
 
 def test_a_jukebox_theme_can_ask_for_new_or_old_material(organization, make_video) -> None:
-    recent = make_video(5, is_filler=True, uploaded_time=NOW - timedelta(days=10))
+    recent = make_video(5, uploaded_time=NOW - timedelta(days=10))
     ancient = make_video(
         5,
-        is_filler=True,
         created_time=datetime.datetime(2012, 1, 1, tzinfo=OSLO),  # no upload time recorded
     )
 
@@ -197,7 +221,7 @@ def test_a_jukebox_theme_can_ask_for_new_or_old_material(organization, make_vide
 
 def test_the_jukebox_draw_repeats_for_the_same_window(organization, make_video) -> None:
     for _ in range(12):
-        make_video(5, is_filler=True)
+        make_video(5)
     recipe = jukebox_recipe(organization)
 
     first = plan(recipe, Window(pk=7), ScheduleContext(), NOW)

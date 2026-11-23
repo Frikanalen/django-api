@@ -94,15 +94,17 @@ class Freshness:
     """Newer uploads weigh more, to keep the airwaves fresh.
 
     Half the weight per `half_life` of age, levelling off at `floor` so
-    ancient material still airs. A video with no upload time recorded is
+    ancient material still airs. The pool holds thousands of archive
+    videos against a few dozen recent ones, so the floor is kept low:
+    at 0.2 the archive's sheer number outweighed everything new. A video with no upload time recorded is
     treated as ancient.
     """
 
     def __init__(
         self,
         now: datetime.datetime,
-        half_life: datetime.timedelta = datetime.timedelta(days=365),
-        floor: float = 0.2,
+        half_life: datetime.timedelta = datetime.timedelta(days=90),
+        floor: float = 0.01,
     ) -> None:
         self.now = now
         self.half_life = half_life

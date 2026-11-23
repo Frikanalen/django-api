@@ -23,7 +23,6 @@ from django.db.models import Count, Q, QuerySet
 from django.db.models.functions import Coalesce
 
 from fk.models import Video
-from fk.models.video import FILLER
 from programming.models import Recipe
 from programming.selection import ScheduleContext, Selector, WeightedSelector, default_rules
 
@@ -65,8 +64,20 @@ def _playlist(recipe: Recipe, now: datetime) -> QuerySet[Video]:
     return Video.objects.airable().filter(pk__in=listed)
 
 
+# The jukebox pool: every finished, published member video without TONO
+# music. No longer limited to is_filler, which in practice only very old
+# videos carry, so the jukebox leaned hard on the archive. Freshness in
+# the weighted draw now does the steering instead.
+JUKEBOX_POOL = Q(
+    has_tono_records=False,
+    organization__fkmember=True,
+    proper_import=True,
+    publish_on_web=True,
+)
+
+
 def _jukebox(recipe: Recipe, now: datetime) -> QuerySet[Video]:
-    videos = Video.objects.listable().filter(FILLER)
+    videos = Video.objects.listable().filter(JUKEBOX_POOL)
     settings = getattr(recipe, "jukebox_settings", None)
     if settings is None:
         return videos
