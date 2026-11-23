@@ -401,7 +401,7 @@ The core of the decision holds in the code on main (django 3.12.0): staff and re
 
 **The jukebox pool is members' videos, not the filler archive.** See [ADR 0002](0002-jukebox-selection.md). `Video.objects.fillers()` no longer feeds the jukebox. Video submissions (`VideoSubmission`, `POST /submissions`) were not built.
 
-**Pinned items.** Editing a list no longer simply clears the recipe. Items the owner chooses are pinned at the head of the list, and the recipe fills the time they leave. Saving a wholly hand-made list clears the recipe; `POST /grants/{id}/automatic` sets it again.
+**Pinned items.** Editing a list no longer simply clears the recipe. Items the owner chooses are pinned at the head of the list, and the recipe fills the time they leave. Saving a list without asking for automatic filling makes the grant hand-made and clears the recipe; `POST /grants/{id}/automatic` sets it again.
 
 **More than videos in a list.** A `GrantItem` is exactly one of a video, a `Poster` (an organization's text poster, aired with an on-air graphics template) or, staff only, a `Graphic` (an HTML page such as the infographics) with a duration. There is no `live_transmission` on `GrantItem`: a live programme is a video that owns a `LiveTransmission` and has a hand-set duration, and it airs live until the video has a file. Staff graphics compile to `Scheduleitem` rows with `graphic` set, so "graphics are never schedule items" now holds only for playout's own gap graphics; scheduled graphics are left out of the public schedule and the EPG.
 
