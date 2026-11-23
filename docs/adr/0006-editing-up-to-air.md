@@ -4,7 +4,7 @@
 
 ## Status
 
-Accepted. Decided in steps on 2026-11-11 (django-api #99), 2026-11-13 (#130, #132) and 2026-11-16 (#142, #144, #148). In production since django 3.9.0. Amends [ADR 0001](0001-airtime-grants.md): its lifecycle ("staff still can until it's compiled") and the staff column of the permissions table.
+Accepted. Decided in steps on 2026-11-11 (django-api #99), 2026-11-13 (#130, #132) and 2026-11-16 (#142, #144, #146, #148). In production since django 3.8.0. Amends [ADR 0001](0001-airtime-grants.md): its lifecycle ("staff still can until it's compiled") and the staff column of the permissions table.
 
 ## Context
 

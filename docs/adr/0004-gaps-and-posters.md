@@ -4,7 +4,7 @@
 
 ## Status
 
-Accepted 2026-11-14 (django-api #137; playout #34; on-air-graphics #41; frontend #134). In production since django 3.4.0. Amends [ADR 0001](0001-airtime-grants.md): items no longer play back-to-back, and a grant's list is no longer only videos and live transmissions.
+Accepted 2026-11-14 (django-api #137; playout #34; on-air-graphics #41; frontend #134). In production since django 3.5.0. Amends [ADR 0001](0001-airtime-grants.md): items no longer play back-to-back, and a grant's list is no longer only videos and live transmissions.
 
 ## Context
 
