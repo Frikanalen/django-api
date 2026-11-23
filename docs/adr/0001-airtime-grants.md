@@ -4,7 +4,18 @@
 
 ## Status
 
-Accepted 2026-11-11 and implemented the same day (django-api#97 onwards; cut over on staging and prod on 2026-11-11). The decision below is kept as written. The implementation has since moved on in several places; [As built](#as-built-2026-11-23) at the end lists where the code differs, and it wins where the two disagree. Supersedes member scheduling through the schedule API, the weekly-slot filler and the jukebox gap filler in `agenda/scheduling/`.
+Accepted 2026-11-11, and in production since the cut-over that evening.
+
+Amended by:
+
+- [ADR 0002](0002-jukebox-selection.md): the jukebox airs members' new videos, not the filler pool.
+- [ADR 0003](0003-recipes.md): recipes replace fill rules, with pinned items and refilling until a day before air.
+- [ADR 0004](0004-gaps-and-posters.md): programmes start on a five-minute grid, and grants can list text posters.
+- [ADR 0005](0005-scheduled-graphics.md): staff can schedule HTML graphics in a grant.
+- [ADR 0006](0006-editing-up-to-air.md): staff edit grants until they end, and late grants go on the schedule at once.
+- [ADR 0007](0007-live-programme-is-a-video.md): a live programme is a video with a live transmission.
+
+Not yet implemented: video submissions, notifications, and most of [Related cleanup](#related-cleanup) (`Scheduleitem` is still in `fk`, its `video` is still `SET_NULL`, `is_live` is still stored). Supersedes member scheduling through the schedule API, the weekly-slot filler and the jukebox gap filler in `agenda/scheduling/`.
 
 ## Context
 
@@ -392,27 +403,3 @@ Nothing is open at the moment.
 
 - **Releasing a grant.** An organization with nothing this week hands the grant back. It moves to a released state and frees the window for staff to re-grant or leave to graphics.
 - **Reminders and staff lists.** Email the organization when a grant is a few days from locking empty or short, and when items are dropped. Give staff a list of slots that have locked empty several weeks running, so they can follow up or reclaim the slot.
-
-## As built (2026-11-23)
-
-The core of the decision holds in the code on main (django 3.12.0): staff and recurring slots issue airtime grants, grants never overlap (exclusion constraint), each holds an ordered list, grants lock on the Monday 00:00 before their week, the 00:05 nightly job issues, fills, locks and compiles, only the compiler and staff write `Scheduleitem`, members can't write the schedule, airtime and exemption requests go through `ReviewedRequest`, and unprogrammed time shows graphics from playout. Recurring slots have the daily/weekly/monthly fields above, and broadcast time lives in `scheduling/broadcast_time.py`. These parts differ from the text above:
-
-**Fill rules became recipes.** There is no `FillRule` or `Playlist` model with pool, ordering and mode. A `programming.Recipe` has a kind (`uploads`, `series`, `playlist`, `jukebox`) with the kind's settings in a table of its own (`SeriesSource`, `PlaylistSource`, `JukeboxSettings`). Recipes always fill the window; there is no single-video mode. Recipes are values: choosing another one points the slot or grant at a new row. Slots and grants have a `recipe` field, not `default_fill_rule`/`fill_rule`. There are no fill-rule or playlist endpoints; a slot's or grant's recipe is set through the grant and slot APIs. All 22 migrated weekly-slot sources were "one video"; the recipes migration (django 3.2.0) made them fill the whole window.
-
-**The jukebox pool is members' videos, not the filler archive.** See [ADR 0002](0002-jukebox-selection.md). `Video.objects.fillers()` no longer feeds the jukebox. Video submissions (`VideoSubmission`, `POST /submissions`) were not built.
-
-**Pinned items.** Editing a list no longer simply clears the recipe. Items the owner chooses are pinned at the head of the list, and the recipe fills the time they leave. Saving a list without asking for automatic filling makes the grant hand-made and clears the recipe; `POST /grants/{id}/automatic` sets it again.
-
-**More than videos in a list.** A `GrantItem` is exactly one of a video, a `Poster` (an organization's text poster, aired with an on-air graphics template) or, staff only, a `Graphic` (an HTML page such as the infographics) with a duration. There is no `live_transmission` on `GrantItem`: a live programme is a video that owns a `LiveTransmission` and has a hand-set duration, and it airs live until the video has a file. Staff graphics compile to `Scheduleitem` rows with `graphic` set, so "graphics are never schedule items" now holds only for playout's own gap graphics; scheduled graphics are left out of the public schedule and the EPG.
-
-**Programmes start on a five-minute grid.** Items are not played strictly back-to-back. `scheduling/layout.py` starts each video on the next five-minute mark with at least 30 s after the one before; posters and graphics follow straight on. Jukebox grants are not padded.
-
-**Automatic grants keep refilling after the lock.** The nightly fill also refills locked and compiled automatic grants until 24 hours before air, and recompiles them if the answer changed. The feeds therefore get a week's notice of the grant and its holder, but the exact automatic picks are only firm a day ahead.
-
-**Staff edit until the grant ends.** Staff can replace a list at any state up to the end of the grant, on air included; what has aired or starts within 30 s stays as it is, and saving a compiled grant recompiles it. Members edit while open and before `locks_at`, or until air on a lock-exempt grant. A grant created or exempted at short notice is filled and compiled at once instead of waiting for the nightly run.
-
-**Who gets airtime.** Only staff, and confirmed members of approved member organizations (`fkmember`), may act for an organization. Suspended organizations (`is_rogue`) are issued no grants and can't be programmed. Unowned slots issue grants to the station (`STATION_ORGANIZATION_ID`), and the public grants API marks the station's own airtime (`station`) so on-air graphics don't announce it as a holder.
-
-**Grant model details.** The window is stored as `starttime`/`endtime` with a generated `airtime` range. There are no `granted_by`, `edited_by`, `edited_at` or `notes` fields.
-
-**Cleanup not done yet.** `Scheduleitem` is still in `fk`, and `Scheduleitem.video` is still `SET_NULL`, not `PROTECT`. `is_live` is still a stored field, and `schedulereason`/`default_name` remain for historical rows. The `Scheduleitem` exclusion constraint is partial on `schedulereason IS NULL` rather than on a cut-over date. No notifications are sent when items are dropped at lock or a grant is about to lock empty; drops are only logged. Releasing a grant is still only a proposal.
