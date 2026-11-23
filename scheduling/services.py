@@ -1040,15 +1040,15 @@ def _context_for(refilling: Sequence[AirtimeGrant], now: datetime) -> ScheduleCo
     context.refilling = {g.pk for g in refilling}
     rows = Scheduleitem.objects.overlapping(now, horizon).exclude(grant__in=context.refilling)
     for row in rows.select_related("video"):
-        context.count(row.video, row.duration, compiled=True)
+        context.count(row.video, row.duration, compiled=True, at=row.starttime)
     others = (
         GrantItem.objects.filter(
             grant__starttime__lt=horizon, grant__endtime__gt=now, video__isnull=False
         )
         .exclude(grant__state__in=(State.CANCELLED, State.COMPILED))
         .exclude(grant__in=[g.pk for g in refilling])
-        .select_related("video")
+        .select_related("video", "grant")
     )
     for item in others:
-        context.count(item.video, item.video.duration)
+        context.count(item.video, item.video.duration, at=item.grant.starttime)
     return context
