@@ -43,7 +43,7 @@ def jukebox_recipe(
     newer_than_days: int | None = None,
     older_than_days: int | None = None,
 ) -> Recipe:
-    """A jukebox theme of its own. With no limits, the whole filler pool."""
+    """A jukebox theme of its own. With no limits, the whole jukebox pool."""
     with transaction.atomic():
         recipe = Recipe.objects.create(organization=station, kind=Recipe.Kind.JUKEBOX)
         settings = JukeboxSettings(

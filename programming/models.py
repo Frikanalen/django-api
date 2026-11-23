@@ -76,7 +76,7 @@ class PlaylistSource(models.Model):
 
 
 class JukeboxSettings(models.Model):
-    """What one jukebox slot draws from the filler pool: its theme.
+    """What one jukebox slot draws from the jukebox pool: its theme.
 
     Every limit is optional; with none set the jukebox draws on the
     whole pool. The draw itself is weighted: fresh, varied across
