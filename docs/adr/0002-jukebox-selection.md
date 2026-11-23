@@ -4,7 +4,7 @@
 
 ## Status
 
-Proposed. Describes the implementation in django-api 3.12.0 (#175, #176) as it stands. Changes the jukebox pool described in [ADR 0001](0001-airtime-grants.md#jukebox-slots-and-submitted-videos).
+Proposed. Describes the implementation in django-api 3.12.0 (#175, #176) as it stands. Changes the jukebox pool described in [ADR 0001](0001-airtime-grants.md#recipes).
 
 ## Context
 
