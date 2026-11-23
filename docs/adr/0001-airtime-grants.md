@@ -50,21 +50,22 @@ A grant is a window of airtime given to one organization, plus the list of what 
 ```python
 class AirtimeGrant(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.PROTECT)
-    airtime      = DateTimeRangeField()                  # half-open [start, end)
-    locks_at     = models.DateTimeField()                # deadline for the organization's edits
-    lock_exempt  = models.BooleanField(default=False)    # editable until air; edits recompile
-    state        = models.CharField(choices=GrantState)  # open / locked / compiled / cancelled
-    origin_slot  = models.ForeignKey(RecurringSlot, null=True, on_delete=models.SET_NULL)
-    fill_rule    = models.ForeignKey(FillRule, null=True, on_delete=models.SET_NULL)
-    granted_by   = models.ForeignKey(User, null=True, on_delete=models.PROTECT)
-    edited_by    = models.ForeignKey(User, null=True, on_delete=models.PROTECT)
-    edited_at    = models.DateTimeField(null=True)
-    notes        = models.TextField(blank=True)
+    airtime = DateTimeRangeField()  # half-open [start, end)
+    locks_at = models.DateTimeField()  # deadline for the organization's edits
+    lock_exempt = models.BooleanField(default=False)  # editable until air; edits recompile
+    state = models.CharField(choices=GrantState)  # open / locked / compiled / cancelled
+    origin_slot = models.ForeignKey(RecurringSlot, null=True, on_delete=models.SET_NULL)
+    fill_rule = models.ForeignKey(FillRule, null=True, on_delete=models.SET_NULL)
+    granted_by = models.ForeignKey(User, null=True, on_delete=models.PROTECT)
+    edited_by = models.ForeignKey(User, null=True, on_delete=models.PROTECT)
+    edited_at = models.DateTimeField(null=True)
+    notes = models.TextField(blank=True)
+
 
 class GrantItem(models.Model):
-    grant             = models.ForeignKey(AirtimeGrant, related_name="items", on_delete=models.CASCADE)
-    position          = models.PositiveSmallIntegerField()
-    video             = models.ForeignKey(Video, null=True, on_delete=models.PROTECT)
+    grant = models.ForeignKey(AirtimeGrant, related_name="items", on_delete=models.CASCADE)
+    position = models.PositiveSmallIntegerField()
+    video = models.ForeignKey(Video, null=True, on_delete=models.PROTECT)
     live_transmission = models.ForeignKey(LiveTransmission, null=True, on_delete=models.PROTECT)
 ```
 
@@ -111,8 +112,9 @@ Organizations ask for airtime and for late changes through the same one-way requ
 ```python
 class AirtimeGrantRequest(ReviewedRequest):
     airtime = DateTimeRangeField()
-    grant   = models.OneToOneField(AirtimeGrant, null=True, on_delete=models.SET_NULL)
+    grant = models.OneToOneField(AirtimeGrant, null=True, on_delete=models.SET_NULL)
     # _approve() creates the grant; fails if the window overlaps another grant
+
 
 class GrantExemptionRequest(ReviewedRequest):
     grant = models.ForeignKey(AirtimeGrant, on_delete=models.CASCADE)
@@ -129,16 +131,18 @@ class GrantExemptionRequest(ReviewedRequest):
 Recurring slots replace weekly slots. A slot is a recurrence rule, an owner and a default fill rule; the nightly job turns each occurrence into a grant.
 
 ```python
-class RecurringSlot(models.Model):           # replaces WeeklySlot
-    organization      = models.ForeignKey(Organization, on_delete=models.PROTECT)
-    frequency         = models.CharField(choices=Frequency)          # daily / weekly / monthly
-    interval          = models.PositiveSmallIntegerField(default=1)  # 2 = fortnightly, every other month
-    weekdays          = ArrayField(models.PositiveSmallIntegerField())  # 0 = Monday
-    month_weeks       = ArrayField(models.SmallIntegerField(), default=list)  # monthly: 1 = first, -1 = last
-    starts_on         = models.DateField()   # anchor: which weeks or months are "on"
-    ends_on           = models.DateField(null=True)
-    start_time        = models.TimeField()
-    duration          = models.DurationField()
+class RecurringSlot(models.Model):  # replaces WeeklySlot
+    organization = models.ForeignKey(Organization, on_delete=models.PROTECT)
+    frequency = models.CharField(choices=Frequency)  # daily / weekly / monthly
+    interval = models.PositiveSmallIntegerField(default=1)  # 2 = fortnightly, every other month
+    weekdays = ArrayField(models.PositiveSmallIntegerField())  # 0 = Monday
+    month_weeks = ArrayField(
+        models.SmallIntegerField(), default=list
+    )  # monthly: 1 = first, -1 = last
+    starts_on = models.DateField()  # anchor: which weeks or months are "on"
+    ends_on = models.DateField(null=True)
+    start_time = models.TimeField()
+    duration = models.DurationField()
     default_fill_rule = models.ForeignKey(FillRule, null=True, on_delete=models.SET_NULL)
 ```
 
@@ -164,19 +168,22 @@ class RecurringSlot(models.Model):           # replaces WeeklySlot
 A grant with a fill rule fills itself, up to its whole window. Fill rules replace `WeeklySlotSource`, and they belong to grants rather than slots.
 
 ```python
-class Playlist(models.Model):             # replaces WeeklySlotSource.direct_videos
+class Playlist(models.Model):  # replaces WeeklySlotSource.direct_videos
     organization = models.ForeignKey(Organization, on_delete=models.PROTECT)
-    name   = models.CharField(max_length=100)
+    name = models.CharField(max_length=100)
     videos = models.ManyToManyField(Video)
+
 
 class FillRule(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.PROTECT)
-    name     = models.CharField(max_length=100)
-    pool     = models.CharField(choices=Pool)      # org_uploads / playlist / fillers / submissions
+    name = models.CharField(max_length=100)
+    pool = models.CharField(choices=Pool)  # org_uploads / playlist / fillers / submissions
     ordering = models.CharField(choices=Ordering)  # latest / least_aired / shuffled / weighted
-    mode     = models.CharField(choices=Mode)      # single / pack
-    pool_organization = models.ForeignKey(Organization, null=True, related_name="+", on_delete=models.PROTECT)
-    pool_playlist     = models.ForeignKey(Playlist, null=True, on_delete=models.PROTECT)
+    mode = models.CharField(choices=Mode)  # single / pack
+    pool_organization = models.ForeignKey(
+        Organization, null=True, related_name="+", on_delete=models.PROTECT
+    )
+    pool_playlist = models.ForeignKey(Playlist, null=True, on_delete=models.PROTECT)
 ```
 
 **How a rule works**
