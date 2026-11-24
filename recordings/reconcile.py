@@ -66,6 +66,13 @@ def reconcile(now: datetime.datetime | None = None) -> None:
     # Every recording path MediaMTX has that no request still needs goes:
     # one whose request was archived, failed or was cancelled.
     stray = set(receiver.config_path_names(PREFIX))
+    # One whose window has just passed is stopped below, not removed.
+    stray -= {
+        f"{PREFIX}{pk}"
+        for pk in RecordingRequest.objects.filter(
+            state__in=(State.WAITING, State.RECORDING)
+        ).values_list("pk", flat=True)
+    }
     for request in due:
         stray.discard(request.path)
         if receiver.path_config(request.path) is None:
@@ -125,10 +132,13 @@ def _stopped(config: dict | None) -> bool:
 
 def _stop(request: RecordingRequest) -> None:
     """Keep the path for playback, but no longer recording or reading."""
-    if receiver.path_config(request.path) is None:
-        receiver.add_path(request.path, STOPPED)
-    else:
-        receiver.replace_path(request.path, STOPPED)
+    if receiver.path_config(request.path) is not None:
+        try:
+            receiver.replace_path(request.path, STOPPED)
+            return
+        except receiver.ReceiverUnavailable:  # gone in between: add it back
+            logger.warning("Could not stop %s in place; adding it back", request.path)
+    receiver.add_path(request.path, STOPPED)
 
 
 def hand_to_ingest(request: RecordingRequest, now: datetime.datetime) -> None:

@@ -10,6 +10,7 @@ from django.test import Client
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from fk import receiver as receiver_module
 from fk.models import LiveSource, Organization, User, Video
 from recordings import playback, reconcile
 from recordings.models import RecordingRequest
@@ -55,6 +56,8 @@ class FakeReceiver:
         self.paths.pop(name, None)
 
     def replace_path(self, name, config):
+        if name not in self.paths:  # as MediaMTX: 400, not configured
+            raise receiver_module.ReceiverUnavailable("receiver answered 400")
         self.paths[name] = config
 
     def config_path_names(self, prefix):
@@ -275,3 +278,12 @@ def test_removing_a_path_uses_delete(monkeypatch, settings) -> None:
     assert calls == [("DELETE", "http://mediamtx-api:9997/v3/config/paths/delete/contrib/record/3")]
     with pytest.raises(receiver.ReceiverUnavailable):
         receiver._post("/v3/config/paths/delete/contrib/record/3")  # the wrong method
+
+
+def test_a_window_just_past_is_stopped_not_swept(recording, mediamtx, ingest) -> None:
+    reconcile.reconcile(START)
+    reconcile.reconcile(START + timedelta(hours=1, minutes=1, seconds=5))
+    assert mediamtx.paths[recording.path] == {"record": False}
+    assert recording.path not in mediamtx.removed
+    recording.refresh_from_db()
+    assert recording.state == State.IMPORTING
