@@ -76,6 +76,19 @@ spec:
                   # COMMENT ON EXTENSION fails with "must be owner".
                   pg_restore -l /work/dump.pgdump \
                     | grep -vE '^[0-9]+; [0-9]+ [0-9]+ (EXTENSION|COMMENT - EXTENSION) ' > /work/toc
+                  # Staging's own playout reader and pull relay logins: their
+                  # secrets are in staging's OpenBao, and prod's rows would
+                  # replace them (every pulled source then gets 401).
+                  psql -At -v ON_ERROR_STOP=1 -c "SELECT coalesce(json_agg(c), '[]')
+                    FROM (SELECT label, key_id, action, secret_hash, created_at, expires_at
+                          FROM fk_streamcredential
+                          WHERE source_id IS NULL AND revoked_at IS NULL) c" > /work/credentials.json
+                  # Likewise the pulled sources' addresses, which are
+                  # encrypted with staging's own key: prod's can't be read
+                  # here.
+                  psql -At -v ON_ERROR_STOP=1 -c "SELECT coalesce(json_agg(s), '[]')
+                    FROM (SELECT stream_id, pull_url_encrypted, pull_target
+                          FROM fk_livesource WHERE pull_url_encrypted <> '') s" > /work/pull.json
                   # Drop everything the user owns rather than pg_restore
                   # --clean, which only drops what is in the dump and trips
                   # over tables staging has and prod does not yet. One
@@ -83,7 +96,22 @@ spec:
                   {
                     echo "DROP OWNED BY \"$PGUSER\";"
                     pg_restore -L /work/toc --no-owner --no-acl -f - /work/dump.pgdump
-                  } | psql --single-transaction -v ON_ERROR_STOP=1 -q
+                    # Put staging's logins back, and retire prod's.
+                    cat <<'SQL'
+                  UPDATE fk_streamcredential SET revoked_at = now()
+                    WHERE source_id IS NULL AND revoked_at IS NULL;
+                  INSERT INTO fk_streamcredential (label, key_id, action, secret_hash, created_at, expires_at)
+                    SELECT label, key_id, action, secret_hash, created_at, expires_at
+                    FROM json_populate_recordset(NULL::fk_streamcredential, :'credentials')
+                    ON CONFLICT (key_id) DO UPDATE SET revoked_at = NULL;
+                  UPDATE fk_livesource l
+                    SET pull_url_encrypted = s.pull_url_encrypted, pull_target = s.pull_target
+                    FROM json_populate_recordset(NULL::fk_livesource, :'pull') s
+                    WHERE l.stream_id = s.stream_id;
+                  SQL
+                  } | psql --single-transaction -v ON_ERROR_STOP=1 -q \
+                      -v credentials="$(cat /work/credentials.json)" -v pull="$(cat /work/pull.json)"
+                  echo "Kept $(grep -o key_id /work/credentials.json | wc -l) staging logins and $(grep -o stream_id /work/pull.json | wc -l) pull addresses"
                   echo "Restored $(du -h /work/dump.pgdump | cut -f1) dump"
               env:
                 - name: PGHOST

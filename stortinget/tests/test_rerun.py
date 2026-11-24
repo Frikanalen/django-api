@@ -78,3 +78,15 @@ def test_not_on_weekends_nor_too_late(keeper) -> None:
     keeper.tick(None, oslo(21, 6))  # Saturday
     keeper.tick(None, oslo(20, 13, 56))  # Friday, four minutes before
     assert not RecordingRequest.objects.exists()
+
+
+def test_takes_over_the_stations_placeholder(keeper, station) -> None:
+    placeholder = AirtimeGrant.objects.create(
+        organization=station, starttime=oslo(19, 20), endtime=oslo(19, 21), locks_at=oslo(19, 20)
+    )
+    keeper.tick(None, oslo(19, 6))
+
+    booking = KeeperBooking.objects.get(kind=Kind.DEMOCRACY_NOW_RERUN)
+    assert (booking.grant.starttime, booking.grant.endtime) == (oslo(19, 20), oslo(19, 21))
+    placeholder.refresh_from_db()
+    assert placeholder.state == AirtimeGrant.State.CANCELLED

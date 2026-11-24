@@ -42,6 +42,7 @@ class FakeReceiver:
     def __init__(self):
         self.paths: dict[str, dict] = {}
         self.removed: list[str] = []
+        self.silent: set[str] = set()
 
     def path_config(self, name):
         return self.paths.get(name)
@@ -53,11 +54,27 @@ class FakeReceiver:
         self.removed.append(name)
         self.paths.pop(name, None)
 
+    def replace_path(self, name, config):
+        self.paths[name] = config
+
+    def config_path_names(self, prefix):
+        return [name for name in self.paths if name.startswith(prefix)]
+
+    def recorded(self, name):
+        return name not in self.silent
+
 
 @pytest.fixture
 def mediamtx(monkeypatch) -> FakeReceiver:
     fake = FakeReceiver()
-    for name in ("path_config", "add_path", "remove_path"):
+    for name in (
+        "path_config",
+        "add_path",
+        "remove_path",
+        "replace_path",
+        "config_path_names",
+        "recorded",
+    ):
         monkeypatch.setattr(reconcile.receiver, name, getattr(fake, name))
     return fake
 
@@ -102,10 +119,22 @@ def test_records_its_window_and_hands_it_to_ingest(recording, mediamtx, ingest) 
     assert ingest == []
 
     reconcile.reconcile(START + timedelta(hours=1, seconds=61))
-    assert path not in mediamtx.paths
+    # Stopped, but kept: playback serves only configured paths.
+    assert mediamtx.paths[path] == {"record": False}
     assert ingest == [f"http://ingest:8000/internal/recordings/{recording.pk}"]
     recording.refresh_from_db()
     assert (recording.state, recording.import_attempts) == (State.IMPORTING, 1)
+
+    # MediaMTX restarted while ingest fetches: put back, stopped.
+    mediamtx.paths.clear()
+    reconcile.reconcile(START + timedelta(hours=1, minutes=2))
+    assert mediamtx.paths[path] == {"record": False}
+
+    # Archived: the path goes.
+    recording.state = State.ARCHIVED
+    recording.save()
+    reconcile.reconcile(START + timedelta(hours=1, minutes=10))
+    assert path not in mediamtx.paths
 
 
 def test_asks_ingest_again_then_gives_up(recording, mediamtx, ingest) -> None:
@@ -188,3 +217,61 @@ def test_playback_takes_the_signed_token_for_that_path_only(recording) -> None:
     assert playback_auth(recording.path, "forged").status_code == 401
     other = playback.issue_token(f"contrib/live/{recording.source.stream_id}")
     assert playback_auth(f"contrib/live/{recording.source.stream_id}", other).status_code == 401
+
+
+def test_a_silent_source_fails_without_asking_ingest(recording, mediamtx, ingest) -> None:
+    reconcile.reconcile(START)
+    mediamtx.silent.add(recording.path)
+    reconcile.reconcile(START + timedelta(hours=1, minutes=2))
+    recording.refresh_from_db()
+    assert recording.state == State.FAILED
+    assert ingest == []
+    assert mediamtx.paths == {}
+
+
+def test_removes_paths_no_request_wants(recording, mediamtx, ingest) -> None:
+    mediamtx.paths["contrib/record/999"] = {}
+    mediamtx.paths["contrib/live/other"] = {}
+    reconcile.reconcile(START)
+    assert set(mediamtx.paths) == {recording.path, "contrib/live/other"}
+
+
+def test_keeps_no_token_in_the_error(recording) -> None:
+    staff = User.objects.create(email="ingest@example.test", is_superuser=True)
+    client = APIClient()
+    client.force_authenticate(staff)
+    client.post(
+        reverse("api-recording-result", args=[recording.pk]),
+        {"ok": False, "error": "400 for http://recording:s3cr3t@mediamtx-playback:9996/get?x"},
+        format="json",
+    )
+    recording.refresh_from_db()
+    assert "s3cr3t" not in recording.error
+    assert "mediamtx-playback:9996/get" in recording.error
+
+
+def test_removing_a_path_uses_delete(monkeypatch, settings) -> None:
+    import io
+    import urllib.error
+
+    from fk import receiver
+
+    settings.FK_MEDIAMTX_API_URL = "http://mediamtx-api:9997"
+    calls = []
+
+    def urlopen(request, timeout):
+        calls.append((request.get_method(), request.full_url))
+        if request.get_method() != "DELETE":  # MediaMTX's router
+            raise urllib.error.HTTPError(
+                request.full_url, 404, "Not Found", {}, io.BytesIO(b"404 page not found")
+            )
+        raise urllib.error.HTTPError(
+            request.full_url, 404, "Not Found", {},
+            io.BytesIO(b'{"status":"error","error":"path configuration not found"}'),
+        )  # fmt: skip
+
+    monkeypatch.setattr(receiver.urllib.request, "urlopen", urlopen)
+    receiver.remove_path("contrib/record/3")  # already gone: fine
+    assert calls == [("DELETE", "http://mediamtx-api:9997/v3/config/paths/delete/contrib/record/3")]
+    with pytest.raises(receiver.ReceiverUnavailable):
+        receiver._post("/v3/config/paths/delete/contrib/record/3")  # the wrong method

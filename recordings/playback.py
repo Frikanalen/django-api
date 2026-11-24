@@ -37,7 +37,9 @@ def url(request) -> str:
             "path": request.path,
             "start": request.starttime.isoformat(),
             "duration": f"{(request.endtime - request.starttime).total_seconds():g}",
-            "format": "mp4",
+            # Fragmented MP4: MediaMTX's plain-MP4 remux repeats a frame at
+            # every keyframe; ingest remuxes this one itself.
+            "format": "fmp4",
         }
     )
     return urlunsplit((base.scheme, netloc, f"{base.path}/get", query, ""))
