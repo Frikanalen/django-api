@@ -103,11 +103,16 @@ spec:
                 - name: work
                   mountPath: /work
           containers:
-            # Staging's code is usually ahead of prod's schema.
+            # Staging's code is usually ahead of prod's schema. Then fail
+            # the ingest queue the copy brought along, so staging's workers
+            # don't take production's uploads and backfill re-encodes.
             - name: migrate
               image: "{{ $.Values.django.image.repository }}:{{ $.Values.django.image.tag | default (printf "v%s" $.Chart.Version) }}"
               imagePullPolicy: Always
-              command: ["python", "manage.py", "migrate", "--noinput"]
+              command:
+                - sh
+                - -c
+                - python manage.py migrate --noinput && python manage.py fail_copied_ingest_jobs --yes
               env:
                 {{- include "django.env" $ | nindent 16 }}
 {{- end }}
