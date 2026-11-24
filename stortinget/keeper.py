@@ -309,7 +309,17 @@ class Keeper:
             return
         start = _at(today, config.democracy_now_rerun_at)
         end = start + config.democracy_now_length
-        if self._free_until(start, end) != end:
+        # The station's own slot there (a placeholder that shows the hour is
+        # reserved) gives way to the rerun; anyone else's grant doesn't.
+        placeholders = list(
+            AirtimeGrant.objects.active().filter(
+                starttime__lt=end,
+                endtime__gt=start,
+                organization__live_sources=config.democracy_now_source_id,
+                keeper_booking__isnull=True,
+            )
+        )
+        if self._free_until(start, end, ignoring=placeholders) != end:
             logger.info("Not rerunning Democracy Now!: %s-%s is taken", start, end)
             self._rerun_skipped.add(today)
             return
@@ -347,6 +357,8 @@ class Keeper:
                 )
                 if earlier is not None:
                     video.categories.set(earlier.categories.all())
+                for placeholder in placeholders:
+                    self._cancel(placeholder, now, why="the Democracy Now! rerun takes it")
                 RecordingRequest.objects.create(
                     source=source, video=video, starttime=record_start, endtime=record_end
                 )
@@ -460,10 +472,14 @@ class Keeper:
             return
         self._extend(grant, free, now, make_room=False)
 
-    def _free_until(self, start, end) -> datetime.datetime | None:
+    def _free_until(self, start, end, *, ignoring=()) -> datetime.datetime | None:
         """How far the schedule is free from `start`, up to `end`; None if
-        something is on at `start` itself."""
-        grants = AirtimeGrant.objects.active().filter(starttime__lt=end, endtime__gt=start)
+        something is on at `start` itself. Grants in `ignoring` don't count."""
+        grants = (
+            AirtimeGrant.objects.active()
+            .filter(starttime__lt=end, endtime__gt=start)
+            .exclude(pk__in=[g.pk for g in ignoring])
+        )
         rows = Scheduleitem.objects.overlapping(start, end).filter(grant=None)
         if (
             grants.filter(starttime__lte=start).exists()
