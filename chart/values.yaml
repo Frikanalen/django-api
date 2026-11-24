@@ -124,7 +124,9 @@ monitoring:
 # ONLY: it drops everything the database user owns and restores the newest
 # dump that prod's staging-refresh-dump CronJob (Frikanalen/clusters,
 # clusters/prod/jobs/) left in Garage, then runs migrate, since staging's
-# code is usually ahead of prod's schema. The chart refuses to render it with
+# code is usually ahead of prod's schema, and fails every unfinished ingest
+# job the copy brought along (fail_copied_ingest_jobs), so staging's workers
+# don't take prod's queue. The chart refuses to render it with
 # ingress.hostname frikanalen.tv.
 stagingDbRefresh:
   enabled: false
