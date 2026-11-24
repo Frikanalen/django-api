@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.12.1](https://github.com/Frikanalen/django-api/compare/v3.12.0...v3.12.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* **chart:** staging's weekly refresh fails the ingest queue it copies from prod ([#181](https://github.com/Frikanalen/django-api/issues/181)) ([dbcabe6](https://github.com/Frikanalen/django-api/commit/dbcabe6af5ea9012546574a1063476af0e85bf7f))
+* recording clean-up, moving grants later, staging refresh keeps its logins ([#182](https://github.com/Frikanalen/django-api/issues/182)) ([bad65d1](https://github.com/Frikanalen/django-api/commit/bad65d1685e2bb2c9194c21adcdf07b7748d5c67))
+* **recordings:** don't sweep a path whose window has just ended ([#183](https://github.com/Frikanalen/django-api/issues/183)) ([a322867](https://github.com/Frikanalen/django-api/commit/a3228670da95b6e9542d4a7df95b71019add733b))
+
+
+### Documentation
+
+* **adr:** ADR 0001 airtime grants, with what was built ([#178](https://github.com/Frikanalen/django-api/issues/178)) ([0422d63](https://github.com/Frikanalen/django-api/commit/0422d63754da43820ed40dfb78e94892d738ce27))
+* **adr:** bring ADR 0001 up to date with airtime grants as built ([#179](https://github.com/Frikanalen/django-api/issues/179)) ([176e6ef](https://github.com/Frikanalen/django-api/commit/176e6ef13fa5689931c689cd838330a0933fc975))
+
 ## [3.12.0](https://github.com/Frikanalen/django-api/compare/v3.11.0...v3.12.0) (2026-11-23)
 
 
