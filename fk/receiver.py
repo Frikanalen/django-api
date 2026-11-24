@@ -72,8 +72,10 @@ def _get(path):
         raise ReceiverUnavailable(str(error)) from error
 
 
-def _post(path, body=None):
-    """A POST on the receiver's API (its config changes): True, or False for a 404."""
+def _post(path, body=None, method="POST"):
+    """A change on the receiver's API: True, or False when MediaMTX says
+    the path isn't there. An unknown route (the router's plain-text 404)
+    is an error, not "already gone"."""
     base = settings.FK_MEDIAMTX_API_URL
     if not base:
         raise ReceiverUnavailable("FK_MEDIAMTX_API_URL is not set")
@@ -81,7 +83,7 @@ def _post(path, body=None):
     request = urllib.request.Request(
         f"{base.rstrip('/')}{path}",
         data=data,
-        method="POST",
+        method=method,
         headers={
             "Authorization": f"Bearer {issue_api_token()}",
             "Content-Type": "application/json",
@@ -91,7 +93,7 @@ def _post(path, body=None):
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS):
             return True
     except urllib.error.HTTPError as error:
-        if error.code == 404:
+        if error.code == 404 and b"page not found" not in error.read():
             return False
         raise ReceiverUnavailable(f"receiver answered {error.code}") from error
     except OSError as error:
@@ -109,7 +111,8 @@ def add_path(name, config):
 
 def remove_path(name):
     """Remove a path configured through the API; nothing if it is not there."""
-    _post(f"/v3/config/paths/delete/{quote(name)}")
+    # MediaMTX takes DELETE here; a POST only meets its router's 404.
+    _post(f"/v3/config/paths/delete/{quote(name)}", method="DELETE")
 
 
 def config_path_names(prefix: str) -> list[str]:

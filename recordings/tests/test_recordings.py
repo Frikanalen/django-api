@@ -226,3 +226,30 @@ def test_keeps_no_token_in_the_error(recording) -> None:
     recording.refresh_from_db()
     assert "s3cr3t" not in recording.error
     assert "mediamtx-playback:9996/get" in recording.error
+
+
+def test_removing_a_path_uses_delete(monkeypatch, settings) -> None:
+    import io
+    import urllib.error
+
+    from fk import receiver
+
+    settings.FK_MEDIAMTX_API_URL = "http://mediamtx-api:9997"
+    calls = []
+
+    def urlopen(request, timeout):
+        calls.append((request.get_method(), request.full_url))
+        if request.get_method() != "DELETE":  # MediaMTX's router
+            raise urllib.error.HTTPError(
+                request.full_url, 404, "Not Found", {}, io.BytesIO(b"404 page not found")
+            )
+        raise urllib.error.HTTPError(
+            request.full_url, 404, "Not Found", {},
+            io.BytesIO(b'{"status":"error","error":"path configuration not found"}'),
+        )  # fmt: skip
+
+    monkeypatch.setattr(receiver.urllib.request, "urlopen", urlopen)
+    receiver.remove_path("contrib/record/3")  # already gone: fine
+    assert calls == [("DELETE", "http://mediamtx-api:9997/v3/config/paths/delete/contrib/record/3")]
+    with pytest.raises(receiver.ReceiverUnavailable):
+        receiver._post("/v3/config/paths/delete/contrib/record/3")  # the wrong method
