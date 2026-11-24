@@ -8,9 +8,11 @@ Each pass (once every half minute or so, see manage.py keep_recordings):
   live path and records it. Reading starts a pulled source even if nothing
   airs it. Paths added through the API are lost when MediaMTX restarts, so
   every pass puts back what is missing;
-- a request whose window (and margin) has passed loses its path, and ingest
-  is asked to archive it. Ingest asks back for the details, so the call
-  carries nothing but the id;
+- a request whose window (and margin) has passed stops recording, and
+  ingest is asked to archive it. Ingest asks back for the details, so the
+  call carries nothing but the id. The path stays (record off, no source)
+  until ingest reports back: MediaMTX's playback serves only configured
+  paths;
 - a hand-off ingest hasn't answered is tried again, a few times.
 
 MediaMTX writes segments by the clock; ingest cuts the exact window out of
@@ -35,6 +37,8 @@ logger = logging.getLogger(__name__)
 State = RecordingRequest.State
 
 PREFIX = "contrib/record/"
+# A finished recording's path: kept so playback can serve it to ingest.
+STOPPED = {"record": False}
 MARGIN = datetime.timedelta(minutes=1)
 IMPORT_RETRY = datetime.timedelta(minutes=20)
 IMPORT_ATTEMPTS = 3
@@ -59,9 +63,8 @@ def reconcile(now: datetime.datetime | None = None) -> None:
         starttime__lte=now + MARGIN,
         endtime__gt=now - MARGIN,
     )
-    # Every recording path MediaMTX has that no running request wants goes:
-    # one whose request ended, failed or was cancelled, or whose removal was
-    # missed.
+    # Every recording path MediaMTX has that no request still needs goes:
+    # one whose request was archived, failed or was cancelled.
     stray = set(receiver.config_path_names(PREFIX))
     for request in due:
         stray.discard(request.path)
@@ -70,25 +73,32 @@ def reconcile(now: datetime.datetime | None = None) -> None:
             receiver.add_path(request.path, path_config(request))
         if request.state == State.WAITING:
             RecordingRequest.objects.filter(pk=request.pk).update(state=State.RECORDING)
+    # MediaMTX's playback serves a path only while it is configured, so one
+    # waiting for ingest stays, but stops recording (and reading its source).
+    for request in RecordingRequest.objects.filter(state=State.IMPORTING):
+        stray.discard(request.path)
+        if not _stopped(receiver.path_config(request.path)):
+            _stop(request)
     for name in sorted(stray):
-        logger.warning("Removing %s: no request is recording on it", name)
+        logger.warning("Removing %s: no request needs it", name)
         receiver.remove_path(name)
 
     finished = RecordingRequest.objects.filter(
         state__in=(State.WAITING, State.RECORDING), endtime__lte=now - MARGIN
     )
     for request in finished:
-        receiver.remove_path(request.path)
         if request.state == State.WAITING:  # never got a path: nothing to import
             request.state, request.error = State.FAILED, "Opptaket startet aldri."
             request.save(update_fields=["state", "error"])
             continue
         if not receiver.recorded(request.path):  # the source sent nothing
+            receiver.remove_path(request.path)
             logger.error("Nothing was recorded for %s", request)
             request.state = State.FAILED
             request.error = "Ingenting ble tatt opp: kilden sendte ikke noe signal."
             request.save(update_fields=["state", "error"])
             continue
+        _stop(request)
         request.state = State.IMPORTING
         request.save(update_fields=["state"])
         hand_to_ingest(request, now)
@@ -102,6 +112,23 @@ def reconcile(now: datetime.datetime | None = None) -> None:
             request.save(update_fields=["state", "error"])
         else:
             hand_to_ingest(request, now)
+
+
+def _stopped(config: dict | None) -> bool:
+    # MediaMTX answers with every setting, defaults included.
+    return (
+        config is not None
+        and not config.get("record")
+        and config.get("source") in (None, "", "publisher")
+    )
+
+
+def _stop(request: RecordingRequest) -> None:
+    """Keep the path for playback, but no longer recording or reading."""
+    if receiver.path_config(request.path) is None:
+        receiver.add_path(request.path, STOPPED)
+    else:
+        receiver.replace_path(request.path, STOPPED)
 
 
 def hand_to_ingest(request: RecordingRequest, now: datetime.datetime) -> None:

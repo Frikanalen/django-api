@@ -109,6 +109,11 @@ def add_path(name, config):
     _post(f"/v3/config/paths/add/{quote(name)}", config)
 
 
+def replace_path(name, config):
+    """Swap a path's whole configuration for `config`."""
+    _post(f"/v3/config/paths/replace/{quote(name)}", config)
+
+
 def remove_path(name):
     """Remove a path configured through the API; nothing if it is not there."""
     # MediaMTX takes DELETE here; a POST only meets its router's 404.

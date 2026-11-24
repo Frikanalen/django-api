@@ -54,6 +54,9 @@ class FakeReceiver:
         self.removed.append(name)
         self.paths.pop(name, None)
 
+    def replace_path(self, name, config):
+        self.paths[name] = config
+
     def config_path_names(self, prefix):
         return [name for name in self.paths if name.startswith(prefix)]
 
@@ -64,7 +67,14 @@ class FakeReceiver:
 @pytest.fixture
 def mediamtx(monkeypatch) -> FakeReceiver:
     fake = FakeReceiver()
-    for name in ("path_config", "add_path", "remove_path", "config_path_names", "recorded"):
+    for name in (
+        "path_config",
+        "add_path",
+        "remove_path",
+        "replace_path",
+        "config_path_names",
+        "recorded",
+    ):
         monkeypatch.setattr(reconcile.receiver, name, getattr(fake, name))
     return fake
 
@@ -109,10 +119,22 @@ def test_records_its_window_and_hands_it_to_ingest(recording, mediamtx, ingest) 
     assert ingest == []
 
     reconcile.reconcile(START + timedelta(hours=1, seconds=61))
-    assert path not in mediamtx.paths
+    # Stopped, but kept: playback serves only configured paths.
+    assert mediamtx.paths[path] == {"record": False}
     assert ingest == [f"http://ingest:8000/internal/recordings/{recording.pk}"]
     recording.refresh_from_db()
     assert (recording.state, recording.import_attempts) == (State.IMPORTING, 1)
+
+    # MediaMTX restarted while ingest fetches: put back, stopped.
+    mediamtx.paths.clear()
+    reconcile.reconcile(START + timedelta(hours=1, minutes=2))
+    assert mediamtx.paths[path] == {"record": False}
+
+    # Archived: the path goes.
+    recording.state = State.ARCHIVED
+    recording.save()
+    reconcile.reconcile(START + timedelta(hours=1, minutes=10))
+    assert path not in mediamtx.paths
 
 
 def test_asks_ingest_again_then_gives_up(recording, mediamtx, ingest) -> None:
