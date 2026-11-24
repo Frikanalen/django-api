@@ -25,7 +25,6 @@ import urllib.error
 import urllib.request
 
 from django.conf import settings
-from django.db.models import Q
 from django.utils import timezone
 
 from fk import receiver
@@ -35,6 +34,7 @@ from .models import RecordingRequest
 logger = logging.getLogger(__name__)
 State = RecordingRequest.State
 
+PREFIX = "contrib/record/"
 MARGIN = datetime.timedelta(minutes=1)
 IMPORT_RETRY = datetime.timedelta(minutes=20)
 IMPORT_ATTEMPTS = 3
@@ -59,12 +59,20 @@ def reconcile(now: datetime.datetime | None = None) -> None:
         starttime__lte=now + MARGIN,
         endtime__gt=now - MARGIN,
     )
+    # Every recording path MediaMTX has that no running request wants goes:
+    # one whose request ended, failed or was cancelled, or whose removal was
+    # missed.
+    stray = set(receiver.config_path_names(PREFIX))
     for request in due:
+        stray.discard(request.path)
         if receiver.path_config(request.path) is None:
             logger.warning("Recording %s on %s", request, request.path)
             receiver.add_path(request.path, path_config(request))
         if request.state == State.WAITING:
             RecordingRequest.objects.filter(pk=request.pk).update(state=State.RECORDING)
+    for name in sorted(stray):
+        logger.warning("Removing %s: no request is recording on it", name)
+        receiver.remove_path(name)
 
     finished = RecordingRequest.objects.filter(
         state__in=(State.WAITING, State.RECORDING), endtime__lte=now - MARGIN
@@ -73,6 +81,12 @@ def reconcile(now: datetime.datetime | None = None) -> None:
         receiver.remove_path(request.path)
         if request.state == State.WAITING:  # never got a path: nothing to import
             request.state, request.error = State.FAILED, "Opptaket startet aldri."
+            request.save(update_fields=["state", "error"])
+            continue
+        if not receiver.recorded(request.path):  # the source sent nothing
+            logger.error("Nothing was recorded for %s", request)
+            request.state = State.FAILED
+            request.error = "Ingenting ble tatt opp: kilden sendte ikke noe signal."
             request.save(update_fields=["state", "error"])
             continue
         request.state = State.IMPORTING
@@ -88,12 +102,6 @@ def reconcile(now: datetime.datetime | None = None) -> None:
             request.save(update_fields=["state", "error"])
         else:
             hand_to_ingest(request, now)
-
-    # A request cancelled while it ran keeps no path behind.
-    for request in RecordingRequest.objects.filter(
-        Q(state=State.CANCELLED), endtime__gt=now - datetime.timedelta(days=1)
-    ):
-        receiver.remove_path(request.path)
 
 
 def hand_to_ingest(request: RecordingRequest, now: datetime.datetime) -> None:

@@ -112,6 +112,22 @@ def remove_path(name):
     _post(f"/v3/config/paths/delete/{quote(name)}")
 
 
+def config_path_names(prefix: str) -> list[str]:
+    """The names of the paths configured through the API under `prefix`."""
+    listing = _get("/v3/config/paths/list?itemsPerPage=1000") or {}
+    return [
+        item["name"]
+        for item in listing.get("items") or []
+        if str(item.get("name", "")).startswith(prefix)
+    ]
+
+
+def recorded(name: str) -> bool:
+    """Whether MediaMTX holds any recorded segments of path `name`."""
+    recording = _get(f"/v3/recordings/get/{quote(name)}")
+    return bool(recording and recording.get("segments"))
+
+
 def path_inbound_bytes(name):
     """How much a path has received, or None if it isn't running."""
     path = _get(f"/v3/paths/get/{quote(name)}")

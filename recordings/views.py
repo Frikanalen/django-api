@@ -1,5 +1,7 @@
 """What ingest needs to archive a recording, and where it reports back."""
 
+import re
+
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 from rest_framework.permissions import IsAdminUser
@@ -38,6 +40,9 @@ class RecordingDetail(APIView):
         return Response(RecordingSerializer(recording).data)
 
 
+_CREDENTIALS = re.compile(r"//[^/\s@]+@")
+
+
 class RecordingResult(APIView):
     """Ingest reports that it archived the recording, or why it couldn't."""
 
@@ -48,6 +53,7 @@ class RecordingResult(APIView):
         result = ResultSerializer(data=request.data)
         result.is_valid(raise_exception=True)
         recording.state = State.ARCHIVED if result.validated_data["ok"] else State.FAILED
-        recording.error = result.validated_data["error"]
+        # Ingest's error may quote the playback URL: never keep its token.
+        recording.error = _CREDENTIALS.sub("//", result.validated_data["error"])
         recording.save(update_fields=["state", "error"])
         return Response(status=204)

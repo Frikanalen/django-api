@@ -42,6 +42,7 @@ class FakeReceiver:
     def __init__(self):
         self.paths: dict[str, dict] = {}
         self.removed: list[str] = []
+        self.silent: set[str] = set()
 
     def path_config(self, name):
         return self.paths.get(name)
@@ -53,11 +54,17 @@ class FakeReceiver:
         self.removed.append(name)
         self.paths.pop(name, None)
 
+    def config_path_names(self, prefix):
+        return [name for name in self.paths if name.startswith(prefix)]
+
+    def recorded(self, name):
+        return name not in self.silent
+
 
 @pytest.fixture
 def mediamtx(monkeypatch) -> FakeReceiver:
     fake = FakeReceiver()
-    for name in ("path_config", "add_path", "remove_path"):
+    for name in ("path_config", "add_path", "remove_path", "config_path_names", "recorded"):
         monkeypatch.setattr(reconcile.receiver, name, getattr(fake, name))
     return fake
 
@@ -188,3 +195,34 @@ def test_playback_takes_the_signed_token_for_that_path_only(recording) -> None:
     assert playback_auth(recording.path, "forged").status_code == 401
     other = playback.issue_token(f"contrib/live/{recording.source.stream_id}")
     assert playback_auth(f"contrib/live/{recording.source.stream_id}", other).status_code == 401
+
+
+def test_a_silent_source_fails_without_asking_ingest(recording, mediamtx, ingest) -> None:
+    reconcile.reconcile(START)
+    mediamtx.silent.add(recording.path)
+    reconcile.reconcile(START + timedelta(hours=1, minutes=2))
+    recording.refresh_from_db()
+    assert recording.state == State.FAILED
+    assert ingest == []
+    assert mediamtx.paths == {}
+
+
+def test_removes_paths_no_request_wants(recording, mediamtx, ingest) -> None:
+    mediamtx.paths["contrib/record/999"] = {}
+    mediamtx.paths["contrib/live/other"] = {}
+    reconcile.reconcile(START)
+    assert set(mediamtx.paths) == {recording.path, "contrib/live/other"}
+
+
+def test_keeps_no_token_in_the_error(recording) -> None:
+    staff = User.objects.create(email="ingest@example.test", is_superuser=True)
+    client = APIClient()
+    client.force_authenticate(staff)
+    client.post(
+        reverse("api-recording-result", args=[recording.pk]),
+        {"ok": False, "error": "400 for http://recording:s3cr3t@mediamtx-playback:9996/get?x"},
+        format="json",
+    )
+    recording.refresh_from_db()
+    assert "s3cr3t" not in recording.error
+    assert "mediamtx-playback:9996/get" in recording.error
