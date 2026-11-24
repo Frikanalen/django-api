@@ -54,3 +54,16 @@ def test_moving_the_end_through_the_service_keeps_the_rows_inside(compiled) -> N
         services.set_items(compiled, [], user=staff, now=at_1910)
         check_now()
     assert schedule(compiled)[0][2] == timedelta(minutes=10)
+
+
+def test_moving_a_compiled_grant_later_keeps_its_list(compiled) -> None:
+    hour = timedelta(hours=1)
+    start, end = compiled.starttime + hour, compiled.endtime + hour
+    with transaction.atomic():
+        services.update_grant(compiled, starttime=start, endtime=end, now=NOW)
+        check_now()
+    compiled.refresh_from_db()
+    rows = list(compiled.schedule_items.order_by("starttime"))
+    assert (compiled.starttime, compiled.endtime) == (start, end)
+    assert len(rows) == 2
+    assert rows[0].starttime == start

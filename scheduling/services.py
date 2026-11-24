@@ -446,10 +446,19 @@ def _move_start(grant: AirtimeGrant, starttime: datetime, endtime: datetime, now
         )
         if blocking is not None:
             raise ValidationError({"starttime": f"The extra time is taken by {blocking}."})
-    grant.starttime = starttime
+    if endtime > grant.endtime:
+        blocking = (
+            Scheduleitem.objects.overlapping(grant.endtime, endtime).exclude(grant=grant).first()
+        )
+        if blocking is not None:
+            raise ValidationError({"endtime": f"The extra time is taken by {blocking}."})
+    # Start and end move in one write: the database checks the grant's rows
+    # against each window it is given, so a halfway window (the new start
+    # with the old end) would refuse rows that fit the final one.
+    grant.starttime, grant.endtime = starttime, endtime
     try:
         with transaction.atomic():
-            grant.save(update_fields=["starttime", "updated_at"])
+            grant.save(update_fields=["starttime", "endtime", "updated_at"])
     except IntegrityError as error:
         raise ValidationError({"starttime": "The new time overlaps another grant."}) from error
     _refit(grant, now)
