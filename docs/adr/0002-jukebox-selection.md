@@ -10,12 +10,30 @@ Proposed. Describes the implementation in django-api 3.12.0 (#175, #176) as it s
 
 The jukebox is the station's own programming. It fills the grants the station gives itself with a recipe of kind `jukebox` (see `programming/`). Unlike a member's grant, nobody picks these videos by hand, so the selection rule is an editorial policy: it decides which members are seen on the station's airtime, and how often.
 
-Up to 3.11.0 the rule was:
+### Legacy behaviour
 
-- **Pool: `is_filler` videos only.** That flag is an opt-in set long ago. In practice almost only very old videos carry it. On staging data, 114 videos were in the pool, and a planned week's median pick was about eight years old. 1% of picks were from the last year, and three organizations made up the whole week.
-- **Weighting: mild freshness.** A video's weight halved per year of age, with a floor of 0.2. That doesn't help when there is almost nothing new in the pool. Even with new videos in it, a large archive at weight 0.2 outweighs a handful of new ones.
+The jukebox has picked videos the same way since long before the airtime grants. Only where its picks go has changed.
 
-So members who upload today were not seen on the jukebox. The station's own airtime mostly showed what was uploaded a decade ago.
+**Where it aired.** Until ADR 0001 (cut over 2026-11-11), the jukebox was a nightly gap filler (`agenda/scheduling/jukebox.py`). After the weekly slots were placed, it filled every free stretch longer than five minutes across the whole drafted schedule, through the end of the open week. It placed fillers back to back on whole minutes and gave way to member programming. Since ADR 0001 it fills only grants the station gives itself with a `jukebox` recipe. Up to 3.11.0 the pool and the draw carried over unchanged.
+
+**The pool: videos whose owner opted in.** `Video.objects.fillers()`, later the `FILLER` condition, took a video when:
+
+- `is_filler` was set;
+- it had no TONO-registered music;
+- its organization was a member (`fkmember`) with an active responsible editor (and, once those flags came, was not suspended, and the video was not removed by staff);
+- its file was processed and it had a length.
+
+`is_filler` is a member's opt-in. The field is labelled "Play automatically?" (as the admin shows it), with the help text "You still have the editorial responsibility. Only affect videos from members." The member set it per video, saying the station may air the video on its own initiative. The current website has no control for it, though the API still accepts it. So almost nothing uploaded in recent years was opted in, and the pool froze around what was flagged on the old site. The pool did **not** require `publish_on_web`: an opted-in video hidden from the website could still air.
+
+**The draw.** A weighted random draw, repeated until the gap or window was full. Each video's weight was the product of three rules:
+
+- *Freshness*: halves per 365 days since upload, never below 0.2. A video with no upload time counts as ancient (0.2).
+- *Organization diversity*: (1 − the organization's share of the airtime counted so far) to the power 1, never below 0.05. The count includes members' programming in the same period.
+- *Repeat avoidance*: never the same video twice in a row, and each earlier play in the period halves the weight.
+
+The old gap filler drew unseeded, so each run differed. Under the recipes (django 3.2.0 and later), the draw is seeded per grant, so a grant gets the same picks night after night unless something it depends on changes.
+
+**The result.** On staging data, 114 videos were in the pool, and a planned week's median pick was about eight years old. 1% of picks were from the last year, and three organizations made up the whole week. Freshness could not help: there was almost nothing new to favour. Even with new videos in the pool, a large archive at a floor of 0.2 outweighs a handful of new ones. So members who upload today were not seen on the jukebox. The station's own airtime mostly showed what was uploaded a decade ago.
 
 ## Decision
 
@@ -46,7 +64,8 @@ Staging had only one upload from the last two weeks. It aired on days 0, 3 and 6
 
 ## Consequences
 
-- **Members are seen on station airtime without asking.** Publishing a video is now enough to be in the jukebox. That is the point of the change, but it is a change of policy: before, being in the jukebox was opt-in (`is_filler`).
+- **Members are seen on station airtime without asking.** Publishing a video is now enough to be in the jukebox. That is the point of the change, but it is a change of policy: before, each video needed its owner's explicit "Play automatically?" (`is_filler`), which also carried a reminder of their editorial responsibility.
+- **Hidden videos leave the jukebox.** The new pool requires `publish_on_web`, so an opted-in video hidden from the website no longer airs automatically. The old pool did not check this.
 - **No way to opt out of the jukebox alone.** A member who doesn't want a video in the jukebox can only hide it from the website. Staff can remove a video (`is_banned`), but that takes it off everything. See [Open questions](#open-questions).
 - **`is_filler` no longer does anything** for the jukebox. It is kept on `Video` and in the admin for now.
 - **Long videos can enter the jukebox.** Before, the opt-in kept the pool to filler-length material. A theme with `longest` set limits this.
