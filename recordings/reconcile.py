@@ -13,7 +13,11 @@ Each pass (once every half minute or so, see manage.py keep_recordings):
   call carries nothing but the id. The path stays (record off, no source)
   until ingest reports back: MediaMTX's playback serves only configured
   paths;
-- a hand-off ingest hasn't answered is tried again, a few times.
+- a hand-off ingest hasn't answered is tried again, a few times;
+- a request that names a master (the source's own file, published some
+  time after the programme) waits for it: once the file is up, ingest
+  archives that instead of the recording; past the master's deadline it
+  archives the recording after all, if anything was recorded.
 
 MediaMTX writes segments by the clock; ingest cuts the exact window out of
 them through the playback server, so the margins never reach the file.
@@ -94,6 +98,11 @@ def reconcile(now: datetime.datetime | None = None) -> None:
         state__in=(State.WAITING, State.RECORDING), endtime__lte=now - MARGIN
     )
     for request in finished:
+        if request.master_url:  # whatever was recorded, wait for the master (below)
+            _stop(request)
+            request.state = State.IMPORTING
+            request.save(update_fields=["state"])
+            continue
         if request.state == State.WAITING:  # never got a path: nothing to import
             request.state, request.error = State.FAILED, "Opptaket startet aldri."
             request.save(update_fields=["state", "error"])
@@ -110,6 +119,12 @@ def reconcile(now: datetime.datetime | None = None) -> None:
         request.save(update_fields=["state"])
         hand_to_ingest(request, now)
 
+    # Waiting for a master (or, past its deadline, about to use the recording).
+    for request in RecordingRequest.objects.filter(
+        state=State.IMPORTING, import_attempts=0
+    ).exclude(master_url=""):
+        _hand_over(request, now)
+
     for request in RecordingRequest.objects.filter(
         state=State.IMPORTING, import_requested_at__lte=now - IMPORT_RETRY
     ):
@@ -119,6 +134,39 @@ def reconcile(now: datetime.datetime | None = None) -> None:
             request.save(update_fields=["state", "error"])
         else:
             hand_to_ingest(request, now)
+
+
+def _hand_over(request: RecordingRequest, now: datetime.datetime) -> None:
+    """Hand ingest the master once it is up, or past its deadline the recording."""
+    if request.master_deadline is None or now < request.master_deadline:
+        if master_is_up(request.master_url):
+            logger.warning("The master of %s is up: %s", request, request.master_url)
+            request.use_master = True
+            request.save(update_fields=["use_master"])
+            hand_to_ingest(request, now)
+        return
+    if receiver.recorded(request.path):
+        logger.warning(
+            "No master for %s by %s; using the recording", request, request.master_deadline
+        )
+        hand_to_ingest(request, now)
+        return
+    logger.error("Neither a master nor a recording for %s", request)
+    receiver.remove_path(request.path)
+    request.state = State.FAILED
+    request.error = (request.error + " " if request.error else "") + (
+        "Ingen ferdig fil før fristen, og ingenting ble tatt opp."
+    )
+    request.save(update_fields=["state", "error"])
+
+
+def master_is_up(url: str) -> bool:
+    call = urllib.request.Request(url, method="HEAD")
+    try:
+        with urllib.request.urlopen(call, timeout=TIMEOUT_SECONDS) as response:
+            return response.status == 200
+    except (urllib.error.URLError, OSError):  # 404 until it is published
+        return False
 
 
 def _stopped(config: dict | None) -> bool:

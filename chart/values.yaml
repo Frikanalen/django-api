@@ -44,6 +44,11 @@ stortingetKeeper:
   democracyNowRerun:
     at: ""
     days: "mon,tue,wed,thu,fri"
+    # Democracy Now!'s own file of the show (a strftime pattern; "": none),
+    # played instead of the recording if it is up masterLeadMinutes before
+    # the rerun. Published about 45 minutes after the show ends.
+    masterUrl: "https://mpeg.democracynow.org/dn%Y-%m%d-hd.mp4"
+    masterLeadMinutes: 75
 
 # Records live sources on request (recordings app): needs env
 # FK_MEDIAMTX_API_URL, FK_MEDIAMTX_PLAYBACK_URL and FK_INGEST_INTERNAL_URL.

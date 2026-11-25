@@ -287,3 +287,116 @@ def test_a_window_just_past_is_stopped_not_swept(recording, mediamtx, ingest) ->
     assert recording.path not in mediamtx.removed
     recording.refresh_from_db()
     assert recording.state == State.IMPORTING
+
+
+MASTER = "https://mpeg.democracynow.org/dn2026-1119-hd.mp4"
+
+
+@pytest.fixture
+def master(monkeypatch, recording) -> dict:
+    recording.master_url = MASTER
+    recording.master_deadline = START + timedelta(hours=5)  # 18:45 Oslo
+    recording.save()
+    state = {"up": False, "asked": 0}
+
+    def is_up(url):
+        assert url == MASTER
+        state["asked"] += 1
+        return state["up"]
+
+    monkeypatch.setattr(reconcile, "master_is_up", is_up)
+    return state
+
+
+def _staff_client() -> APIClient:
+    client = APIClient()
+    staff, _ = User.objects.get_or_create(
+        email="ingest@example.test", defaults={"is_superuser": True}
+    )
+    client.force_authenticate(staff)
+    return client
+
+
+def test_waits_for_the_master_and_hands_that_to_ingest(recording, mediamtx, ingest, master) -> None:
+    reconcile.reconcile(START + timedelta(minutes=30))
+    reconcile.reconcile(START + timedelta(hours=1, seconds=61))
+    path = recording.path
+    # Recorded and stopped (kept as the fallback), but not handed over yet.
+    assert mediamtx.paths[path] == {"record": False}
+    assert ingest == []
+    recording.refresh_from_db()
+    assert (recording.state, recording.import_attempts) == (State.IMPORTING, 0)
+
+    master["up"] = True
+    reconcile.reconcile(START + timedelta(hours=1, minutes=45))
+    assert ingest == [f"http://ingest:8000/internal/recordings/{recording.pk}"]
+    recording.refresh_from_db()
+    assert (recording.use_master, recording.import_attempts) == (True, 1)
+    data = _staff_client().get(reverse("api-recording-detail", args=[recording.pk])).json()
+    assert data["masterUrl"] == MASTER
+
+    asked = master["asked"]
+    reconcile.reconcile(START + timedelta(hours=1, minutes=46))
+    assert master["asked"] == asked  # handed over: no more asking
+    assert len(ingest) == 1
+
+
+def test_ingest_is_not_given_a_master_it_wasnt_handed(recording, master) -> None:
+    data = _staff_client().get(reverse("api-recording-detail", args=[recording.pk])).json()
+    assert data["masterUrl"] is None
+
+
+def test_uses_the_recording_when_the_master_is_late(recording, mediamtx, ingest, master) -> None:
+    reconcile.reconcile(START + timedelta(minutes=30))
+    reconcile.reconcile(START + timedelta(hours=1, seconds=61))
+    reconcile.reconcile(START + timedelta(hours=4))
+    assert ingest == []
+    reconcile.reconcile(START + timedelta(hours=5))
+    assert ingest == [f"http://ingest:8000/internal/recordings/{recording.pk}"]
+    recording.refresh_from_db()
+    assert (recording.use_master, recording.state) == (False, State.IMPORTING)
+
+
+def test_a_master_needs_no_recording(recording, mediamtx, ingest, master) -> None:
+    mediamtx.silent.add(recording.path)
+    reconcile.reconcile(START + timedelta(minutes=30))
+    reconcile.reconcile(START + timedelta(hours=1, seconds=61))
+    recording.refresh_from_db()
+    assert recording.state == State.IMPORTING
+    master["up"] = True
+    reconcile.reconcile(START + timedelta(hours=2))
+    assert len(ingest) == 1
+
+
+def test_fails_with_neither_master_nor_recording(recording, mediamtx, ingest, master) -> None:
+    mediamtx.silent.add(recording.path)
+    reconcile.reconcile(START + timedelta(hours=1, seconds=61))  # never got a path
+    reconcile.reconcile(START + timedelta(hours=5))
+    recording.refresh_from_db()
+    assert recording.state == State.FAILED
+    assert "Ingen ferdig fil" in recording.error
+    assert recording.path not in mediamtx.paths
+    assert ingest == []
+
+
+def test_a_failed_master_falls_back_to_the_recording(recording, mediamtx, ingest, master) -> None:
+    reconcile.reconcile(START + timedelta(minutes=30))
+    master["up"] = True
+    reconcile.reconcile(START + timedelta(hours=1, seconds=61))
+    reconcile.reconcile(START + timedelta(hours=1, minutes=2))
+    assert len(ingest) == 1
+
+    _staff_client().post(
+        reverse("api-recording-result", args=[recording.pk]),
+        {"ok": False, "error": "not compliant"},
+        format="json",
+    )
+    recording.refresh_from_db()
+    assert (recording.state, recording.use_master) == (State.IMPORTING, False)
+    assert "not compliant" in recording.error
+
+    # The next pass after the report (its deadline is when it was reported).
+    reconcile.reconcile(recording.master_deadline)
+    assert len(ingest) == 2
+    data = _staff_client().get(reverse("api-recording-detail", args=[recording.pk])).json()
+    assert data["masterUrl"] is None

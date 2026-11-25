@@ -3,6 +3,7 @@
 import re
 
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
@@ -16,13 +17,20 @@ State = RecordingRequest.State
 
 class RecordingSerializer(serializers.ModelSerializer):
     playback_url = serializers.SerializerMethodField()
+    # Set when ingest is to fetch the source's own file instead.
+    master_url = serializers.SerializerMethodField()
 
     class Meta:
         model = RecordingRequest
-        fields = ("id", "video", "source", "starttime", "endtime", "state", "playback_url")
+        fields = (
+            "id", "video", "source", "starttime", "endtime", "state", "playback_url", "master_url",
+        )  # fmt: skip
 
     def get_playback_url(self, request) -> str:
         return playback.url(request)
+
+    def get_master_url(self, request) -> str | None:
+        return request.master_url if request.use_master else None
 
 
 class ResultSerializer(serializers.Serializer):
@@ -52,8 +60,24 @@ class RecordingResult(APIView):
         recording = get_object_or_404(RecordingRequest, pk=pk)
         result = ResultSerializer(data=request.data)
         result.is_valid(raise_exception=True)
-        recording.state = State.ARCHIVED if result.validated_data["ok"] else State.FAILED
         # Ingest's error may quote the playback URL: never keep its token.
-        recording.error = _CREDENTIALS.sub("//", result.validated_data["error"])
-        recording.save(update_fields=["state", "error"])
+        error = _CREDENTIALS.sub("//", result.validated_data["error"])
+        if result.validated_data["ok"]:
+            recording.state, recording.error = State.ARCHIVED, ""
+        elif recording.use_master:
+            # The master didn't work out: the next pass hands over the
+            # recording instead (recordings.reconcile), if there is one.
+            recording.use_master = False
+            recording.master_deadline = timezone.now()
+            recording.import_attempts = 0
+            recording.import_requested_at = None
+            recording.error = f"Ferdig fil feilet: {error}"
+        else:
+            recording.state, recording.error = State.FAILED, error
+        recording.save(
+            update_fields=[
+                "state", "error", "use_master", "master_deadline", "import_attempts",
+                "import_requested_at",
+            ]
+        )  # fmt: skip
         return Response(status=204)
