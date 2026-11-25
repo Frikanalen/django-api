@@ -161,7 +161,7 @@ def test_the_jukebox_fills_what_the_show_leaves(with_master, station) -> None:
 
     jukebox = Video.objects.create(
         name="Kort snutt", organization=station, creator=station.editor,
-        duration=timedelta(seconds=50), proper_import=True, publish_on_web=True,
+        duration=timedelta(seconds=150), proper_import=True, publish_on_web=True,
     )  # fmt: skip
     VideoFile.objects.create(
         video=jukebox, variant=VideoFileVariant.ORIGINAL, filename="j/original/j.mp4"
@@ -172,7 +172,7 @@ def test_the_jukebox_fills_what_the_show_leaves(with_master, station) -> None:
     fetch = RecordingRequest.objects.get(record=False)
     assert _playing(booking) == [RecordingRequest.objects.get(record=True).video_id]  # a full hour
 
-    fetch.video.duration = timedelta(minutes=59, seconds=2)
+    fetch.video.duration = timedelta(minutes=57)
     fetch.video.save()
     _arrived(fetch)
     with_master.tick(None, oslo(19, 16))

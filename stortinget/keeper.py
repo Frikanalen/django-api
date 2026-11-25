@@ -86,6 +86,8 @@ FILL_AHEAD = datetime.timedelta(minutes=5)
 FILL_CHUNK = datetime.timedelta(minutes=30)
 SHORTEST_FILL = datetime.timedelta(minutes=5)
 FILL_JUKEBOX = "Etter Stortinget"
+# No clips or test pictures in the keeper's jukebox: nothing shorter.
+JUKEBOX_SHORTEST = datetime.timedelta(minutes=2)
 # The jukebox theme that fills the rest of the rerun's hour.
 RERUN_JUKEBOX = "Etter Democracy Now!"
 # Playout can leave black if an item changes just before it starts or ends.
@@ -400,7 +402,7 @@ class Keeper:
                     endtime=end,
                     lock_exempt=True,
                     # What the show leaves of the hour: from the jukebox.
-                    recipe=named_jukebox(organization, RERUN_JUKEBOX),
+                    recipe=named_jukebox(organization, RERUN_JUKEBOX, shortest=JUKEBOX_SHORTEST),
                     videos=[video],
                 )
                 KeeperBooking.objects.create(grant=grant, kind=Kind.DEMOCRACY_NOW_RERUN, day=today)
@@ -624,7 +626,9 @@ class Keeper:
             logger.warning("Filling %s from the jukebox", reserved)
             if self.config.dry_run:
                 continue
-            reserved.recipe = named_jukebox(first.organization, FILL_JUKEBOX)
+            reserved.recipe = named_jukebox(
+                first.organization, FILL_JUKEBOX, shortest=JUKEBOX_SHORTEST
+            )
             reserved.save(update_fields=["recipe", "updated_at"])
             services.refill(reserved, now=now)
         # Democracy Now! may still take 14-15 until its deadline.
@@ -665,7 +669,7 @@ class Keeper:
                 starttime=start,
                 endtime=end,
                 lock_exempt=True,
-                recipe=named_jukebox(organization, FILL_JUKEBOX),
+                recipe=named_jukebox(organization, FILL_JUKEBOX, shortest=JUKEBOX_SHORTEST),
             )
             KeeperBooking.objects.create(
                 grant=grant, kind=Kind.FILL, day=start.astimezone(OSLO).date()
