@@ -400,3 +400,27 @@ def test_a_failed_master_falls_back_to_the_recording(recording, mediamtx, ingest
     assert len(ingest) == 2
     data = _staff_client().get(reverse("api-recording-detail", args=[recording.pk])).json()
     assert data["masterUrl"] is None
+
+
+def test_a_fetch_only_request_records_nothing(recording, mediamtx, ingest, master) -> None:
+    recording.record = False
+    recording.save()
+    reconcile.reconcile(START + timedelta(minutes=30))
+    assert mediamtx.paths == {}
+    reconcile.reconcile(START + timedelta(hours=1, seconds=61))
+    recording.refresh_from_db()
+    assert recording.state == State.IMPORTING
+    master["up"] = True
+    reconcile.reconcile(START + timedelta(hours=1, minutes=45))
+    assert len(ingest) == 1
+    assert mediamtx.paths == {} and mediamtx.removed == []
+
+
+def test_a_fetch_only_request_fails_without_its_master(recording, mediamtx, ingest, master) -> None:
+    recording.record = False
+    recording.save()
+    reconcile.reconcile(START + timedelta(hours=1, seconds=61))
+    reconcile.reconcile(START + timedelta(hours=5))
+    recording.refresh_from_db()
+    assert recording.state == State.FAILED
+    assert ingest == [] and mediamtx.removed == []

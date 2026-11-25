@@ -393,11 +393,11 @@ FK_DEMOCRACY_NOW_DEADLINE = env.str("FK_DEMOCRACY_NOW_DEADLINE", default="13:58"
 # Democracy Now! recorded every one of these days and rerun from the
 # recording at this time ("" for no rerun).
 FK_DEMOCRACY_NOW_RERUN_AT = env.str("FK_DEMOCRACY_NOW_RERUN_AT", default="")
-# Democracy Now!'s own file of the day's show, a strftime pattern ("": none).
-# The rerun plays it rather than the recording once it is up.
+# Democracy Now!'s own file of the day's show, a strftime pattern ("": none),
+# fetched into a video of its own; the rerun switches to it once it plays.
 FK_DEMOCRACY_NOW_MASTER_URL = env.str("FK_DEMOCRACY_NOW_MASTER_URL", default="")
-# How long before the rerun to give up on the master and use the recording.
-FK_DEMOCRACY_NOW_MASTER_LEAD_MINUTES = env.int("FK_DEMOCRACY_NOW_MASTER_LEAD_MINUTES", default=75)
+# The latest the rerun switches to the master, in minutes before it airs.
+FK_DEMOCRACY_NOW_MASTER_LEAD_MINUTES = env.int("FK_DEMOCRACY_NOW_MASTER_LEAD_MINUTES", default=10)
 FK_DEMOCRACY_NOW_RERUN_DAYS = env.str("FK_DEMOCRACY_NOW_RERUN_DAYS", default="mon,tue,wed,thu,fri")
 # The European Commission's midday briefing from EbS, on the days EbS lists
 # one (0: not carried). Start "listed" (from the listed start) or "live"

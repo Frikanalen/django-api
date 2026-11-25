@@ -60,6 +60,15 @@ def jukebox_recipe(
     return recipe
 
 
+def named_jukebox(station: Organization, name: str) -> Recipe:
+    """The station's jukebox theme of that name (the whole pool), made the
+    first time it is asked for."""
+    existing = Recipe.objects.filter(
+        organization=station, kind=Recipe.Kind.JUKEBOX, jukebox_settings__name=name
+    ).first()
+    return existing or jukebox_recipe(station, name=name)
+
+
 def series_of(recipe: Recipe | None) -> Series | None:
     """The series a recipe follows, if it follows one."""
     if recipe is None or not hasattr(recipe, "series_source"):

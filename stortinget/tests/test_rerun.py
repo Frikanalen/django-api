@@ -6,7 +6,7 @@ from datetime import timedelta
 
 import pytest
 
-from fk.models import LiveSource, Organization, User
+from fk.models import LiveSource, Organization, User, VideoFile, VideoFileVariant
 from recordings.models import RecordingRequest
 from scheduling.models import AirtimeGrant
 from stortinget.feed import OSLO
@@ -93,11 +93,88 @@ def test_takes_over_the_stations_placeholder(keeper, station) -> None:
     assert placeholder.state == AirtimeGrant.State.CANCELLED
 
 
-def test_names_the_days_master(keeper) -> None:
-    keeper.config = dataclasses.replace(
-        keeper.config, democracy_now_master_url="https://mpeg.democracynow.org/dn%Y-%m%d-hd.mp4"
+MASTER = "https://mpeg.democracynow.org/dn%Y-%m%d-hd.mp4"
+
+
+@pytest.fixture
+def with_master(keeper) -> Keeper:
+    keeper.config = dataclasses.replace(keeper.config, democracy_now_master_url=MASTER)
+    return keeper
+
+
+def _playing(booking) -> list[int]:
+    return list(booking.grant.items.values_list("video_id", flat=True))
+
+
+def _arrived(request: RecordingRequest) -> None:
+    """Ingest archived the request's file."""
+    VideoFile.objects.create(
+        video=request.video, variant=VideoFileVariant.ORIGINAL, filename="x/original/x.mp4"
     )
-    keeper.tick(None, oslo(19, 6))
-    request = RecordingRequest.objects.get()
-    assert request.master_url == "https://mpeg.democracynow.org/dn2026-1119-hd.mp4"
-    assert request.master_deadline == oslo(19, 18, 45)
+    request.state = RecordingRequest.State.ARCHIVED
+    request.save()
+
+
+def test_fetches_the_days_master_into_a_video_of_its_own(with_master) -> None:
+    with_master.tick(None, oslo(19, 6))
+    recording = RecordingRequest.objects.get(record=True)
+    fetch = RecordingRequest.objects.get(record=False)
+    assert recording.master_url == ""
+    assert fetch.master_url == "https://mpeg.democracynow.org/dn2026-1119-hd.mp4"
+    assert fetch.master_deadline == oslo(19, 19, 50)
+    assert (fetch.starttime, fetch.endtime) == (oslo(19, 14), oslo(19, 15))
+    assert fetch.video.name == "Democracy Now! 19. november 2026"
+    assert recording.video.name == "Democracy Now! 19. november 2026 (opptak)"
+    booking = KeeperBooking.objects.get(kind=Kind.DEMOCRACY_NOW_RERUN)
+    assert _playing(booking) == [recording.video_id]
+
+
+def test_the_rerun_switches_to_the_master_once_it_plays(with_master) -> None:
+    with_master.tick(None, oslo(19, 6))
+    booking = KeeperBooking.objects.get(kind=Kind.DEMOCRACY_NOW_RERUN)
+    recording = RecordingRequest.objects.get(record=True)
+    fetch = RecordingRequest.objects.get(record=False)
+
+    _arrived(recording)
+    with_master.tick(None, oslo(19, 15, 30))
+    assert _playing(booking) == [recording.video_id]  # the master isn't here yet
+
+    _arrived(fetch)
+    with_master.tick(None, oslo(19, 16))
+    assert _playing(booking) == [fetch.video_id]
+    with_master.tick(None, oslo(19, 16, 1))  # and stays
+    assert _playing(booking) == [fetch.video_id]
+
+
+def test_no_switch_in_the_last_minutes(with_master) -> None:
+    with_master.tick(None, oslo(19, 6))
+    booking = KeeperBooking.objects.get(kind=Kind.DEMOCRACY_NOW_RERUN)
+    recording = RecordingRequest.objects.get(record=True)
+    _arrived(recording)
+    _arrived(RecordingRequest.objects.get(record=False))
+    with_master.tick(None, oslo(19, 19, 51))
+    assert _playing(booking) == [recording.video_id]
+
+
+def test_the_jukebox_fills_what_the_show_leaves(with_master, station) -> None:
+    from fk.models import Video
+
+    jukebox = Video.objects.create(
+        name="Kort snutt", organization=station, creator=station.editor,
+        duration=timedelta(seconds=50), proper_import=True, publish_on_web=True,
+    )  # fmt: skip
+    VideoFile.objects.create(
+        video=jukebox, variant=VideoFileVariant.ORIGINAL, filename="j/original/j.mp4"
+    )
+    with_master.tick(None, oslo(19, 6))
+    booking = KeeperBooking.objects.get(kind=Kind.DEMOCRACY_NOW_RERUN)
+    assert booking.grant.recipe.jukebox_settings.name == "Etter Democracy Now!"
+    fetch = RecordingRequest.objects.get(record=False)
+    assert _playing(booking) == [RecordingRequest.objects.get(record=True).video_id]  # a full hour
+
+    fetch.video.duration = timedelta(minutes=59, seconds=2)
+    fetch.video.save()
+    _arrived(fetch)
+    with_master.tick(None, oslo(19, 16))
+    assert _playing(booking)[0] == fetch.video_id
+    assert jukebox.pk in _playing(booking)[1:]
