@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.13.0](https://github.com/Frikanalen/django-api/compare/v3.12.1...v3.13.0) (2026-11-25)
+
+
+### Features
+
+* **airlog:** staff air log, a week of what aired, listed from the recorder's folder ([#189](https://github.com/Frikanalen/django-api/issues/189)) ([6d65ca8](https://github.com/Frikanalen/django-api/commit/6d65ca872d6459613eee88d64d1423949c2b8705))
+* **recordings:** prefer the source's master over the recording ([#184](https://github.com/Frikanalen/django-api/issues/184)) ([3ee70ab](https://github.com/Frikanalen/django-api/commit/3ee70ab49a758459209c1e7426cd2489e202ebda))
+* **scheduling:** deleting a video takes it out of grants and refills the time ([#188](https://github.com/Frikanalen/django-api/issues/188)) ([9d41097](https://github.com/Frikanalen/django-api/commit/9d410970295d96d905dfcdbb96193be7437c3a92))
+* **stortinget:** delete the DN rerun's videos once they're used ([#192](https://github.com/Frikanalen/django-api/issues/192)) ([cd523f7](https://github.com/Frikanalen/django-api/commit/cd523f752b215dccd057ed1beb3985821d683abc))
+* **stortinget:** DN rerun from the master, and the jukebox fills what the keeper's bookings leave ([#186](https://github.com/Frikanalen/django-api/issues/186)) ([cf501f0](https://github.com/Frikanalen/django-api/commit/cf501f01defb15d98e1f79f0f5b4162882bc999e))
+
+
+### Bug Fixes
+
+* **stortinget:** the DN rerun switches to the master even after a jukebox top-up ([#191](https://github.com/Frikanalen/django-api/issues/191)) ([8082f65](https://github.com/Frikanalen/django-api/commit/8082f6594a6beb688f9f986b70c7cb4d0b32d242))
+* **stortinget:** the keeper's jukebox airs nothing shorter than two minutes ([#187](https://github.com/Frikanalen/django-api/issues/187)) ([1620719](https://github.com/Frikanalen/django-api/commit/1620719a78ea786f292c2705dc13dd7b9311ceb4))
+
 ## [3.12.1](https://github.com/Frikanalen/django-api/compare/v3.12.0...v3.12.1) (2026-11-24)
 
 
