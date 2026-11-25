@@ -47,8 +47,8 @@ from django.db.models import Q
 from django.utils import timezone
 
 from fk.models import LiveSource, LiveTransmission, Scheduleitem, Video, VideoFileVariant
-from recordings.models import RecordingRequest
 from programming.services import named_jukebox
+from recordings.models import RecordingRequest
 from scheduling import services
 from scheduling.models import AirtimeGrant
 
