@@ -1,6 +1,7 @@
 from hmac import compare_digest
 
 from django.contrib.postgres.search import SearchQuery, SearchRank
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import F, Prefetch
 from django.db.models.functions import Greatest
 from django.http import Http404
@@ -18,6 +19,7 @@ from api.auth.permissions import (
     RequireTargetOrganizationMembership,
     can_administer_organization,
 )
+from api.grants.views import _drf
 from api.pagination import FkDefaultPagination
 from api.video.serializers import (
     IngestClaimSerializer,
@@ -29,6 +31,7 @@ from api.video.serializers import (
     coming_live_airings,
 )
 from fk.models import Category, IngestJob, Organization, Video
+from scheduling import services as scheduling
 
 
 def _with_live_airings(queryset):
@@ -109,6 +112,14 @@ class VideoDetail(generics.RetrieveUpdateDestroyAPIView):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
+
+    def perform_destroy(self, instance):
+        # Takes the video out of the grants that list it, and off the
+        # schedule, refilling what it leaves; see scheduling.services.
+        try:
+            scheduling.delete_video(instance)
+        except DjangoValidationError as error:
+            raise _drf(error) from error
 
 
 class VideoUploadTokenDetail(generics.RetrieveAPIView):

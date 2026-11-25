@@ -78,6 +78,7 @@ class GrantItem(models.Model):
 - `origin_slot` is provenance only. A grant copies the slot's time when issued, so editing or deleting a slot never moves an existing grant.
 - `locks_at` is per grant. Slot grants default to the Monday 00:00 before their week; an ad-hoc grant at short notice gets its own deadline, or is lock-exempt, instead of being born locked.
 - Videos and posters bring their own title and length. A graphic has no length; the item gives it one.
+- Deleting a video takes it out of every list that has yet to end: the list closes up, an automatic grant's recipe fills the time, and a compiled grant recompiles. Aired rows and the as-run log keep its title. The delete is refused while the video is on air or about to start, or while a grant that has aired it is still on air. `GrantItem.video` stays `PROTECT`, so a delete has to go through `scheduling.services.delete_video`; the API and the admin do.
 - Order is an integer position renumbered from 0 on every save: the API takes the whole list and replaces it in one transaction, so clients never send positions.
 - `Scheduleitem.weekly_slot` is replaced by `Scheduleitem.grant`, nullable for staff entries and historical rows.
 
@@ -442,3 +443,4 @@ Revisions to this record, with the pull requests that made each change. Version 
 | 2026-11-20 | The public grants API marks the station's own airtime. | django-api #165 | 3.12.0 |
 | 2026-11-23 | The jukebox draws on members' videos: see [ADR 0002](0002-jukebox-selection.md). | django-api #175, #176 | 3.12.0 |
 | 2026-11-23 | Record revised to describe the system as built. | | |
+| 2026-11-25 | Deleting a video takes it out of the lists that list it and refills the time. | django-api (this PR) | |
