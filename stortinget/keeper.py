@@ -612,6 +612,21 @@ class Keeper:
         if first is None or first.starttime > now or self._on_air(Kind.SITTING, today, now):
             return
         until = _at(today, config.hard_stop)
+        # The station's own reservation for the day, pushed back by the
+        # sitting, would air nothing: it fills from the jukebox too.
+        for reserved in AirtimeGrant.objects.active().filter(
+            organization=first.organization,
+            keeper_booking__isnull=True,
+            recipe=None,
+            starttime__gt=now,
+            starttime__lt=until,
+        ):
+            logger.warning("Filling %s from the jukebox", reserved)
+            if self.config.dry_run:
+                continue
+            reserved.recipe = named_jukebox(first.organization, FILL_JUKEBOX)
+            reserved.save(update_fields=["recipe", "updated_at"])
+            services.refill(reserved, now=now)
         # Democracy Now! may still take 14-15 until its deadline.
         dn_start = _at(today, config.democracy_now_start)
         dn_open = (

@@ -118,3 +118,14 @@ def test_democracy_now_isnt_kept_out_by_a_fill(keeper, station) -> None:
     keeper._democracy_now_if_due(oslo(13).date(), oslo(13, 45))
     assert AirtimeGrant.objects.active().filter(keeper_booking__kind=Kind.DEMOCRACY_NOW).exists()
     assert fills() == [(oslo(13, 40), oslo(14))]
+
+
+def test_the_stations_reservation_fills_from_the_jukebox_too(keeper, station) -> None:
+    sitting(station, oslo(10), oslo(14, 31, 5))
+    reserved = AirtimeGrant.objects.create(  # the 10-17 slot, pushed back by the sitting
+        organization=station, starttime=oslo(14, 45), endtime=oslo(17), locks_at=oslo(9)
+    )
+    keeper._fill_after_sittings(oslo(14, 31, 30))
+    reserved.refresh_from_db()
+    assert reserved.recipe.jukebox_settings.name == "Etter Stortinget"
+    assert fills() == [(oslo(14, 34), oslo(14, 45))]
