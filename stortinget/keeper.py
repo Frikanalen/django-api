@@ -453,6 +453,7 @@ class Keeper:
             or booking.grant.starttime - self.config.democracy_now_master_lead <= now
         ):
             return
+        self._fill_rerun(booking.grant, now)
         playing = list(booking.grant.items.exclude(video=None).values_list("video_id", flat=True))
         fetch = (
             RecordingRequest.objects.filter(

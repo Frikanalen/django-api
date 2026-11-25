@@ -315,8 +315,11 @@ def replace_video(
         items = list(grant.items.select_related("video", "poster", "graphic"))
         if not any(item.video_id == old.pk for item in items):
             return False
-        entries = [new if item.video_id == old.pk else _row_entry(item) for item in items]
-        pinned = sum(1 for item in items if item.pinned)
+        # The chosen (pinned) entries, `new` in `old`'s place; what the
+        # recipe filled around them is filled afresh below.
+        kept = [item for item in items if item.pinned or item.video_id == old.pk]
+        entries = [new if item.video_id == old.pk else _row_entry(item) for item in kept]
+        pinned = len(entries)
         try:
             validate_items(grant, entries, now)
         except ValidationError:
