@@ -117,6 +117,11 @@ class Config:
     # Democracy Now!'s rerun from the day's recording (None: no rerun).
     democracy_now_rerun_at: datetime.time | None = None
     democracy_now_rerun_days: frozenset[int] = frozenset({0, 1, 2, 3, 4})
+    # Democracy Now!'s own file of the day's show (a strftime pattern), which
+    # the rerun plays instead of the recording if it is up by
+    # democracy_now_master_lead before the rerun.
+    democracy_now_master_url: str = ""
+    democracy_now_master_lead: datetime.timedelta = datetime.timedelta(minutes=75)
 
     @classmethod
     def from_settings(cls) -> Config:
@@ -150,6 +155,10 @@ class Config:
             ),
             democracy_now_rerun_days=frozenset(
                 WEEKDAYS[d.strip()] for d in settings.FK_DEMOCRACY_NOW_RERUN_DAYS.split(",") if d
+            ),
+            democracy_now_master_url=settings.FK_DEMOCRACY_NOW_MASTER_URL,
+            democracy_now_master_lead=datetime.timedelta(
+                minutes=settings.FK_DEMOCRACY_NOW_MASTER_LEAD_MINUTES
             ),
         )
 
@@ -360,7 +369,20 @@ class Keeper:
                 for placeholder in placeholders:
                     self._cancel(placeholder, now, why="the Democracy Now! rerun takes it")
                 RecordingRequest.objects.create(
-                    source=source, video=video, starttime=record_start, endtime=record_end
+                    source=source,
+                    video=video,
+                    starttime=record_start,
+                    endtime=record_end,
+                    master_url=(
+                        today.strftime(config.democracy_now_master_url)
+                        if config.democracy_now_master_url
+                        else ""
+                    ),
+                    master_deadline=(
+                        start - config.democracy_now_master_lead
+                        if config.democracy_now_master_url
+                        else None
+                    ),
                 )
                 grant = services.create_grant(
                     organization=organization,

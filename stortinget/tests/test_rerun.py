@@ -1,5 +1,6 @@
 """Democracy Now! recorded every weekday and rerun at 20:00 from the recording."""
 
+import dataclasses
 import datetime
 from datetime import timedelta
 
@@ -90,3 +91,13 @@ def test_takes_over_the_stations_placeholder(keeper, station) -> None:
     assert (booking.grant.starttime, booking.grant.endtime) == (oslo(19, 20), oslo(19, 21))
     placeholder.refresh_from_db()
     assert placeholder.state == AirtimeGrant.State.CANCELLED
+
+
+def test_names_the_days_master(keeper) -> None:
+    keeper.config = dataclasses.replace(
+        keeper.config, democracy_now_master_url="https://mpeg.democracynow.org/dn%Y-%m%d-hd.mp4"
+    )
+    keeper.tick(None, oslo(19, 6))
+    request = RecordingRequest.objects.get()
+    assert request.master_url == "https://mpeg.democracynow.org/dn2026-1119-hd.mp4"
+    assert request.master_deadline == oslo(19, 18, 45)
