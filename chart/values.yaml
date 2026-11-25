@@ -56,6 +56,17 @@ stortingetKeeper:
 recordingKeeper:
   enabled: false
 
+# The air log (airlog app): the NFS export live-stream-packager's airlog
+# recorder writes to (infra roles/air_log_storage), mounted read-only into
+# its own small deployment (templates/deployment-airlog.yaml), which lists it
+# for staff and serves its segments under /api/airlog. No server: no air log.
+airlog:
+  nfs:
+    server: ""
+    path: ""
+  # live-stream-packager's airlog.segmentSeconds.
+  segmentSeconds: 10
+
 podDisruptionBudget:
   enabled: true
   maxUnavailable: 1

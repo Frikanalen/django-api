@@ -7,6 +7,7 @@ from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.routers import SimpleRouter
 
 import agenda.tvanytime.views as tvanytime_views
+import airlog.views as airlog_views
 import api.auth.views as auth_views
 import api.grant_request.views as grant_request_views
 import api.grants.views as grant_views
@@ -171,6 +172,14 @@ api_patterns: list[URLPattern | URLResolver] = [
     # asks for whichever video needs work next, so there is no id to hang
     # it off.
     path("ingest/claim", video_views.IngestClaim.as_view(), name="api-ingest-claim"),
+    # The air log (staff only): what aired, a week back.
+    path("airlog/coverage", airlog_views.AirlogCoverage.as_view(), name="api-airlog-coverage"),
+    path("airlog/playlist.m3u8", airlog_views.AirlogPlaylist.as_view(), name="api-airlog-playlist"),
+    path(
+        "airlog/segments/<path:path>",
+        airlog_views.AirlogSegment.as_view(),
+        name="api-airlog-segment",
+    ),
     path(
         "recordings/<int:pk>",
         recording_views.RecordingDetail.as_view(),

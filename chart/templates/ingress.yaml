@@ -29,6 +29,16 @@ spec:
                 name: django-api-events
                 port:
                   number: 8080
+          {{- if .Values.airlog.nfs.server }}
+          # Ahead of /api: the air log is served by its own deployment.
+          - path: /api/airlog
+            pathType: Prefix
+            backend:
+              service:
+                name: django-api-airlog
+                port:
+                  number: 8080
+          {{- end }}
           - path: /api
             pathType: Prefix
             backend:

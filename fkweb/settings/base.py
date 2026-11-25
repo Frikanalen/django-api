@@ -54,6 +54,11 @@ FK_PROMETHEUS_URL = env.str("FK_PROMETHEUS_URL", default="")
 # output, for the monitor a crew keeps up at a live transmission. Empty
 # where the receiver has no programme return.
 FK_PROGRAM_RETURN_PATH = env.str("FK_PROGRAM_RETURN_PATH", default="")
+# The air log (airlog app): where live-stream-packager's recorder keeps a
+# week of what the stream carried, mounted read-only. Empty: no air log.
+FK_AIRLOG_DIR = env.str("FK_AIRLOG_DIR", default="")
+# The recorder's segment length (live-stream-packager airlog.segmentSeconds).
+FK_AIRLOG_SEGMENT_SECONDS = env.int("FK_AIRLOG_SEGMENT_SECONDS", default=10)
 # Fernet keys for pulled sources' addresses, comma-separated: the first
 # encrypts, the rest still decrypt (rotation). Per environment, from OpenBao.
 # Unset, no source can be made a pulled one.
@@ -368,6 +373,7 @@ LOCAL_APPS = (
     "scheduling",
     "stortinget",
     "recordings",
+    "airlog",
     "api",
     "news",
 )

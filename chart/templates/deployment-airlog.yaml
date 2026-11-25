@@ -1,0 +1,74 @@
+{{- if .Values.airlog.nfs.server }}
+# The same image as the main deployment, serving only /api/airlog (the air
+# log, staff only) from the recorder's NFS export, mounted read-only. Apart
+# from the main API pods so that they never depend on file01: an NFS server
+# that is away can hold a pod in ContainerCreating, and here that only takes
+# the air log with it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-airlog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: django-api-airlog
+  minReadySeconds: 5
+  template:
+    metadata:
+      annotations:
+        linkerd.io/inject: enabled
+      labels:
+        app: django-api-airlog
+    spec:
+      containers:
+        - name: django
+          image: "{{ .Values.django.image.repository }}:{{ .Values.django.image.tag | default (printf "v%s" .Chart.Version) }}"
+          imagePullPolicy: {{ .Values.django.image.pullPolicy }}
+          # Not start.sh: migrations and static files belong to the main
+          # deployment.
+          command: ["gunicorn", "fkweb.wsgi:application", "--bind", "0.0.0.0:8080", "--threads", "8"]
+          env:
+            {{- include "django.env" . | nindent 12 }}
+            - name: FK_AIRLOG_DIR
+              value: /airlog
+            - name: FK_AIRLOG_SEGMENT_SECONDS
+              value: {{ .Values.airlog.segmentSeconds | quote }}
+          ports:
+            - name: http-airlog
+              containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: http-airlog
+            periodSeconds: 10
+          volumeMounts:
+            - name: airlog
+              mountPath: /airlog
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 192Mi
+      volumes:
+        - name: airlog
+          nfs:
+            server: {{ .Values.airlog.nfs.server | quote }}
+            path: {{ .Values.airlog.nfs.path | quote }}
+            readOnly: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: django-api-airlog
+  labels:
+    app: django-api-airlog
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http-airlog
+  selector:
+    app: django-api-airlog
+{{- end }}
