@@ -141,7 +141,12 @@ def playlist(start: datetime.datetime, end: datetime.datetime, now: datetime.dat
 def file(path: str) -> Path | None:
     """The file behind a segment path from the API, if it names one."""
     base = root()
-    if base is None or not SEGMENT_PATH.match(path):
+    if base is None or not SEGMENT_PATH.fullmatch(path):
         return None
-    candidate = base / path
-    return candidate if candidate.is_file() else None
+    # The pattern already rules out "..", but check the normalised path stays
+    # under the air log folder all the same.
+    folder = os.path.realpath(base)
+    candidate = os.path.realpath(os.path.join(folder, path))
+    if not candidate.startswith(folder + os.sep):
+        return None
+    return Path(candidate) if os.path.isfile(candidate) else None
