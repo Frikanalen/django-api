@@ -154,3 +154,27 @@ def test_no_switch_in_the_last_minutes(with_master) -> None:
     _arrived(RecordingRequest.objects.get(record=False))
     with_master.tick(None, oslo(19, 19, 51))
     assert _playing(booking) == [recording.video_id]
+
+
+def test_the_jukebox_fills_what_the_show_leaves(with_master, station) -> None:
+    from fk.models import Video
+
+    jukebox = Video.objects.create(
+        name="Kort snutt", organization=station, creator=station.editor,
+        duration=timedelta(seconds=50), proper_import=True, publish_on_web=True,
+    )  # fmt: skip
+    VideoFile.objects.create(
+        video=jukebox, variant=VideoFileVariant.ORIGINAL, filename="j/original/j.mp4"
+    )
+    with_master.tick(None, oslo(19, 6))
+    booking = KeeperBooking.objects.get(kind=Kind.DEMOCRACY_NOW_RERUN)
+    assert booking.grant.recipe.jukebox_settings.name == "Etter Democracy Now!"
+    fetch = RecordingRequest.objects.get(record=False)
+    assert _playing(booking) == [RecordingRequest.objects.get(record=True).video_id]  # a full hour
+
+    fetch.video.duration = timedelta(minutes=59, seconds=2)
+    fetch.video.save()
+    _arrived(fetch)
+    with_master.tick(None, oslo(19, 16))
+    assert _playing(booking)[0] == fetch.video_id
+    assert jukebox.pk in _playing(booking)[1:]

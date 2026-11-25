@@ -323,6 +323,25 @@ def replace_video(
             return False
         _replace_items(grant, entries, pinned=pinned)
         grant.save(update_fields=["updated_at"])
+        if grant.recipe is not None:  # what the new video leaves, filled afresh
+            _fill(grant, _context_for([grant], now), now)
+        if _on_schedule(grant, now):
+            compile_grant(grant, now)
+    return True
+
+
+def refill(grant: AirtimeGrant, *, now: datetime | None = None) -> bool:
+    """Fill what the grant's list leaves of its window from its recipe
+    again, before it goes on air (say, once a video's real duration is
+    known). Returns whether the list changed."""
+    now = now or timezone.now()
+    with transaction.atomic():
+        grant = AirtimeGrant.objects.select_for_update().get(pk=grant.pk)
+        if grant.recipe is None or grant.starttime <= now or grant.state == State.CANCELLED:
+            return False
+        if not _fill(grant, _context_for([grant], now), now):
+            return False
+        grant.save(update_fields=["updated_at"])
         if _on_schedule(grant, now):
             compile_grant(grant, now)
     return True

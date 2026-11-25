@@ -48,6 +48,7 @@ from django.utils import timezone
 
 from fk.models import LiveSource, LiveTransmission, Scheduleitem, Video, VideoFileVariant
 from recordings.models import RecordingRequest
+from programming.services import named_jukebox
 from scheduling import services
 from scheduling.models import AirtimeGrant
 
@@ -76,6 +77,8 @@ BRIEFING_NEVER_BEGAN = datetime.timedelta(minutes=30)
 BRIEFING_GRID_GRACE = datetime.timedelta(minutes=2)
 # Set up Democracy Now!'s recording no later than this before it starts.
 RECORDING_LEAD = datetime.timedelta(minutes=5)
+# The jukebox theme that fills the rest of the rerun's hour.
+RERUN_JUKEBOX = "Etter Democracy Now!"
 # Playout can leave black if an item changes just before it starts or ends.
 BOUNDARY_GUARD = datetime.timedelta(seconds=10)
 
@@ -188,6 +191,8 @@ class Keeper:
     _briefing_over: set[datetime.date] = field(default_factory=set)
     _briefing_skipped: set[datetime.date] = field(default_factory=set)
     _rerun_skipped: set[datetime.date] = field(default_factory=set)
+    # The rerun grants last filled, by the lengths of what they play.
+    _rerun_filled: dict[int, tuple] = field(default_factory=dict)
 
     # -- The loop calls this ------------------------------------------------
 
@@ -373,6 +378,8 @@ class Keeper:
                     starttime=start,
                     endtime=end,
                     lock_exempt=True,
+                    # What the show leaves of the hour: from the jukebox.
+                    recipe=named_jukebox(organization, RERUN_JUKEBOX),
                     videos=[video],
                 )
                 KeeperBooking.objects.create(grant=grant, kind=Kind.DEMOCRACY_NOW_RERUN, day=today)
@@ -395,6 +402,20 @@ class Keeper:
         if earlier is not None:
             video.categories.set(earlier.categories.all())
         return video
+
+    def _fill_rerun(self, grant: AirtimeGrant, now: datetime.datetime) -> None:
+        """Fill the rerun's hour again whenever what it plays changes length
+        (the show's real duration arrives with its file)."""
+        lengths = tuple(
+            grant.items.exclude(video=None)
+            .filter(pinned=True)
+            .values_list("video__duration", flat=True)
+        )
+        if self._rerun_filled.get(grant.pk) == lengths:
+            return
+        self._rerun_filled[grant.pk] = lengths
+        if services.refill(grant, now=now):
+            logger.info("Filled the rest of the Democracy Now! rerun from the jukebox")
 
     def _democracy_now_master(self, now: datetime.datetime) -> None:
         """Switch today's rerun to Democracy Now!'s own file once it plays."""
