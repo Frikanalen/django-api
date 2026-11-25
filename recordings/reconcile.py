@@ -17,7 +17,8 @@ Each pass (once every half minute or so, see manage.py keep_recordings):
 - a request that names a master (the source's own file, published some
   time after the programme) waits for it: once the file is up, ingest
   archives that instead of the recording; past the master's deadline it
-  archives the recording after all, if anything was recorded.
+  archives the recording after all, if anything was recorded. A request
+  that doesn't record (record=False) only waits for its master.
 
 MediaMTX writes segments by the clock; ingest cuts the exact window out of
 them through the playback server, so the margins never reach the file.
@@ -63,6 +64,7 @@ def path_config(request: RecordingRequest) -> dict:
 def reconcile(now: datetime.datetime | None = None) -> None:
     now = now or timezone.now()
     due = RecordingRequest.objects.select_related("source").filter(
+        record=True,
         state__in=(State.WAITING, State.RECORDING),
         starttime__lte=now + MARGIN,
         endtime__gt=now - MARGIN,
@@ -86,7 +88,7 @@ def reconcile(now: datetime.datetime | None = None) -> None:
             RecordingRequest.objects.filter(pk=request.pk).update(state=State.RECORDING)
     # MediaMTX's playback serves a path only while it is configured, so one
     # waiting for ingest stays, but stops recording (and reading its source).
-    for request in RecordingRequest.objects.filter(state=State.IMPORTING):
+    for request in RecordingRequest.objects.filter(state=State.IMPORTING, record=True):
         stray.discard(request.path)
         if not _stopped(receiver.path_config(request.path)):
             _stop(request)
@@ -99,7 +101,8 @@ def reconcile(now: datetime.datetime | None = None) -> None:
     )
     for request in finished:
         if request.master_url:  # whatever was recorded, wait for the master (below)
-            _stop(request)
+            if request.record:
+                _stop(request)
             request.state = State.IMPORTING
             request.save(update_fields=["state"])
             continue
@@ -145,14 +148,15 @@ def _hand_over(request: RecordingRequest, now: datetime.datetime) -> None:
             request.save(update_fields=["use_master"])
             hand_to_ingest(request, now)
         return
-    if receiver.recorded(request.path):
+    if request.record and receiver.recorded(request.path):
         logger.warning(
             "No master for %s by %s; using the recording", request, request.master_deadline
         )
         hand_to_ingest(request, now)
         return
     logger.error("Neither a master nor a recording for %s", request)
-    receiver.remove_path(request.path)
+    if request.record:
+        receiver.remove_path(request.path)
     request.state = State.FAILED
     request.error = (request.error + " " if request.error else "") + (
         "Ingen ferdig fil før fristen, og ingenting ble tatt opp."

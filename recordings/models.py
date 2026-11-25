@@ -43,6 +43,8 @@ class RecordingRequest(models.Model):
     import_attempts = models.PositiveSmallIntegerField(default=0)
     import_requested_at = models.DateTimeField(null=True, blank=True)
     error = models.TextField(blank=True, default="")
+    # False: nothing is recorded; the request only fetches its master.
+    record = models.BooleanField(default=True)
     # The source's own file of the window, preferred over the recording once
     # it is up; waited for until master_deadline, then the recording is used.
     master_url = models.URLField(max_length=500, blank=True, default="")

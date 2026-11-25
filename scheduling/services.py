@@ -301,6 +301,33 @@ def set_items(
     return grant
 
 
+def replace_video(
+    grant: AirtimeGrant, old: Video, new: Video, *, now: datetime | None = None
+) -> bool:
+    """Put `new` in `old`'s place in the grant's list, and on the schedule
+    if the grant is there, before the grant goes on air. Returns whether
+    it did: not once the grant has begun, nor if `new` doesn't fit."""
+    now = now or timezone.now()
+    with transaction.atomic():
+        grant = AirtimeGrant.objects.select_for_update().get(pk=grant.pk)
+        if grant.starttime <= now or grant.state not in (State.OPEN, State.LOCKED, State.COMPILED):
+            return False
+        items = list(grant.items.select_related("video", "poster", "graphic"))
+        if not any(item.video_id == old.pk for item in items):
+            return False
+        entries = [new if item.video_id == old.pk else _row_entry(item) for item in items]
+        pinned = sum(1 for item in items if item.pinned)
+        try:
+            validate_items(grant, entries, now)
+        except ValidationError:
+            return False
+        _replace_items(grant, entries, pinned=pinned)
+        grant.save(update_fields=["updated_at"])
+        if _on_schedule(grant, now):
+            compile_grant(grant, now)
+    return True
+
+
 def make_automatic(grant: AirtimeGrant, *, user, now: datetime | None = None) -> AirtimeGrant:
     """Unpin everything and let the grant's recipe program the whole window."""
     return set_items(grant, [], user=user, now=now, automatic=True)

@@ -46,7 +46,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from fk.models import LiveSource, LiveTransmission, Scheduleitem, Video
+from fk.models import LiveSource, LiveTransmission, Scheduleitem, Video, VideoFileVariant
 from recordings.models import RecordingRequest
 from scheduling import services
 from scheduling.models import AirtimeGrant
@@ -117,11 +117,11 @@ class Config:
     # Democracy Now!'s rerun from the day's recording (None: no rerun).
     democracy_now_rerun_at: datetime.time | None = None
     democracy_now_rerun_days: frozenset[int] = frozenset({0, 1, 2, 3, 4})
-    # Democracy Now!'s own file of the day's show (a strftime pattern), which
-    # the rerun plays instead of the recording if it is up by
-    # democracy_now_master_lead before the rerun.
+    # Democracy Now!'s own file of the day's show (a strftime pattern),
+    # fetched into a video of its own; the rerun plays it instead of the
+    # recording if it is playable by democracy_now_master_lead before.
     democracy_now_master_url: str = ""
-    democracy_now_master_lead: datetime.timedelta = datetime.timedelta(minutes=75)
+    democracy_now_master_lead: datetime.timedelta = datetime.timedelta(minutes=10)
 
     @classmethod
     def from_settings(cls) -> Config:
@@ -196,6 +196,7 @@ class Keeper:
         which neither confirms nor contradicts anything)."""
         now = now or timezone.now()
         self._democracy_now_rerun(now)
+        self._democracy_now_master(now)
         if snapshot is not None:
             self._book_ahead(snapshot, now)
         today = now.astimezone(OSLO).date()
@@ -348,42 +349,25 @@ class Keeper:
                 organization = source.organization
                 if organization.editor is None:
                     raise NoRoom(f"{organization} has no responsible editor")
-                video = Video.objects.create(
-                    name=(
-                        f"Democracy Now! {today.day}. {MONTHS[today.month - 1]} {today.year} "
-                        "(opptak)"
-                    ),
-                    organization=organization,
-                    creator=organization.editor,
-                    duration=config.democracy_now_length,
-                    ref_url="https://www.democracynow.org/",
-                    spoken_language="en",
-                )
-                earlier = (
-                    Video.objects.filter(keeper_kind_filter(Kind.DEMOCRACY_NOW))
-                    .order_by("-pk")
-                    .first()
-                )
-                if earlier is not None:
-                    video.categories.set(earlier.categories.all())
+                title = f"Democracy Now! {today.day}. {MONTHS[today.month - 1]} {today.year}"
+                video = self._democracy_now_video(organization, f"{title} (opptak)")
                 for placeholder in placeholders:
                     self._cancel(placeholder, now, why="the Democracy Now! rerun takes it")
                 RecordingRequest.objects.create(
-                    source=source,
-                    video=video,
-                    starttime=record_start,
-                    endtime=record_end,
-                    master_url=(
-                        today.strftime(config.democracy_now_master_url)
-                        if config.democracy_now_master_url
-                        else ""
-                    ),
-                    master_deadline=(
-                        start - config.democracy_now_master_lead
-                        if config.democracy_now_master_url
-                        else None
-                    ),
+                    source=source, video=video, starttime=record_start, endtime=record_end
                 )
+                if config.democracy_now_master_url:
+                    # The show as Democracy Now! publishes it, into a video
+                    # of its own: the rerun switches to it once it plays.
+                    RecordingRequest.objects.create(
+                        source=source,
+                        video=self._democracy_now_video(organization, title),
+                        starttime=record_start,
+                        endtime=record_end,
+                        record=False,
+                        master_url=today.strftime(config.democracy_now_master_url),
+                        master_deadline=start - config.democracy_now_master_lead,
+                    )
                 grant = services.create_grant(
                     organization=organization,
                     starttime=start,
@@ -395,6 +379,60 @@ class Keeper:
         except NoRoom as error:
             logger.error("Not rerunning Democracy Now!: %s", error)
             self._rerun_skipped.add(today)
+
+    def _democracy_now_video(self, organization, name: str) -> Video:
+        video = Video.objects.create(
+            name=name,
+            organization=organization,
+            creator=organization.editor,
+            duration=self.config.democracy_now_length,
+            ref_url="https://www.democracynow.org/",
+            spoken_language="en",
+        )
+        earlier = (
+            Video.objects.filter(keeper_kind_filter(Kind.DEMOCRACY_NOW)).order_by("-pk").first()
+        )
+        if earlier is not None:
+            video.categories.set(earlier.categories.all())
+        return video
+
+    def _democracy_now_master(self, now: datetime.datetime) -> None:
+        """Switch today's rerun to Democracy Now!'s own file once it plays."""
+        today = now.astimezone(OSLO).date()
+        booking = (
+            KeeperBooking.objects.filter(kind=Kind.DEMOCRACY_NOW_RERUN, day=today)
+            .select_related("grant")
+            .first()
+        )
+        if (
+            booking is None
+            or booking.grant.starttime - self.config.democracy_now_master_lead <= now
+        ):
+            return
+        playing = list(booking.grant.items.exclude(video=None).values_list("video_id", flat=True))
+        fetch = (
+            RecordingRequest.objects.filter(
+                record=False,
+                state=RecordingRequest.State.ARCHIVED,
+                video__in=Video.objects.filter(
+                    videofile__variant__in=(VideoFileVariant.ORIGINAL, VideoFileVariant.BROADCAST)
+                ),
+                starttime=_at(today, self.config.democracy_now_start),
+                source_id=self.config.democracy_now_source_id,
+            )
+            .exclude(video_id__in=playing)
+            .select_related("video")
+            .first()
+        )
+        if fetch is None:
+            return
+        recording = RecordingRequest.objects.filter(
+            record=True, video_id__in=playing, starttime=fetch.starttime
+        ).first()
+        if recording is None:
+            return
+        if services.replace_video(booking.grant, recording.video, fetch.video, now=now):
+            logger.warning("The Democracy Now! rerun plays %s now", fetch.video)
 
     # -- The EU midday briefing ---------------------------------------------
 
