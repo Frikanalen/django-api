@@ -30,7 +30,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from fk.models import Organization, Scheduleitem, Video
+from fk.models import AsRun, Organization, Scheduleitem, Video
 from programming.generators import plan
 from programming.models import Recipe
 from programming.selection import ScheduleContext
@@ -765,6 +765,89 @@ def delete_poster(poster: Poster, *, user, now: datetime | None = None) -> None:
             )
         GrantItem.objects.filter(poster=poster).delete()
         poster.delete()
+
+
+def delete_video(video: Video, *, now: datetime | None = None) -> None:
+    """Delete a video, and take it out of every list and off the schedule.
+
+    Coming grants forget it: the list closes up, an automatic grant's
+    recipe fills the time it leaves, and a compiled grant is recompiled.
+    A grant on air loses it from what is still to come, its started rows
+    left as they are. Staff entries yet to air go.
+
+    What has aired keeps its place in the history: past schedule rows and
+    the as-run log keep the title, without the video. Lists that have aired
+    forget it, as they do a deleted poster.
+
+    Refused while the video is on air or about to start (within
+    :data:`ON_AIR_MARGIN`), and while a grant that has already aired it is
+    still on air: the started part of that grant must stay as it aired.
+    Both are over within the hour or two the grant lasts.
+    """
+    now = now or timezone.now()
+    with transaction.atomic():
+        video = Video.objects.select_for_update().get(pk=video.pk)
+        rows = Scheduleitem.objects.filter(video=video)
+        on_air = rows.overlapping(now, now + ON_AIR_MARGIN).order_by("starttime").first()
+        if on_air is not None:
+            raise ValidationError(
+                f"Videoen er på lufta nå (til {_clock(on_air.endtime)}). "
+                "Du kan slette den når den er ferdig."
+            )
+        running = (
+            AirtimeGrant.objects.filter(
+                schedule_items__video=video,
+                schedule_items__starttime__lte=now,
+                endtime__gt=now,
+            )
+            .order_by("endtime")
+            .first()
+        )
+        if running is not None:
+            raise ValidationError(
+                "Videoen har gått i en sending som fortsatt pågår "
+                f"(til {_clock(running.endtime)}). Du kan slette den når sendingen er ferdig."
+            )
+
+        listing = (
+            GrantItem.objects.filter(video=video, grant__endtime__gt=now)
+            .exclude(grant__state=State.CANCELLED)
+            .values("grant_id")
+        )
+        grants = list(
+            AirtimeGrant.objects.select_for_update(of=("self",))
+            .filter(pk__in=listing)
+            .select_related("organization", "recipe")
+            .order_by("starttime")
+        )
+        for grant in grants:
+            items = list(grant.items.select_related("video", "poster", "graphic"))
+            kept = [item for item in items if item.video_id != video.pk]
+            pinned = sum(1 for item in kept if item.pinned)
+            _replace_items(grant, [item.entry for item in kept], pinned=pinned)
+            grant.save(update_fields=["updated_at"])
+        # Lists that have aired, and cancelled ones, simply forget it.
+        GrantItem.objects.filter(video=video).delete()
+
+        # What is still to come goes; compile_grant rewrites a grant's own
+        # rows below, and a staff entry has nothing to stand in for it.
+        rows.filter(starttime__gt=now).delete()
+        # What aired keeps its title once the video is gone.
+        rows.filter(default_name="").update(default_name=video.name[:255])
+        AsRun.objects.filter(video=video, program_name="").update(program_name=video.name[:160])
+        video.delete()
+
+        # The video is gone, so a recipe can't pick it again.
+        for grant in grants:
+            if grant.recipe is not None and grant.starttime > now + ON_AIR_MARGIN:
+                _fill(grant, _context_for([grant], now), now)
+            if _on_schedule(grant, now):
+                compile_grant(grant, now)
+        transaction.on_commit(cache.clear)
+
+
+def _clock(at: datetime) -> str:
+    return f"{at.astimezone(broadcast_time.TZ):%H:%M}"
 
 
 def _when(grant: AirtimeGrant) -> str:

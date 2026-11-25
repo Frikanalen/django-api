@@ -10,6 +10,7 @@ from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.text import capfirst
 
 from fk.forms import UserChangeForm, UserCreationForm
 from fk.models import (
@@ -92,6 +93,28 @@ class VideoAdmin(admin.ModelAdmin):
     inlines = [VideoFileInline, ProgramImageInline, LiveTransmissionInline]
     search_fields = ["name", "description", "organization__name", "creator__email"]
     list_filter = ("is_banned", "proper_import", "is_filler", "publish_on_web", "has_tono_records")
+
+    # Grant lists refer to videos with PROTECT, so a delete goes through
+    # the scheduling service, which takes the video out of them first. The
+    # confirmation page need not list them as blocking.
+    def get_deleted_objects(self, objs, request):
+        from scheduling.models import GrantItem
+
+        to_delete, model_count, perms_needed, protected = super().get_deleted_objects(objs, request)
+        listed = f"{capfirst(GrantItem._meta.verbose_name)}: "
+        protected = [p for p in protected if not str(p).startswith(listed)]
+        return to_delete, model_count, perms_needed, protected
+
+    def delete_model(self, request, obj):
+        from scheduling.services import delete_video
+
+        delete_video(obj)
+
+    def delete_queryset(self, request, queryset):
+        from scheduling.services import delete_video
+
+        for video in queryset:
+            delete_video(video)
 
 
 class OrganizationAdmin(admin.ModelAdmin):
