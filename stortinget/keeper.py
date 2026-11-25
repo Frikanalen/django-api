@@ -42,6 +42,7 @@ from dataclasses import dataclass, field
 
 from django.conf import settings
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -88,6 +89,8 @@ SHORTEST_FILL = datetime.timedelta(minutes=5)
 FILL_JUKEBOX = "Etter Stortinget"
 # No clips or test pictures in the keeper's jukebox: nothing shorter.
 JUKEBOX_SHORTEST = datetime.timedelta(minutes=2)
+# How long after a rerun ends the videos it was made of are deleted.
+CLEAN_UP_AFTER = datetime.timedelta(minutes=5)
 # The jukebox theme that fills the rest of the rerun's hour.
 RERUN_JUKEBOX = "Etter Democracy Now!"
 # Playout can leave black if an item changes just before it starts or ends.
@@ -221,6 +224,7 @@ class Keeper:
         self._democracy_now_rerun(now)
         self._democracy_now_master(now)
         self._fill_after_sittings(now)
+        self._clean_up_reruns(now)
         if snapshot is not None:
             self._book_ahead(snapshot, now)
         today = now.astimezone(OSLO).date()
@@ -426,6 +430,34 @@ class Keeper:
             video.categories.set(earlier.categories.all())
         return video
 
+    def _clean_up_reruns(self, now: datetime.datetime) -> None:
+        """Delete the videos a Democracy Now! rerun was made of once it has
+        aired: they were for that evening, not for the jukebox."""
+        if not self.config.democracy_now_source_id or self.config.dry_run:
+            return
+        aired = KeeperBooking.objects.filter(
+            kind=Kind.DEMOCRACY_NOW_RERUN, grant__endtime__lte=now - CLEAN_UP_AFTER
+        ).values_list("day", flat=True)
+        starts = [_at(day, self.config.democracy_now_start) for day in aired]
+        for request in RecordingRequest.objects.filter(
+            source_id=self.config.democracy_now_source_id,
+            starttime__in=starts,
+            state__in=(
+                RecordingRequest.State.ARCHIVED,
+                RecordingRequest.State.FAILED,
+                RecordingRequest.State.CANCELLED,
+            ),
+        ).select_related("video"):
+            self._delete(request.video, now)
+
+    def _delete(self, video: Video, now: datetime.datetime) -> None:
+        try:
+            services.delete_video(video, now=now)
+        except ValidationError as error:  # on air: next time
+            logger.info("Not deleting %s yet: %s", video, error)
+            return
+        logger.warning("Deleted %s", video)
+
     def _fill_rerun(self, grant: AirtimeGrant, now: datetime.datetime) -> None:
         """Fill the rerun's hour again whenever what it plays changes length
         (the show's real duration arrives with its file)."""
@@ -478,6 +510,8 @@ class Keeper:
             return
         if services.replace_video(booking.grant, recording.video, fetch.video, now=now):
             logger.warning("The Democracy Now! rerun plays %s now", fetch.video)
+            # The recording is no longer wanted: gone before the jukebox finds it.
+            self._delete(recording.video, now)
 
     # -- The EU midday briefing ---------------------------------------------
 

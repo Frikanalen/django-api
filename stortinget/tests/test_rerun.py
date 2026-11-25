@@ -207,3 +207,23 @@ def test_switches_even_when_the_jukebox_filled_after_the_recording(with_master, 
     _arrived(fetch)
     with_master.tick(None, oslo(19, 16))
     assert _playing(booking) == [fetch.video_id]  # no 10-minute clip fits what is left
+
+
+def test_the_keepers_videos_go_once_used(with_master) -> None:
+    from fk.models import Video
+
+    with_master.tick(None, oslo(19, 6))
+    recording = RecordingRequest.objects.get(record=True)
+    fetch = RecordingRequest.objects.get(record=False)
+    _arrived(recording)
+    _arrived(fetch)
+    with_master.tick(None, oslo(19, 16))
+    # Replaced by the master: the recording is deleted at once.
+    assert not Video.objects.filter(pk=recording.video_id).exists()
+    assert Video.objects.filter(pk=fetch.video_id).exists()
+
+    with_master.tick(None, oslo(19, 21, 2))  # just after the rerun
+    assert Video.objects.filter(pk=fetch.video_id).exists()
+    with_master.tick(None, oslo(19, 21, 5))
+    assert not Video.objects.filter(pk=fetch.video_id).exists()
+    assert not RecordingRequest.objects.exists()
