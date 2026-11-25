@@ -77,6 +77,15 @@ BRIEFING_NEVER_BEGAN = datetime.timedelta(minutes=30)
 BRIEFING_GRID_GRACE = datetime.timedelta(minutes=2)
 # Set up Democracy Now!'s recording no later than this before it starts.
 RECORDING_LEAD = datetime.timedelta(minutes=5)
+# The time a sitting leaves (on a carry day, up to the hard stop) is filled
+# from the jukebox, in grants of at most FILL_CHUNK made FILL_LEAD before
+# they begin, none shorter than SHORTEST_FILL. Any other booking takes their
+# time back.
+FILL_LEAD = datetime.timedelta(minutes=2)
+FILL_AHEAD = datetime.timedelta(minutes=5)
+FILL_CHUNK = datetime.timedelta(minutes=30)
+SHORTEST_FILL = datetime.timedelta(minutes=5)
+FILL_JUKEBOX = "Etter Stortinget"
 # The jukebox theme that fills the rest of the rerun's hour.
 RERUN_JUKEBOX = "Etter Democracy Now!"
 # Playout can leave black if an item changes just before it starts or ends.
@@ -177,6 +186,13 @@ def _whole(moment: datetime.datetime) -> datetime.datetime:
     return moment
 
 
+def _minute(moment: datetime.datetime) -> datetime.datetime:
+    """Rounded up to a whole minute."""
+    if moment.second or moment.microsecond:
+        moment = moment.replace(second=0, microsecond=0) + datetime.timedelta(minutes=1)
+    return moment
+
+
 def _norwegian_date(day: datetime.date) -> str:
     return f"{DAY_NAMES[day.weekday()]} {day.day}. {MONTHS[day.month - 1]} {day.year}"
 
@@ -202,6 +218,7 @@ class Keeper:
         now = now or timezone.now()
         self._democracy_now_rerun(now)
         self._democracy_now_master(now)
+        self._fill_after_sittings(now)
         if snapshot is not None:
             self._book_ahead(snapshot, now)
         today = now.astimezone(OSLO).date()
@@ -297,7 +314,11 @@ class Keeper:
         start = _at(today, self.config.democracy_now_start)
         end = start + self.config.democracy_now_length
         # Democracy Now! fills the sitting's time, but doesn't take anyone's.
-        taken = AirtimeGrant.objects.active().filter(starttime__lt=end, endtime__gt=start)
+        taken = (
+            AirtimeGrant.objects.active()
+            .filter(starttime__lt=end, endtime__gt=start)
+            .exclude(keeper_booking__kind=Kind.FILL)
+        )
         if (
             taken.exists()
             or Scheduleitem.objects.overlapping(start, end).filter(grant=None).exists()
@@ -553,14 +574,19 @@ class Keeper:
             return
         self._extend(grant, free, now, make_room=False)
 
-    def _free_until(self, start, end, *, ignoring=()) -> datetime.datetime | None:
+    def _free_until(
+        self, start, end, *, ignoring=(), fills_count=False
+    ) -> datetime.datetime | None:
         """How far the schedule is free from `start`, up to `end`; None if
-        something is on at `start` itself. Grants in `ignoring` don't count."""
+        something is on at `start` itself. Grants in `ignoring` don't count,
+        nor jukebox fills (which give way) unless `fills_count`."""
         grants = (
             AirtimeGrant.objects.active()
             .filter(starttime__lt=end, endtime__gt=start)
             .exclude(pk__in=[g.pk for g in ignoring])
         )
+        if not fills_count:
+            grants = grants.exclude(keeper_booking__kind=Kind.FILL)
         rows = Scheduleitem.objects.overlapping(start, end).filter(grant=None)
         if (
             grants.filter(starttime__lte=start).exists()
@@ -569,6 +595,80 @@ class Keeper:
             return None
         starts = [g.starttime for g in grants] + [r.starttime for r in rows]
         return min([end, *starts])
+
+    # -- Filling what a sitting leaves --------------------------------------
+
+    def _fill_after_sittings(self, now: datetime.datetime) -> None:
+        """On a carry day, once a sitting is off air (a break, or over), give
+        the station the free time up to the hard stop, a chunk at a time,
+        to fill from the jukebox: the contingency kept for Stortinget
+        shouldn't air nothing."""
+        config = self.config
+        today = now.astimezone(OSLO).date()
+        if today.weekday() not in config.days:
+            return
+        sittings = self._bookings(Kind.SITTING, today).order_by("starttime")
+        first = sittings.select_related("organization").first()
+        if first is None or first.starttime > now or self._on_air(Kind.SITTING, today, now):
+            return
+        until = _at(today, config.hard_stop)
+        # Democracy Now! may still take 14-15 until its deadline.
+        dn_start = _at(today, config.democracy_now_start)
+        dn_open = (
+            config.democracy_now_source_id
+            and now.astimezone(OSLO).time() < config.democracy_now_deadline
+            and not KeeperBooking.objects.filter(kind=Kind.DEMOCRACY_NOW, day=today).exists()
+        )
+        earliest = _minute(now + FILL_LEAD)
+        # Where something free could begin soon: now, or where what is on ends.
+        ends = AirtimeGrant.objects.active().filter(
+            endtime__gt=earliest, endtime__lte=earliest + FILL_AHEAD
+        )
+        for start in sorted({earliest, *ends.values_list("endtime", flat=True)}):
+            if start >= until or start < first.starttime:
+                continue
+            free = self._free_until(start, until, fills_count=True)
+            if free is None:
+                continue
+            end = min(free, start + FILL_CHUNK)
+            if dn_open and start < dn_start:
+                end = min(end, dn_start)
+            if end - start < SHORTEST_FILL:
+                continue
+            self._book_fill(first.organization, start, end)
+            return
+
+    def _book_fill(self, organization, start, end) -> None:
+        logger.warning(
+            "Filling %s-%s from the jukebox", start.astimezone(OSLO), end.astimezone(OSLO)
+        )
+        if self.config.dry_run:
+            return
+        with transaction.atomic():
+            grant = services.create_grant(
+                organization=organization,
+                starttime=start,
+                endtime=end,
+                lock_exempt=True,
+                recipe=named_jukebox(organization, FILL_JUKEBOX),
+            )
+            KeeperBooking.objects.create(
+                grant=grant, kind=Kind.FILL, day=start.astimezone(OSLO).date()
+            )
+
+    def _clear_fills(self, start, end, now) -> None:
+        """Take start-end back from jukebox fills: one on air is cut where
+        the booking begins, one still to come gives way."""
+        fills = AirtimeGrant.objects.active().filter(
+            keeper_booking__kind=Kind.FILL, starttime__lt=end, endtime__gt=start
+        )
+        for grant in fills:
+            if grant.starttime < max(start, now):
+                at = max(start, _whole(now + CUT_DELAY))
+                if at < grant.endtime and not self.config.dry_run:
+                    services.update_grant(grant, endtime=at, now=now)
+            else:
+                self._cancel(grant, now, why="a booking needs the time")
 
     # -- Looking things up --------------------------------------------------
 
@@ -699,6 +799,7 @@ class Keeper:
         try:
             with transaction.atomic():
                 source = LiveSource.objects.select_related("organization__editor").get(pk=source_id)
+                self._clear_fills(start, end, now)
                 if kind == Kind.SITTING:
                     self._make_room(start, end, now)
                 video = self._live_video(kind, source, start, end, mote_id)
@@ -722,6 +823,7 @@ class Keeper:
         old_end = grant.endtime
         try:
             with transaction.atomic():
+                self._clear_fills(old_end, end, now)
                 if make_room:
                     self._make_room(old_end, end, now, keep=grant)
                 AirtimeGrant.objects.filter(pk=grant.pk).update(endtime=end)

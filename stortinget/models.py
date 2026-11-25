@@ -10,6 +10,8 @@ class KeeperBooking(models.Model):
         DEMOCRACY_NOW = "democracy_now", "Democracy Now!"
         EU_BRIEFING = "eu_briefing", "EU Commission midday briefing"
         DEMOCRACY_NOW_RERUN = "dn_rerun", "Democracy Now! rerun"
+        # The jukebox in time a sitting left; gives way to any other booking.
+        FILL = "fill", "Jukebox after a sitting"
 
     grant = models.OneToOneField(
         "scheduling.AirtimeGrant", on_delete=models.CASCADE, related_name="keeper_booking"
