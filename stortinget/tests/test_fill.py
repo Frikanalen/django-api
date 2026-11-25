@@ -68,6 +68,7 @@ def test_fills_what_a_sitting_left_a_chunk_at_a_time(keeper, station) -> None:
     assert fills() == [(oslo(14, 34), oslo(15, 4))]
     grant = AirtimeGrant.objects.get(keeper_booking__kind=Kind.FILL)
     assert grant.recipe.jukebox_settings.name == "Etter Stortinget"
+    assert grant.recipe.jukebox_settings.shortest == timedelta(minutes=2)
 
     keeper._fill_after_sittings(oslo(14, 40))  # nothing yet: the chunk runs
     assert len(fills()) == 1

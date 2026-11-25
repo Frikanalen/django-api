@@ -60,13 +60,16 @@ def jukebox_recipe(
     return recipe
 
 
-def named_jukebox(station: Organization, name: str) -> Recipe:
-    """The station's jukebox theme of that name (the whole pool), made the
-    first time it is asked for."""
+def named_jukebox(station: Organization, name: str, *, shortest: timedelta | None = None) -> Recipe:
+    """The station's jukebox theme of that name (the whole pool, but no
+    video shorter than `shortest`), made the first time it is asked for."""
     existing = Recipe.objects.filter(
-        organization=station, kind=Recipe.Kind.JUKEBOX, jukebox_settings__name=name
+        organization=station,
+        kind=Recipe.Kind.JUKEBOX,
+        jukebox_settings__name=name,
+        jukebox_settings__shortest=shortest,
     ).first()
-    return existing or jukebox_recipe(station, name=name)
+    return existing or jukebox_recipe(station, name=name, shortest=shortest)
 
 
 def series_of(recipe: Recipe | None) -> Series | None:
