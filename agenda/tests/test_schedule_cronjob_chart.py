@@ -29,6 +29,8 @@ def test_ingress_exposes_only_the_operational_django_surfaces() -> None:
     assert re.findall(r"^\s+- path: (\S+)$", manifest, flags=re.MULTILINE) == [
         "/admin",
         "/api/playout/events",
+        # Staff's air log, from its own deployment (deployment-airlog.yaml).
+        "/api/airlog",
         "/api",
         "/static",
         "/xmltv",
