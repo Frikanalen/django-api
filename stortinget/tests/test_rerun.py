@@ -178,3 +178,32 @@ def test_the_jukebox_fills_what_the_show_leaves(with_master, station) -> None:
     with_master.tick(None, oslo(19, 16))
     assert _playing(booking)[0] == fetch.video_id
     assert jukebox.pk in _playing(booking)[1:]
+
+
+def test_switches_even_when_the_jukebox_filled_after_the_recording(with_master, station) -> None:
+    from fk.models import Video
+
+    for n in range(3):
+        clip = Video.objects.create(
+            name=f"Snutt {n}", organization=station, creator=station.editor,
+            duration=timedelta(minutes=10), proper_import=True, publish_on_web=True,
+        )  # fmt: skip
+        VideoFile.objects.create(
+            video=clip, variant=VideoFileVariant.ORIGINAL, filename=f"s{n}/original/s{n}.mp4"
+        )
+    with_master.tick(None, oslo(19, 6))
+    booking = KeeperBooking.objects.get(kind=Kind.DEMOCRACY_NOW_RERUN)
+    recording = RecordingRequest.objects.get(record=True)
+    fetch = RecordingRequest.objects.get(record=False)
+
+    recording.video.duration = timedelta(minutes=30)  # a short recording
+    recording.video.save()
+    _arrived(recording)
+    with_master.tick(None, oslo(19, 15, 30))
+    assert len(_playing(booking)) > 1  # topped up from the jukebox
+
+    fetch.video.duration = timedelta(minutes=59, seconds=2)
+    fetch.video.save()
+    _arrived(fetch)
+    with_master.tick(None, oslo(19, 16))
+    assert _playing(booking) == [fetch.video_id]  # no 10-minute clip fits what is left
