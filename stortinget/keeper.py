@@ -908,6 +908,7 @@ class Keeper:
                     endtime=end,
                     lock_exempt=True,
                     videos=[video],
+                    now=now,
                 )
                 KeeperBooking.objects.create(grant=grant, kind=kind, mote_id=mote_id, day=day)
         except NoRoom as error:

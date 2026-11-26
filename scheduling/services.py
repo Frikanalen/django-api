@@ -373,10 +373,17 @@ def create_grant(
     lock_exempt: bool = False,
     recipe: Recipe | None = None,
     videos: Sequence[Entry] = (),
+    now: datetime | None = None,
 ) -> AirtimeGrant:
     """Staff gives an organization a window directly, optionally with the
     videos it plays already in it (pinned, in order). Everything happens
-    together: if the videos don't fit, no grant is made."""
+    together: if the videos don't fit, no grant is made.
+
+    `now` is the caller's idea of the time, for a caller that has one --
+    the Stortinget keeper decides on a clock of its own. Whether the list
+    fits depends on it: a grant already on air is laid out from now, not
+    from its start, so checking against the wall clock instead would
+    judge the keeper's booking by a different moment than it was made in."""
     if organization.is_rogue:
         raise ValidationError({"organization": "This organization is suspended."})
     grant = AirtimeGrant(
@@ -391,9 +398,9 @@ def create_grant(
     with transaction.atomic():
         grant.save()
         if videos:
-            validate_items(grant, videos)
+            validate_items(grant, videos, now)
             _replace_items(grant, videos, pinned=len(videos))
-        _publish_if_due(grant)
+        _publish_if_due(grant, now)
     return grant
 
 
