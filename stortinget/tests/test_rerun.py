@@ -227,3 +227,24 @@ def test_the_keepers_videos_go_once_used(with_master) -> None:
     with_master.tick(None, oslo(19, 21, 5))
     assert not Video.objects.filter(pk=fetch.video_id).exists()
     assert not RecordingRequest.objects.exists()
+
+
+def test_the_master_goes_in_when_the_recording_is_gone(with_master, station) -> None:
+    """Nothing was recorded (DN's stream was down) and the recording left
+    the rerun: the master still takes the hour."""
+    from scheduling import services
+
+    with_master.tick(None, oslo(19, 6))
+    booking = KeeperBooking.objects.get(kind=Kind.DEMOCRACY_NOW_RERUN)
+    recording = RecordingRequest.objects.get(record=True)
+    fetch = RecordingRequest.objects.get(record=False)
+    recording.state = RecordingRequest.State.FAILED
+    recording.save()
+    services.delete_video(recording.video, now=oslo(19, 15, 10))
+    assert recording.video_id not in _playing(booking)
+
+    _arrived(fetch)
+    with_master.tick(None, oslo(19, 16))
+    assert _playing(booking) == [fetch.video_id]
+    with_master.tick(None, oslo(19, 16, 1))  # and stays
+    assert _playing(booking) == [fetch.video_id]
