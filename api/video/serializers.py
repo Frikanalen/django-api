@@ -298,6 +298,10 @@ class VideoCreateSerializer(BaseVideoSerializer):
     )
 
 
+class VideoUploadSerializer(serializers.Serializer):
+    upload_url = serializers.CharField(default=settings.FK_UPLOAD_URL, read_only=True)
+
+
 class VideoUploadTokenSerializer(serializers.ModelSerializer):
     upload_url = serializers.CharField(default=settings.FK_UPLOAD_URL, read_only=True)
 
