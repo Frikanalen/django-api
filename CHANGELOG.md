@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.14.0](https://github.com/Frikanalen/django-api/compare/v3.13.0...v3.14.0) (2026-11-26)
+
+
+### Features
+
+* **api:** read and record a video's ffprobe report at /videos/{id}/media_metadata ([#193](https://github.com/Frikanalen/django-api/issues/193)) ([a8192dc](https://github.com/Frikanalen/django-api/commit/a8192dcda9e58a58fba8d818eb9ceaa16ba2f7b8))
+
 ## [3.13.0](https://github.com/Frikanalen/django-api/compare/v3.12.1...v3.13.0) (2026-11-25)
 
 
