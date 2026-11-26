@@ -41,9 +41,9 @@ class Window(Protocol):
 
 # -- Candidates: which videos a recipe may use --------------------------------
 #
-# A recipe only picks videos whose file is processed (``airable``). A
-# pending upload may still be listed by hand and wait for its file, but
-# nothing schedules it automatically.
+# A recipe only picks published videos whose file is processed
+# (``airable``). A pending upload or an unpublished video may still be
+# listed by hand, but nothing schedules it automatically.
 
 
 def _uploads(recipe: Recipe, now: datetime) -> QuerySet[Video]:

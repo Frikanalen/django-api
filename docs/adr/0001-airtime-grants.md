@@ -223,6 +223,7 @@ What a kind needs lives in a table of its own, with real columns and foreign key
 - **A member's slot airs the member's own content.** Only grants the station gives itself are jukebox; leftover time in a member's grant is never filled with jukebox videos.
 - **Pinned items.** Items the owner chooses are pinned at the head of the list, and the recipe fills the time they leave. Saving a list without asking for automatic filling makes the grant hand-made and clears its recipe; `POST /grants/{id}/automatic` unpins everything and lets the recipe program the whole window.
 - **Recipes pick only imported videos**, with a file and a positive length. A placeholder without a file is something the owner pins by hand.
+- **Recipes pick only published videos** (`publish_on_web`), through `Video.objects.airable()`. An unpublished video airs only where someone lists it by hand. One unpublished after a recipe picked it leaves that list straight away, even inside the day before air: a grant yet to start is refilled, one on air closes up behind what has started, and compiling never lays out such a pick.
 - Eligibility is one queryset method, `Video.objects.listable()`.
 
 **Doing nothing works**
@@ -444,3 +445,4 @@ Revisions to this record, with the pull requests that made each change. Version 
 | 2026-11-23 | The jukebox draws on members' videos: see [ADR 0002](0002-jukebox-selection.md). | django-api #175, #176 | 3.12.0 |
 | 2026-11-23 | Record revised to describe the system as built. | | |
 | 2026-11-25 | Deleting a video takes it out of the lists that list it and refills the time. | django-api (this PR) | |
+| 2026-11-26 | Recipes pick only published videos; unpublishing one takes it out of what recipes picked it for. | django-api (this PR) | |
