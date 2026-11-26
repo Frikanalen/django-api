@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.14.1](https://github.com/Frikanalen/django-api/compare/v3.14.0...v3.14.1) (2026-11-26)
+
+
+### Bug Fixes
+
+* **scheduling:** judge a keeper booking by the keeper's clock, not the wall clock ([#198](https://github.com/Frikanalen/django-api/issues/198)) ([31d488e](https://github.com/Frikanalen/django-api/commit/31d488e56badfa09b9edcded439b6f786bafb185))
+* **scheduling:** recipes never air an unpublished video ([#195](https://github.com/Frikanalen/django-api/issues/195)) ([3de7eda](https://github.com/Frikanalen/django-api/commit/3de7eda9627605b16875ae29463cc33d2b900681))
+* **stortinget:** book Democracy Now! live every weekday, days ahead ([#197](https://github.com/Frikanalen/django-api/issues/197)) ([ccf27ca](https://github.com/Frikanalen/django-api/commit/ccf27ca007db5e28411a04fc77a35f66b76d157b))
+
 ## [3.14.0](https://github.com/Frikanalen/django-api/compare/v3.13.0...v3.14.0) (2026-11-26)
 
 
