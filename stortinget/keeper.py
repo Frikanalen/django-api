@@ -28,6 +28,10 @@ from EbS (see :mod:`stortinget.ebs`), on the days EbS lists one:
 - already on when the keeper first sees it (after a sitting breaks off,
   say): booked from now, if the time is free.
 
+Democracy Now! goes on live 14:00-15:00 every weekday, booked a few days
+ahead into free time (the station's own placeholder there gives way); a
+sitting that runs on takes the hour, and gives it back as above.
+
 And Democracy Now! is recorded every weekday, 14:00-15:00, and rerun from
 the recording at 20:00-21:00, whether or not it aired live: the keeper
 books the evening slot in the morning, if it is free, together with a
@@ -139,6 +143,10 @@ class Config:
     # recording if it is playable by democracy_now_master_lead before.
     democracy_now_master_url: str = ""
     democracy_now_master_lead: datetime.timedelta = datetime.timedelta(minutes=10)
+    # Democracy Now! live on these days, booked this far ahead; a sitting
+    # takes the time when it runs on.
+    democracy_now_days: frozenset[int] = frozenset()
+    democracy_now_ahead: datetime.timedelta = datetime.timedelta(days=3)
 
     @classmethod
     def from_settings(cls) -> Config:
@@ -177,6 +185,10 @@ class Config:
             democracy_now_master_lead=datetime.timedelta(
                 minutes=settings.FK_DEMOCRACY_NOW_MASTER_LEAD_MINUTES
             ),
+            democracy_now_days=frozenset(
+                WEEKDAYS[d.strip()] for d in settings.FK_DEMOCRACY_NOW_DAYS.split(",") if d
+            ),
+            democracy_now_ahead=datetime.timedelta(days=settings.FK_DEMOCRACY_NOW_AHEAD_DAYS),
         )
 
 
@@ -212,6 +224,7 @@ class Keeper:
     _briefing_over: set[datetime.date] = field(default_factory=set)
     _briefing_skipped: set[datetime.date] = field(default_factory=set)
     _rerun_skipped: set[datetime.date] = field(default_factory=set)
+    _democracy_now_skipped: set[datetime.date] = field(default_factory=set)
     # The rerun grants last filled, by the lengths of what they play.
     _rerun_filled: dict[int, tuple] = field(default_factory=dict)
 
@@ -221,6 +234,7 @@ class Keeper:
         """Act on one reading of the speaker list (None: the fetch failed,
         which neither confirms nor contradicts anything)."""
         now = now or timezone.now()
+        self._democracy_now_ahead(now)
         self._democracy_now_rerun(now)
         self._democracy_now_master(now)
         self._fill_after_sittings(now)
@@ -315,23 +329,59 @@ class Keeper:
         local = now.astimezone(OSLO)
         if local.date() != today or local.time() >= self.config.democracy_now_deadline:
             return
-        if KeeperBooking.objects.filter(kind=Kind.DEMOCRACY_NOW, day=today).exists():
+        if KeeperBooking.objects.filter(
+            kind=Kind.DEMOCRACY_NOW, day=today, grant__in=AirtimeGrant.objects.active()
+        ).exists():
             return
         start = _at(today, self.config.democracy_now_start)
         end = start + self.config.democracy_now_length
-        # Democracy Now! fills the sitting's time, but doesn't take anyone's.
-        taken = (
-            AirtimeGrant.objects.active()
-            .filter(starttime__lt=end, endtime__gt=start)
-            .exclude(keeper_booking__kind=Kind.FILL)
-        )
-        if (
-            taken.exists()
-            or Scheduleitem.objects.overlapping(start, end).filter(grant=None).exists()
-        ):
+        # Democracy Now! fills the sitting's time, but doesn't take anyone's
+        # (the station's own placeholder gives way, jukebox fills too).
+        placeholders = self._station_placeholders(start, end)
+        if self._free_until(start, end, ignoring=placeholders) != end:
             logger.info("Not booking Democracy Now!: %s-%s is taken", start, end)
             return
-        self._book(Kind.DEMOCRACY_NOW, start, end, now)
+        self._book(Kind.DEMOCRACY_NOW, start, end, now, replacing=placeholders)
+
+    def _democracy_now_ahead(self, now: datetime.datetime) -> None:
+        """Book Democracy Now! live a few days ahead, into free time or the
+        station's placeholder there. A sitting takes its time if it runs on
+        (and gives it back if it breaks off before the deadline)."""
+        config = self.config
+        if not config.democracy_now_source_id:
+            return
+        today = now.astimezone(OSLO).date()
+        for offset in range(config.democracy_now_ahead.days + 1):
+            day = today + datetime.timedelta(days=offset)
+            if day.weekday() not in config.democracy_now_days or day in self._democracy_now_skipped:
+                continue
+            start = _at(day, config.democracy_now_start)
+            end = start + config.democracy_now_length
+            if start - now <= FILL_LEAD:
+                continue  # too late for playout to cue it
+            if KeeperBooking.objects.filter(kind=Kind.DEMOCRACY_NOW, day=day).exists():
+                continue
+            placeholders = self._station_placeholders(start, end)
+            if self._free_until(start, end, ignoring=placeholders) != end:
+                logger.info("Not booking Democracy Now!: %s-%s is taken", start, end)
+                self._democracy_now_skipped.add(day)
+                continue
+            self._book(Kind.DEMOCRACY_NOW, start, end, now, replacing=placeholders)
+            if config.dry_run:
+                self._democracy_now_skipped.add(day)  # say it once
+
+    def _station_placeholders(self, start, end) -> list[AirtimeGrant]:
+        """The station's own grants inside start-end that the keeper didn't
+        make: placeholders showing the time is reserved, which give way to
+        the keeper's Democracy Now! bookings."""
+        return list(
+            AirtimeGrant.objects.active().filter(
+                starttime__gte=start,
+                endtime__lte=end,
+                organization__live_sources=self.config.democracy_now_source_id,
+                keeper_booking__isnull=True,
+            )
+        )
 
     # -- Democracy Now!'s evening rerun --------------------------------------
 
@@ -353,14 +403,7 @@ class Keeper:
         end = start + config.democracy_now_length
         # The station's own slot there (a placeholder that shows the hour is
         # reserved) gives way to the rerun; anyone else's grant doesn't.
-        placeholders = list(
-            AirtimeGrant.objects.active().filter(
-                starttime__lt=end,
-                endtime__gt=start,
-                organization__live_sources=config.democracy_now_source_id,
-                keeper_booking__isnull=True,
-            )
-        )
+        placeholders = self._station_placeholders(start, end)
         if self._free_until(start, end, ignoring=placeholders) != end:
             logger.info("Not rerunning Democracy Now!: %s-%s is taken", start, end)
             self._rerun_skipped.add(today)
@@ -834,7 +877,7 @@ class Keeper:
         LiveTransmission.objects.create(video=video, source=source)
         return video
 
-    def _book(self, kind, start, end, now, *, mote_id: int | None = None) -> None:
+    def _book(self, kind, start, end, now, *, mote_id: int | None = None, replacing=()) -> None:
         source_id = {
             Kind.SITTING: self.config.live_source_id,
             Kind.DEMOCRACY_NOW: self.config.democracy_now_source_id,
@@ -854,6 +897,8 @@ class Keeper:
             with transaction.atomic():
                 source = LiveSource.objects.select_related("organization__editor").get(pk=source_id)
                 self._clear_fills(start, end, now)
+                for placeholder in replacing:
+                    self._cancel(placeholder, now, why=f"{Kind(kind).label} takes it")
                 if kind == Kind.SITTING:
                     self._make_room(start, end, now)
                 video = self._live_video(kind, source, start, end, mote_id)

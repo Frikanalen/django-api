@@ -44,6 +44,10 @@ spec:
               value: {{ .Values.stortingetKeeper.democracyNow.minutes | quote }}
             - name: FK_DEMOCRACY_NOW_DEADLINE
               value: {{ .Values.stortingetKeeper.democracyNow.deadline | quote }}
+            - name: FK_DEMOCRACY_NOW_DAYS
+              value: {{ .Values.stortingetKeeper.democracyNow.days | quote }}
+            - name: FK_DEMOCRACY_NOW_AHEAD_DAYS
+              value: {{ .Values.stortingetKeeper.democracyNow.aheadDays | quote }}
             - name: FK_DEMOCRACY_NOW_RERUN_AT
               value: {{ .Values.stortingetKeeper.democracyNowRerun.at | quote }}
             - name: FK_DEMOCRACY_NOW_RERUN_DAYS

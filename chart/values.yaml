@@ -30,6 +30,10 @@ stortingetKeeper:
     start: "14:00"
     minutes: 60
     deadline: "13:58"
+    # Booked live on these days, this many days ahead (a sitting that runs
+    # on takes the time).
+    days: "mon,tue,wed,thu,fri"
+    aheadDays: 3
   # The European Commission's midday briefing from EbS, on the days EbS lists
   # one (liveSourceId 0: not carried). start: "listed" (on air from the listed
   # start) or "live" (only once EbS shows it has begun).
