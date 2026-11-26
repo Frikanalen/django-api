@@ -396,6 +396,10 @@ FK_DEMOCRACY_NOW_LIVE_SOURCE_ID = env.int("FK_DEMOCRACY_NOW_LIVE_SOURCE_ID", def
 FK_DEMOCRACY_NOW_START = env.str("FK_DEMOCRACY_NOW_START", default="14:00")
 FK_DEMOCRACY_NOW_MINUTES = env.int("FK_DEMOCRACY_NOW_MINUTES", default=60)
 FK_DEMOCRACY_NOW_DEADLINE = env.str("FK_DEMOCRACY_NOW_DEADLINE", default="13:58")
+# Democracy Now! is booked live on these days, this many days ahead (a
+# sitting that runs on takes the time).
+FK_DEMOCRACY_NOW_DAYS = env.str("FK_DEMOCRACY_NOW_DAYS", default="mon,tue,wed,thu,fri")
+FK_DEMOCRACY_NOW_AHEAD_DAYS = env.int("FK_DEMOCRACY_NOW_AHEAD_DAYS", default=3)
 # Democracy Now! recorded every one of these days and rerun from the
 # recording at this time ("" for no rerun).
 FK_DEMOCRACY_NOW_RERUN_AT = env.str("FK_DEMOCRACY_NOW_RERUN_AT", default="")
