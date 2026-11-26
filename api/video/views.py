@@ -10,6 +10,8 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_field
 from rest_framework import generics, status
 from rest_framework.exceptions import NotFound
+from rest_framework.parsers import JSONParser
+from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 
 from api.auth.permissions import (
@@ -26,6 +28,7 @@ from api.video.serializers import (
     IngestJobSerializer,
     UploadTokenVerificationSerializer,
     VideoCreateSerializer,
+    VideoMediaMetadataSerializer,
     VideoSerializer,
     VideoUploadTokenSerializer,
     coming_live_airings,
@@ -213,6 +216,64 @@ class VideoIngestJobDetail(generics.RetrieveUpdateAPIView):
     )
     def put(self, request, *args, **kwargs):
         return super().put(request, *args, **kwargs)
+
+
+class VideoMediaMetadataDetail(generics.GenericAPIView):
+    """The ffprobe report on a video's original, written by ingest.
+
+    Same audiences as the ingest job beside it: ingest writes, the
+    organization behind the video reads. The probe names archive paths
+    and encoder tags that are no business of anyone else's.
+
+    Plain JSON in both directions, deliberately bypassing the camelCase
+    renderer and parser the rest of the API uses. They rewrite every key
+    they meet, recursively, so `codec_name` would be stored as
+    `codecName` -- no longer what ffprobe says, and no longer comparable
+    with a fresh probe of the same file.
+    """
+
+    queryset = Video.objects.all()
+    serializer_class = VideoMediaMetadataSerializer
+    permission_classes = (IngestJobPermission,)
+    renderer_classes = (JSONRenderer,)
+    parser_classes = (JSONParser,)
+
+    def get_object(self) -> Video:
+        video = generics.get_object_or_404(Video.objects.all(), pk=self.kwargs["pk"])
+        self.check_object_permissions(self.request, video)
+        return video
+
+    @extend_schema(
+        operation_id="videos_media_metadata_retrieve",
+        summary="Read a video's media metadata",
+        description=(
+            "The ffprobe report on the video's original file, keys exactly as ffprobe "
+            "prints them. `version` 0 with empty `data` means nothing has probed it yet."
+        ),
+    )
+    def get(self, request, *args, **kwargs):
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @extend_schema(
+        operation_id="videos_media_metadata_update",
+        summary="Record a video's media metadata",
+        description=(
+            "Replaces the stored ffprobe report with the one given. Reserved for the "
+            "ingest service. Keys inside `data` are stored exactly as sent."
+        ),
+    )
+    def put(self, request, *args, **kwargs):
+        video = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        video.media_metadata = dict(serializer.validated_data)
+        # A queryset update rather than save(): only this column is written,
+        # so a concurrent edit to the rest of the row survives, and
+        # `updated_time` is left alone. A probe describes the file, not the
+        # programme, and a catalogue-wide refill must not make every video
+        # look freshly edited to whatever watches that timestamp.
+        Video.objects.filter(pk=video.pk).update(media_metadata=video.media_metadata)
+        return Response(self.get_serializer(video).data)
 
 
 class IngestClaim(generics.GenericAPIView):
