@@ -315,6 +315,30 @@ class UploadTokenVerificationSerializer(serializers.Serializer):
     upload_token = serializers.CharField(max_length=32, trim_whitespace=False)
 
 
+class VideoMediaMetadataSerializer(serializers.Serializer):
+    """What ffprobe made of a video's original, as ingest recorded it.
+
+    Stored whole rather than picked apart: container, codecs, resolution,
+    field order and anything else ffprobe reports are all in `data`, and
+    deciding today which of them matter would only mean probing the whole
+    archive again the day something else does. `version` describes the
+    envelope, not ffprobe: 1 is `{"format": ..., "streams": ...}` as
+    `ffprobe -show_format -show_streams -of json` prints it, the shape
+    media-processor first wrote into this column in 2021.
+
+    An empty column -- nothing has ever probed the video -- reads as
+    `version` 0 with empty `data`, so a reader never has to tell a missing
+    envelope from an empty one.
+    """
+
+    version = serializers.IntegerField(min_value=1)
+    data = serializers.DictField(child=serializers.JSONField(), allow_empty=False)
+
+    def to_representation(self, instance: Video):
+        metadata = instance.media_metadata or {}
+        return {"version": metadata.get("version", 0), "data": metadata.get("data", {})}
+
+
 class IngestJobSerializer(serializers.ModelSerializer):
     """What ingest reports about an upload, and what its uploader is shown.
 

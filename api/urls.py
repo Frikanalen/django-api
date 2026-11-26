@@ -167,6 +167,11 @@ api_patterns: list[URLPattern | URLResolver] = [
         video_views.VideoIngestJobDetail.as_view(),
         name="api-video-ingest-job-detail",
     ),
+    path(
+        "videos/<int:pk>/media_metadata",
+        video_views.VideoMediaMetadataDetail.as_view(),
+        name="api-video-media-metadata",
+    ),
     path("videos/<int:pk>", video_views.VideoDetail.as_view(), name="api-video-detail"),
     # Ingest. Not under videos/ like the reporting endpoint above: a claim
     # asks for whichever video needs work next, so there is no id to hang
