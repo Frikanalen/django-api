@@ -17,6 +17,7 @@ from fk.models import (
     Organization,
     Scheduleitem,
     Series,
+    UploadToken,
     User,
     Video,
     VideoFileVariant,
@@ -299,10 +300,11 @@ class VideoCreateSerializer(BaseVideoSerializer):
 
 
 class VideoUploadTokenSerializer(serializers.ModelSerializer):
+    upload_token = serializers.CharField(source="token", read_only=True)
     upload_url = serializers.CharField(default=settings.FK_UPLOAD_URL, read_only=True)
 
     class Meta:
-        model = Video
+        model = UploadToken
         fields = (
             "upload_token",
             "upload_url",

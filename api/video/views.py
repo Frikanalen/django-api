@@ -1,5 +1,3 @@
-from hmac import compare_digest
-
 from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import F, Prefetch
@@ -33,7 +31,7 @@ from api.video.serializers import (
     VideoUploadTokenSerializer,
     coming_live_airings,
 )
-from fk.models import Category, IngestJob, Organization, Video
+from fk.models import Category, IngestJob, Organization, UploadToken, Video
 from scheduling import services as scheduling
 
 
@@ -126,13 +124,18 @@ class VideoDetail(generics.RetrieveUpdateDestroyAPIView):
 
 
 class VideoUploadTokenDetail(generics.RetrieveAPIView):
-    """
-    Video details
+    """A token that lets the caller upload to this video through ingest.
+
+    Hands out the video's live token, minting one if it has none. Tokens
+    expire after a day and are deleted once the original is ingested.
     """
 
     queryset = Video.objects.all()
     serializer_class = VideoUploadTokenSerializer
     permission_classes = (IsInOrganizationOrDisallow,)
+
+    def get_object(self) -> UploadToken:
+        return UploadToken.for_video(super().get_object())
 
 
 class VideoUploadTokenVerification(generics.GenericAPIView):
@@ -163,7 +166,7 @@ class VideoUploadTokenVerification(generics.GenericAPIView):
 
         # Treat a bad capability exactly like a missing video.  This avoids
         # exposing either fact to callers that do not already hold the token.
-        if not compare_digest(video.upload_token, serializer.validated_data["upload_token"]):
+        if not UploadToken.is_valid(video, serializer.validated_data["upload_token"]):
             raise NotFound()
 
         return Response(status=status.HTTP_204_NO_CONTENT)

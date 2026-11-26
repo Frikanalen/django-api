@@ -144,6 +144,16 @@ class IngestJob(models.Model):
             ),
         ]
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # The original is in: nothing more needs uploading on the strength
+        # of the tokens handed out for it. Anyone who does want to upload
+        # again (a replacement, a programme image) is minted a fresh one.
+        if self.state == IngestState.DONE:
+            from fk.models.upload_token import UploadToken
+
+            UploadToken.objects.filter(video_id=self.video_id).delete()
+
     @classmethod
     def for_video(cls, video) -> "IngestJob":
         """The job for a video, or the one its history implies.

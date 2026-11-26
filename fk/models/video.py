@@ -202,32 +202,11 @@ class Video(models.Model):
     # This field is used by the new ingest.
     media_metadata = models.JSONField(blank=True, default=dict)
 
-    # This function is a workaround so we can pass a callable
-    # to default argument. Otherwise, the migration analyser evaluates
-    # the UUID and then concludes a new default value has been assigned,
-    # helpfully generating a migration.
-    #
-    # upload_token should be migrated to a UUIDField, and that transition
-    # needs to be tested throughout the upload chain.
-    # upload_token = models.UUIDField(blank=True, default=uuid.uuid4,
-    #                 editable=False,
-    #                 help_text='Video upload token (used by fkupload/frontend)')
-
+    # Upload tokens now live in UploadToken. Migration 0011 still names
+    # this as the old field's default, so it has to stay importable.
     @staticmethod
     def default_uuid_value():
         return uuid4().hex
-
-    upload_token = models.CharField(
-        blank=True,
-        # Unwrapping the staticmethod is what keeps the default a callable
-        # Django can serialize back to this same name; passing the
-        # descriptor itself makes the autodetector see a changed default
-        # and write a migration on every run. mypy reads the name in the
-        # class body as a plain function, which has no __func__.
-        default=default_uuid_value.__func__,  # type: ignore[attr-defined]
-        max_length=32,
-        help_text="Video upload token (used by fkupload/frontend)",
-    )
 
     objects = VideoManager()
 
