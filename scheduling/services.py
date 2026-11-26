@@ -988,7 +988,7 @@ def compile_grant(grant: AirtimeGrant, now: datetime | None = None) -> bool:
     is left in its state.
 
     A removed video (Video.is_banned) is skipped, the list closing up
-    behind it.
+    behind it, as is one the recipe picked that is no longer published.
     """
     now = now or timezone.now()
     if grant.organization.is_rogue:
@@ -1020,6 +1020,12 @@ def compile_grant(grant: AirtimeGrant, now: datetime | None = None) -> bool:
             for item in removed:
                 logger.warning("Leaving %s out of %s: it has been removed", item.entry, grant)
             items = [i for i in items if i not in removed]
+            # Nor is a video the recipe picked that has since been
+            # unpublished: only what someone listed by hand airs unpublished.
+            withdrawn = [i for i in items if _withdrawn_pick(grant, i)]
+            for item in withdrawn:
+                logger.warning("Leaving %s out of %s: it is no longer published", item.entry, grant)
+            items = [i for i in items if i not in withdrawn]
             start, previous = _tail_origin(grant, started, now)
             padded = grant.padded
             kept = _fitting(grant, items, padded=padded, start=start, previous=previous)
@@ -1056,15 +1062,68 @@ def compile_grant(grant: AirtimeGrant, now: datetime | None = None) -> bool:
     return True
 
 
+def _withdrawn_pick(grant: AirtimeGrant, item: GrantItem) -> bool:
+    """Whether `item` is a video `grant`'s recipe picked (not one its owner
+    pinned) that is no longer published, so the recipe could not pick it
+    now. Such a video must not air on the recipe's say-so."""
+    return (
+        grant.recipe_id is not None
+        and not item.pinned
+        and item.video is not None
+        and not item.video.publish_on_web
+    )
+
+
+def _withdraw_unpublished(video: Video, now: datetime) -> None:
+    """`video` is unpublished: take it out of what recipes picked it for.
+
+    A grant yet to start is filled from its recipe again, so the time it
+    leaves is programmed, and recompiled if it is on the schedule. One on
+    air, or about to start, is recompiled: what has started stays, the
+    rest closes up. This holds inside the day the schedule is otherwise
+    firm for: a video its owner has withdrawn should not air regardless.
+    """
+    grants = (
+        AirtimeGrant.objects.filter(
+            recipe__isnull=False,
+            endtime__gt=now,
+            items__video=video,
+            items__pinned=False,
+        )
+        .exclude(state=State.CANCELLED)
+        .distinct()
+        .order_by("starttime")
+    )
+    for grant in grants:
+        with transaction.atomic():
+            grant = (
+                AirtimeGrant.objects.select_for_update(of=("self",))
+                .select_related("organization", "recipe")
+                .get(pk=grant.pk)
+            )
+            coming = grant.starttime > now + ON_AIR_MARGIN
+            if coming and _fill(grant, _context_for([grant], now), now):
+                grant.save(update_fields=["updated_at"])
+                logger.warning("Refilled %s: %s is no longer published", grant, video)
+            if _on_schedule(grant, now):
+                compile_grant(grant, now)
+        transaction.on_commit(cache.clear)
+
+
 def recompile_for_video(video: Video, now: datetime | None = None) -> None:
     """A pending upload's file arrived with its real length, a live
     programme got its recording, or staff removed the video or lifted
     its removal: recompile the compiled grants yet to air whose rows no
     longer match it. A save that changes nothing about the length, how
-    it airs or whether it may air leaves the schedule alone."""
+    it airs or whether it may air leaves the schedule alone.
+
+    An unpublished video also leaves every list a recipe picked it for
+    (see :func:`_withdraw_unpublished`)."""
     now = now or timezone.now()
     # Fresh, so a live transmission just added or removed is seen.
     video = Video.objects.select_related("live_transmission").get(pk=video.pk)
+    if not video.publish_on_web:
+        _withdraw_unpublished(video, now)
     live = airs_live(video)
     # A removed video comes off a grant already on air too: compile_grant
     # keeps what has started and closes up the rest.
@@ -1083,7 +1142,10 @@ def recompile_for_video(video: Video, now: datetime | None = None) -> None:
     for grant in grants:
         rows = list(grant.schedule_items.filter(video=video).values_list("duration", "is_live"))
         # A removed video is listed but not laid out; see compile_grant.
-        listed = 0 if video.is_banned else grant.items.filter(video=video).count()
+        items = grant.items.filter(video=video).select_related("video")
+        listed = (
+            0 if video.is_banned else sum(1 for item in items if not _withdrawn_pick(grant, item))
+        )
         if len(rows) != listed or any(d != video.duration or l != live for d, l in rows):
             compile_grant(grant, now)
 

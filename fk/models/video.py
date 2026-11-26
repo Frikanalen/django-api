@@ -54,8 +54,13 @@ class VideoManager(models.Manager):
         return self.available().filter(duration__gt=timedelta(0))
 
     def airable(self):
-        """Videos that can go on air as they are: listable, file processed."""
-        return self.listable().filter(proper_import=True)
+        """Videos a recipe may put on air as they are: listable, file
+        processed and published.
+
+        An unpublished video still airs where someone lists it by hand,
+        but nothing schedules it automatically.
+        """
+        return self.listable().filter(proper_import=True, publish_on_web=True)
 
 
 # What may be aired as filler. Shared by Video.objects.fillers() and the
