@@ -549,12 +549,14 @@ class Keeper:
         recording = RecordingRequest.objects.filter(
             record=True, video_id__in=playing, starttime=fetch.starttime
         ).first()
-        if recording is None:
-            return
-        if services.replace_video(booking.grant, recording.video, fetch.video, now=now):
+        # In the recording's place; or, if the recording is gone from the
+        # rerun (it failed, or was deleted), at its head.
+        old = recording.video if recording is not None else None
+        if services.replace_video(booking.grant, old, fetch.video, now=now):
             logger.warning("The Democracy Now! rerun plays %s now", fetch.video)
-            # The recording is no longer wanted: gone before the jukebox finds it.
-            self._delete(recording.video, now)
+            if recording is not None:
+                # No longer wanted: gone before the jukebox finds it.
+                self._delete(recording.video, now)
 
     # -- The EU midday briefing ---------------------------------------------
 

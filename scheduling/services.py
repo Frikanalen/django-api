@@ -302,23 +302,29 @@ def set_items(
 
 
 def replace_video(
-    grant: AirtimeGrant, old: Video, new: Video, *, now: datetime | None = None
+    grant: AirtimeGrant, old: Video | None, new: Video, *, now: datetime | None = None
 ) -> bool:
-    """Put `new` in `old`'s place in the grant's list, and on the schedule
-    if the grant is there, before the grant goes on air. Returns whether
-    it did: not once the grant has begun, nor if `new` doesn't fit."""
+    """Put `new` in `old`'s place in the grant's list (with `old` None:
+    first, ahead of the chosen entries), and on the schedule if the grant
+    is there, before the grant goes on air. Returns whether it did: not
+    once the grant has begun, nor if `new` doesn't fit."""
     now = now or timezone.now()
     with transaction.atomic():
         grant = AirtimeGrant.objects.select_for_update().get(pk=grant.pk)
         if grant.starttime <= now or grant.state not in (State.OPEN, State.LOCKED, State.COMPILED):
             return False
         items = list(grant.items.select_related("video", "poster", "graphic"))
-        if not any(item.video_id == old.pk for item in items):
-            return False
         # The chosen (pinned) entries, `new` in `old`'s place; what the
         # recipe filled around them is filled afresh below.
-        kept = [item for item in items if item.pinned or item.video_id == old.pk]
-        entries = [new if item.video_id == old.pk else _row_entry(item) for item in kept]
+        if old is None:
+            if any(item.video_id == new.pk for item in items if item.pinned):
+                return False
+            entries = [new] + [_row_entry(item) for item in items if item.pinned]
+        else:
+            if not any(item.video_id == old.pk for item in items):
+                return False
+            kept = [item for item in items if item.pinned or item.video_id == old.pk]
+            entries = [new if item.video_id == old.pk else _row_entry(item) for item in kept]
         pinned = len(entries)
         try:
             validate_items(grant, entries, now)
