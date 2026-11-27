@@ -153,6 +153,11 @@ api_patterns: list[URLPattern | URLResolver] = [
         name="api-program-image-detail",
     ),
     path(
+        "videos/<int:pk>/upload",
+        video_views.VideoUpload.as_view(),
+        name="api-video-upload",
+    ),
+    path(
         "videos/<int:pk>/upload_token",
         video_views.VideoUploadTokenDetail.as_view(),
         name="api-video-upload-token-detail",

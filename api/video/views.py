@@ -30,6 +30,7 @@ from api.video.serializers import (
     VideoCreateSerializer,
     VideoMediaMetadataSerializer,
     VideoSerializer,
+    VideoUploadSerializer,
     VideoUploadTokenSerializer,
     coming_live_airings,
 )
@@ -123,6 +124,36 @@ class VideoDetail(generics.RetrieveUpdateDestroyAPIView):
             scheduling.delete_video(instance)
         except DjangoValidationError as error:
             raise _drf(error) from error
+
+
+class VideoUpload(generics.RetrieveAPIView):
+    """Where to upload this video's file, for those allowed to.
+
+    Answering at all is the authorization: ingest asks this endpoint on
+    the uploader's behalf, with the uploader's own session cookie or API
+    token, before it accepts an upload. Allowed are staff and the
+    members of the video's organization, for a video they can see; a
+    removed video or a suspended organization's takes no uploads.
+    """
+
+    serializer_class = VideoUploadSerializer
+    permission_classes = (IsInOrganizationOrDisallow,)
+
+    def get_queryset(self):
+        return Video.objects.visible_to(self.request.user)
+
+    @extend_schema(
+        operation_id="videos_upload_retrieve",
+        summary="Get a video's upload endpoint",
+        responses={
+            200: VideoUploadSerializer,
+            401: OpenApiResponse(description="Not signed in."),
+            403: OpenApiResponse(description="Not allowed to upload to this video."),
+            404: OpenApiResponse(description="No such video, or not one the caller can see."),
+        },
+    )
+    def get(self, request, *args, **kwargs):
+        return Response(self.get_serializer(self.get_object()).data)
 
 
 class VideoUploadTokenDetail(generics.RetrieveAPIView):
