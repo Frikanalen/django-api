@@ -7,8 +7,8 @@ files and whose 'cannot mutate' test only ever sent POSTs. Every denied
 row also proves the object was left untouched.
 
 Organization objects have their own equivalent grid in
-api/organization/tests/test_permissions.py, and upload-token visibility
-is covered in api/video/tests/test_upload_token.py.
+api/organization/tests/test_permissions.py, and who may upload
+is covered in api/video/tests/test_upload_access.py.
 """
 
 from datetime import timedelta
