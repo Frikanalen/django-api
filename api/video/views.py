@@ -1,5 +1,3 @@
-from hmac import compare_digest
-
 from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import F, Prefetch
@@ -9,7 +7,6 @@ from django_filters import rest_framework as djfilters
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_field
 from rest_framework import generics, status
-from rest_framework.exceptions import NotFound
 from rest_framework.parsers import JSONParser
 from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
@@ -26,12 +23,10 @@ from api.pagination import FkDefaultPagination
 from api.video.serializers import (
     IngestClaimSerializer,
     IngestJobSerializer,
-    UploadTokenVerificationSerializer,
     VideoCreateSerializer,
     VideoMediaMetadataSerializer,
     VideoSerializer,
     VideoUploadSerializer,
-    VideoUploadTokenSerializer,
     coming_live_airings,
 )
 from fk.models import Category, IngestJob, Organization, Video
@@ -154,50 +149,6 @@ class VideoUpload(generics.RetrieveAPIView):
     )
     def get(self, request, *args, **kwargs):
         return Response(self.get_serializer(self.get_object()).data)
-
-
-class VideoUploadTokenDetail(generics.RetrieveAPIView):
-    """
-    Video details
-    """
-
-    queryset = Video.objects.all()
-    serializer_class = VideoUploadTokenSerializer
-    permission_classes = (IsInOrganizationOrDisallow,)
-
-
-class VideoUploadTokenVerification(generics.GenericAPIView):
-    """Verify an upload capability without disclosing the token itself."""
-
-    queryset = Video.objects.all()
-    serializer_class = UploadTokenVerificationSerializer
-
-    @extend_schema(
-        operation_id="videos_upload_token_verify",
-        summary="Verify an upload token",
-        description=(
-            "Confirms that `uploadToken` authorizes an upload for this video. "
-            "An invalid token deliberately produces the same response as an unknown video."
-        ),
-        request=UploadTokenVerificationSerializer,
-        responses={
-            204: OpenApiResponse(description="The upload token is valid."),
-            404: OpenApiResponse(
-                description="The video does not exist or the upload token is invalid."
-            ),
-        },
-    )
-    def post(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        video = self.get_object()
-
-        # Treat a bad capability exactly like a missing video.  This avoids
-        # exposing either fact to callers that do not already hold the token.
-        if not compare_digest(video.upload_token, serializer.validated_data["upload_token"]):
-            raise NotFound()
-
-        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class VideoIngestJobDetail(generics.RetrieveUpdateAPIView):

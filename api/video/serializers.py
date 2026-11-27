@@ -302,23 +302,6 @@ class VideoUploadSerializer(serializers.Serializer):
     upload_url = serializers.CharField(default=settings.FK_UPLOAD_URL, read_only=True)
 
 
-class VideoUploadTokenSerializer(serializers.ModelSerializer):
-    upload_url = serializers.CharField(default=settings.FK_UPLOAD_URL, read_only=True)
-
-    class Meta:
-        model = Video
-        fields = (
-            "upload_token",
-            "upload_url",
-        )
-
-
-class UploadTokenVerificationSerializer(serializers.Serializer):
-    """The upload capability presented by ingest for a specific video."""
-
-    upload_token = serializers.CharField(max_length=32, trim_whitespace=False)
-
-
 class VideoMediaMetadataSerializer(serializers.Serializer):
     """What ffprobe made of a video's original, as ingest recorded it.
 
