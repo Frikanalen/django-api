@@ -446,4 +446,4 @@ Revisions to this record, with the pull requests that made each change. Version 
 | 2026-11-23 | Record revised to describe the system as built. | | |
 | 2026-11-25 | Deleting a video takes it out of the lists that list it and refills the time. | django-api (this PR) | |
 | 2026-11-26 | Recipes pick only published videos; unpublishing one takes it out of what recipes picked it for. | django-api (this PR) | |
-| 2026-11-27 | Jukebox grants are padded like any other; the jukebox airs each video at most once per window. | django-api (this PR) | |
+| 2026-11-27 | Jukebox grants are padded like any other; the jukebox airs each video at most once per window. | django-api #203 | |
