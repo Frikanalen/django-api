@@ -257,7 +257,7 @@ A live programme is a `Video` that owns a `LiveTransmission` (its live source), 
 - The first entry starts with the grant.
 - A video starts at the next five-minute wall-clock mark that is at least 30 seconds (`BREATHER`) after the previous programme ends, so viewers get a moment of graphics between programmes and the schedule shows round times.
 - Posters and graphics aren't programmes: one plays straight after whatever is before it, so it can fill the gap a programme leaves, and the next programme still starts on the grid.
-- Jukebox grants aren't padded. They are a stream of short fillers, not a schedule of programmes.
+- Jukebox grants are padded too. The jukebox airs whole programmes, and spare minutes become graphics between them rather than short clips crammed in at the end.
 
 **Text posters.** An organization makes a `Poster` from an on-air graphics template (`standard` or `notice`): a heading and text, where a blank line starts a new slide. It is listed in a grant like a video and airs for its own duration, which must be at least the time it takes to read every slide once. Light or dark follows the time of day at air.
 
@@ -446,3 +446,4 @@ Revisions to this record, with the pull requests that made each change. Version 
 | 2026-11-23 | Record revised to describe the system as built. | | |
 | 2026-11-25 | Deleting a video takes it out of the lists that list it and refills the time. | django-api (this PR) | |
 | 2026-11-26 | Recipes pick only published videos; unpublishing one takes it out of what recipes picked it for. | django-api (this PR) | |
+| 2026-11-27 | Jukebox grants are padded like any other; the jukebox airs each video at most once per window. | django-api #203 | |

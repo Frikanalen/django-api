@@ -162,9 +162,15 @@ def premiere(pool, window, context, now) -> Selector:
 
 def weighted(pool, window, context, now) -> Selector:
     """The weighted draw from :mod:`programming.selection`, seeded by the
-    window so it repeats as long as nothing real changed."""
+    window so it repeats as long as nothing real changed. Each video at
+    most once per window."""
     return WeightedSelector(
-        pool, context, default_rules(now=now), rng=random.Random(window.pk), at=window.starttime
+        pool,
+        context,
+        default_rules(now=now),
+        rng=random.Random(window.pk),
+        at=window.starttime,
+        once=True,
     )
 
 

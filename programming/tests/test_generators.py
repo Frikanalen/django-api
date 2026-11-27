@@ -298,3 +298,17 @@ def test_an_upload_older_than_two_weeks_gets_no_quota(organization, make_video) 
     ]
 
     assert picks.count(old_new.pk) < 10
+
+
+def test_the_jukebox_never_repeats_a_short_video_to_fill_the_tail(organization, make_video) -> None:
+    """Prod, 2026-11-27: the one short video was the only thing that fit
+    the last minutes of a window and aired three times in a row."""
+    short = make_video(1, uploaded_time=NOW - timedelta(days=400))
+    for n in range(5):
+        make_video(10, uploaded_time=NOW - timedelta(days=500 + n))
+
+    for pk in range(20):
+        window = Window(pk=pk, duration=timedelta(minutes=33))
+        picks = ids(plan(jukebox_recipe(organization), window, ScheduleContext(), NOW))
+        assert all(a != b for a, b in itertools.pairwise(picks)), picks
+        assert picks.count(short.pk) <= 1

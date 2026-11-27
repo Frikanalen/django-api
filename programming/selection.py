@@ -176,9 +176,11 @@ class WeightedSelector:
     every rule's weight. Pass an RNG seeded per grant to make the draw
     repeatable night to night.
 
-    If every fitting candidate weighs zero -- say the only video short
-    enough just played -- the draw falls back to uniform: dead air is
-    worse than repetition.
+    If every fitting candidate weighs zero, the draw falls back to
+    uniform, but never to the video that just played: when that is the
+    only one short enough, nothing is picked and the time is left to the
+    graphics. Repeating it filled the tail of a window with the same
+    short video back to back.
     """
 
     def __init__(
@@ -188,6 +190,7 @@ class WeightedSelector:
         rules: Sequence[Rule],
         rng: random.Random | None = None,
         at: datetime.datetime | None = None,
+        once: bool = False,
     ) -> None:
         # A non-positive duration cannot advance the schedule clock, so
         # it would be drawn once a minute for the whole window.
@@ -196,6 +199,8 @@ class WeightedSelector:
         self._rules = list(rules)
         self._rng = rng or random
         self._at = at
+        # Each video at most once from this selector, i.e. per window.
+        self._once = once
 
     def pick(self, remaining: datetime.timedelta) -> Video | None:
         """The next video no longer than `remaining`, or None if none fit."""
@@ -203,9 +208,17 @@ class WeightedSelector:
         if not fitting:
             return None
         scores = [self._weight(video) for video in fitting]
-        weights = scores if any(scores) else None  # None draws uniformly
+        if not any(scores):
+            # Uniform, but never the same video twice in a row.
+            fitting = [v for v in fitting if v.id != self._context.last_video_id]
+            if not fitting:
+                return None
+            scores = None
+        weights = scores
         video = self._rng.choices(fitting, weights=weights, k=1)[0]
         self._context.record(video, at=self._at)
+        if self._once:
+            self._candidates.remove(video)
         return video
 
     def _weight(self, video: Video) -> float:

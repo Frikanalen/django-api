@@ -212,7 +212,8 @@ def test_a_list_from_before_padding_still_airs_in_full(make_grant, make_video) -
     ]
 
 
-def test_a_jukebox_grant_plays_back_to_back(make_grant, make_video, organization) -> None:
+def test_a_jukebox_grant_is_padded_like_any_other(make_grant, make_video, organization) -> None:
+    """Graphics between programmes, not back to back (2026-11-27)."""
     a, b = make_video(20), make_video(15)
     grant = make_grant(OPEN_WEEK, state=State.LOCKED)
     grant.recipe = jukebox_recipe(organization)
@@ -223,7 +224,7 @@ def test_a_jukebox_grant_plays_back_to_back(make_grant, make_video, organization
 
     assert schedule(grant) == [
         (a.pk, OPEN_WEEK, timedelta(minutes=20)),
-        (b.pk, OPEN_WEEK + timedelta(minutes=20), timedelta(minutes=15)),
+        (b.pk, OPEN_WEEK + timedelta(minutes=25), timedelta(minutes=15)),
     ]
 
 

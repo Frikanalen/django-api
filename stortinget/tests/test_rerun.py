@@ -172,7 +172,9 @@ def test_the_jukebox_fills_what_the_show_leaves(with_master, station) -> None:
     fetch = RecordingRequest.objects.get(record=False)
     assert _playing(booking) == [RecordingRequest.objects.get(record=True).video_id]  # a full hour
 
-    fetch.video.duration = timedelta(minutes=57)
+    # Jukebox grants are padded: the next programme starts on the
+    # five-minute grid, so a 50-minute show leaves room from :55.
+    fetch.video.duration = timedelta(minutes=50)
     fetch.video.save()
     _arrived(fetch)
     with_master.tick(None, oslo(19, 16))
