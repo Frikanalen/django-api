@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.15.0](https://github.com/Frikanalen/django-api/compare/v3.14.1...v3.15.0) (2026-11-27)
+
+
+### Features
+
+* GET /api/videos/&lt;id&gt;/upload, the upload authorization ([#202](https://github.com/Frikanalen/django-api/issues/202)) ([af84370](https://github.com/Frikanalen/django-api/commit/af843707634cdcce47aa3d57167be98e095d3d1c))
+
+
+### Bug Fixes
+
+* **jukebox:** no repeats in a window, graphics instead of crammed clips ([#203](https://github.com/Frikanalen/django-api/issues/203)) ([d7bd1c2](https://github.com/Frikanalen/django-api/commit/d7bd1c23df83364109b4c29165389d995a9b07c5))
+* **stortinget:** the DN rerun takes the master even when nothing was recorded ([#199](https://github.com/Frikanalen/django-api/issues/199)) ([f381483](https://github.com/Frikanalen/django-api/commit/f381483a30a2e85259c9abf70da16da9d58f2a77))
+
 ## [3.14.1](https://github.com/Frikanalen/django-api/compare/v3.14.0...v3.14.1) (2026-11-26)
 
 
