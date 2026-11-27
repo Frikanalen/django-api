@@ -188,12 +188,22 @@ def test_picks_are_recorded_so_rules_see_them() -> None:
 
 
 def test_a_universally_vetoed_draw_falls_back_to_uniform() -> None:
-    """Dead air is worse than repetition: if the only video that fits
-    just played, it plays again."""
+    class Veto:
+        def weight(self, v, context):
+            return 0.0
+
+    chooser = selector([video(1), video(2)], rules=[Veto()])
+
+    assert {pick_id(chooser, minutes(60)) for _ in range(20)} == {1, 2}
+
+
+def test_the_video_that_just_played_never_plays_again_straight_away() -> None:
+    """If the only video that fits just played, the time is left to the
+    graphics instead of airing it twice in a row."""
     chooser = selector([video(1)], rules=[RepeatAvoidance()])
 
     assert pick_id(chooser, minutes(60)) == 1
-    assert pick_id(chooser, minutes(60)) == 1
+    assert chooser.pick(minutes(60)) is None
 
 
 def test_the_draw_follows_the_weights() -> None:
@@ -214,4 +224,13 @@ def test_zero_length_candidates_are_never_drawn() -> None:
     """A non-positive duration cannot advance the schedule clock."""
     chooser = selector([video(1, minutes=0)], rules=[])
 
+    assert chooser.pick(minutes(60)) is None
+
+
+def test_once_draws_each_video_at_most_once() -> None:
+    chooser = WeightedSelector(
+        [video(1), video(2)], ScheduleContext(), rules=[], rng=random.Random(1), once=True
+    )
+
+    assert {pick_id(chooser, minutes(60)), pick_id(chooser, minutes(60))} == {1, 2}
     assert chooser.pick(minutes(60)) is None
