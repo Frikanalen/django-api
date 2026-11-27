@@ -7,8 +7,9 @@ Posters and graphics are not programmes: one plays right after whatever
 is before it, so it can go in the gap a programme leaves, and the next
 programme still starts on the grid after it.
 
-The first entry starts with the grant. Jukebox grants are not padded:
-they are a stream of short fillers, not a schedule of programmes.
+The first entry starts with the grant. Jukebox grants are padded too:
+the jukebox airs whole programmes, and what time is left between them
+is better spent on graphics than on short clips that happen to fit.
 
 The frontend lays a list out the same way (src/app/grants/grants.ts);
 keep the two in step.

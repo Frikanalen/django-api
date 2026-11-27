@@ -274,10 +274,10 @@ class AirtimeGrant(models.Model):
     @property
     def padded(self) -> bool:
         """Whether programmes start on the five-minute grid (see
-        :mod:`scheduling.layout`). Not in a jukebox grant."""
-        from programming.models import Recipe
-
-        return self.recipe is None or self.recipe.kind != Recipe.Kind.JUKEBOX
+        :mod:`scheduling.layout`). Every grant is, the jukebox's too: its
+        spare minutes become graphics between programmes rather than
+        short clips crammed in at the end."""
+        return True
 
     def clean(self):
         super().clean()
